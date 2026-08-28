@@ -75,7 +75,9 @@ defineProps<{
             </div>
 
             <div class="grid gap-2 md:col-span-2">
-                <Label for="service_details">Additional service or details</Label>
+                <Label for="service_details"
+                    >Additional service or details</Label
+                >
                 <Input
                     id="service_details"
                     name="service_details"
@@ -110,7 +112,7 @@ defineProps<{
                     id="notes"
                     name="notes"
                     rows="4"
-                    class="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+                    class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Optional notes about this transaction"
                     :value="transaction?.notes ?? ''"
                 ></textarea>
