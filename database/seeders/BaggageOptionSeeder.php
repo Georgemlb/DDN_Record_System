@@ -58,4 +58,3 @@ class BaggageOptionSeeder extends Seeder
         }
     }
 }
-

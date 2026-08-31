@@ -51,4 +51,3 @@ class BaggageOption extends Model
         $query->where('is_active', true)->orderBy('sort_order')->orderBy('weight_kg');
     }
 }
-

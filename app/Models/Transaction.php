@@ -49,9 +49,13 @@ use Illuminate\Support\Carbon;
 class Transaction extends Model
 {
     public const TYPE_AIRLINE = 'airline';
+
     public const TYPE_TRANSLATION = 'translation';
+
     public const TYPE_PSA = 'psa';
+
     public const TYPE_ONLINE_ASSISTANCE = 'online_assistance';
+
     public const TYPE_PRINTING = 'printing';
 
     public const TYPES = [
@@ -63,6 +67,7 @@ class Transaction extends Model
     ];
 
     public const PAYMENT_METHOD_CASH = 'cash';
+
     public const PAYMENT_METHOD_GCASH = 'gcash';
 
     public const PAYMENT_METHODS = [
@@ -71,8 +76,11 @@ class Transaction extends Model
     ];
 
     public const PSA_DOC_BC = 'BC';
+
     public const PSA_DOC_MC = 'MC';
+
     public const PSA_DOC_DC = 'DC';
+
     public const PSA_DOC_CENOMAR = 'Cenomar';
 
     public const PSA_DOCUMENT_TYPES = [
@@ -100,7 +108,7 @@ class Transaction extends Model
     }
 
     /**
-     * @return BelongsTo<BaggageOption, Transaction>
+     * @return BelongsTo<BaggageOption, $this>
      */
     public function baggageOption(): BelongsTo
     {
@@ -108,7 +116,7 @@ class Transaction extends Model
     }
 
     /**
-     * @return BelongsTo<OnlineAssistanceType, Transaction>
+     * @return BelongsTo<OnlineAssistanceType, $this>
      */
     public function onlineAssistanceType(): BelongsTo
     {

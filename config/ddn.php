@@ -16,4 +16,3 @@ return [
         'employee' => 0.40,
     ],
 ];
-
