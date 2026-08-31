@@ -3,6 +3,19 @@ import { Head } from '@inertiajs/vue3';
 import TransactionController from '@/actions/App/Http/Controllers/TransactionController';
 import TransactionForm from '@/components/TransactionForm.vue';
 import { index } from '@/routes/transactions';
+import type {
+    BaggageOption,
+    DdnSplitConfig,
+    OnlineAssistanceType,
+    PsaDocumentType,
+} from '@/types/transaction';
+
+defineProps<{
+    baggageOptions?: BaggageOption[];
+    onlineAssistanceTypes?: OnlineAssistanceType[];
+    psaDocumentTypes?: PsaDocumentType[];
+    ddnSplitConfig?: DdnSplitConfig;
+}>();
 
 defineOptions({
     layout: {
@@ -24,7 +37,7 @@ defineOptions({
                 Record transaction
             </h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                Add a business transaction to your records.
+                Add a business transaction or service record.
             </p>
         </section>
 
@@ -33,6 +46,10 @@ defineOptions({
                 :action="TransactionController.store().url"
                 method="post"
                 submit-label="Save transaction"
+                :baggage-options="baggageOptions"
+                :online-assistance-types="onlineAssistanceTypes"
+                :psa-document-types="psaDocumentTypes"
+                :ddn-split-config="ddnSplitConfig"
             />
         </section>
     </main>

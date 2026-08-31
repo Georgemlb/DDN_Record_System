@@ -1,16 +1,29 @@
 <?php
 
+use App\Models\BaggageOption;
+use App\Models\OnlineAssistanceType;
 use App\Models\Transaction;
 use App\Models\User;
+use Database\Seeders\BaggageOptionSeeder;
+use Database\Seeders\OnlineAssistanceTypeSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
 
+beforeEach(function () {
+    $this->seed([
+        BaggageOptionSeeder::class,
+        OnlineAssistanceTypeSeeder::class,
+    ]);
+});
+
 function transactionData(array $overrides = []): array
 {
     return array_merge([
+        'type' => Transaction::TYPE_AIRLINE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
         'transaction_date' => '2026-08-28',
         'customer_name' => 'Person 1',
         'pax' => 1,
@@ -39,20 +52,125 @@ test('an authenticated user can view recorded transactions', function () {
             ->where('transactions.0.id', $latest->id));
 });
 
-test('an authenticated user can record a transaction', function () {
+test('an authenticated user can record an airline transaction', function () {
     $user = User::factory()->create();
+    $baggage = BaggageOption::query()->first();
 
-    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData());
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'baggage_option_id' => $baggage->id,
+    ]));
 
     $transaction = Transaction::query()->sole();
 
     $response->assertRedirect(route('transactions.show', $transaction));
     $this->assertDatabaseHas('transactions', [
         'id' => $transaction->id,
+        'type' => 'airline',
         'customer_name' => 'Person 1',
         'pax' => 1,
         'provider' => 'Cebu Pacific',
+        'baggage_option_id' => $baggage->id,
         'amount' => '4500.00',
+        'ddn_amount' => '4500.00',
+    ]);
+});
+
+test('an authenticated user can record a document translation transaction with ddn calculation', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'translation',
+        'payment_method' => 'cash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'Translation Client',
+        'amount' => '1500.00',
+        'third_party_payment' => '500.00',
+        'notes' => 'English to Spanish',
+    ]);
+
+    $transaction = Transaction::query()->sole();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'translation',
+        'amount' => '1500.00',
+        'third_party_payment' => '500.00',
+        'ddn_amount' => '1000.00',
+    ]);
+});
+
+test('an authenticated user can record a PSA assistance transaction with ddn calculation', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'psa',
+        'payment_method' => 'gcash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'PSA Client',
+        'psa_document_type' => 'Cenomar',
+        'amount' => '1200.00',
+        'third_party_payment' => '500.00',
+    ]);
+
+    $transaction = Transaction::query()->sole();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'psa',
+        'payment_method' => 'gcash',
+        'psa_document_type' => 'Cenomar',
+        'amount' => '1200.00',
+        'third_party_payment' => '500.00',
+        'ddn_amount' => '700.00',
+    ]);
+});
+
+test('an authenticated user can record an online assistance transaction with 60/40 revenue split', function () {
+    $user = User::factory()->create();
+    $type = OnlineAssistanceType::query()->first();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'online_assistance',
+        'payment_method' => 'gcash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'Online Client',
+        'online_assistance_type_id' => $type->id,
+        'amount' => '1000.00',
+    ]);
+
+    $transaction = Transaction::query()->sole();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'online_assistance',
+        'amount' => '1000.00',
+        'ddn_amount' => '600.00',
+        'employee_share' => '400.00',
+    ]);
+});
+
+test('an authenticated user can record a printing transaction', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'printing',
+        'payment_method' => 'cash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'Print Client',
+        'amount' => '150.00',
+    ]);
+
+    $transaction = Transaction::query()->sole();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'printing',
+        'amount' => '150.00',
+        'ddn_amount' => '150.00',
     ]);
 });
 

@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { Plus, ReceiptText } from '@lucide/vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { formatPhp, formatTransactionDate } from '@/lib/transactionFormat';
+import {
+    formatPaymentMethod,
+    formatPhp,
+    formatTransactionDate,
+    formatTransactionType,
+} from '@/lib/transactionFormat';
 import { create, show } from '@/routes/transactions';
 import type { Transaction } from '@/types/transaction';
 
@@ -20,6 +26,27 @@ defineOptions({
         ],
     },
 });
+
+const getTransactionServiceDetail = (tx: Transaction): string => {
+    switch (tx.type) {
+        case 'airline':
+            return tx.provider
+                ? `${tx.provider} (${tx.pax ?? 1} pax)`
+                : `${tx.pax ?? 1} pax`;
+        case 'psa':
+            return tx.psa_document_type
+                ? `Doc: ${tx.psa_document_type}`
+                : 'PSA Assistance';
+        case 'online_assistance':
+            return tx.online_assistance_type?.name ?? 'Online Assistance';
+        case 'translation':
+            return 'Document Translation';
+        case 'printing':
+            return 'Printing Service';
+        default:
+            return tx.service_details || '—';
+    }
+};
 </script>
 
 <template>
@@ -35,7 +62,8 @@ defineOptions({
                     Transactions
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Record and manage your business transactions.
+                    Record and manage your business income and service
+                    transactions.
                 </p>
             </div>
             <Button as-child>
@@ -45,7 +73,7 @@ defineOptions({
 
         <section
             v-if="transactions.length"
-            class="overflow-hidden rounded-lg border bg-card"
+            class="overflow-hidden rounded-lg border bg-card shadow-xs"
         >
             <div class="overflow-x-auto">
                 <table class="w-full min-w-185 text-left text-sm">
@@ -55,13 +83,16 @@ defineOptions({
                         <tr>
                             <th class="px-5 py-3 font-medium">Date</th>
                             <th class="px-5 py-3 font-medium">
-                                Customer / person
+                                Customer / Person
                             </th>
-                            <th class="px-5 py-3 font-medium">Pax</th>
-                            <th class="px-5 py-3 font-medium">Provider</th>
+                            <th class="px-5 py-3 font-medium">Service Type</th>
                             <th class="px-5 py-3 font-medium">Details</th>
+                            <th class="px-5 py-3 font-medium">Payment</th>
                             <th class="px-5 py-3 text-right font-medium">
-                                Amount
+                                Customer Total
+                            </th>
+                            <th class="px-5 py-3 text-right font-medium">
+                                DDN Amount
                             </th>
                         </tr>
                     </thead>
@@ -69,7 +100,7 @@ defineOptions({
                         <tr
                             v-for="transaction in transactions"
                             :key="transaction.id"
-                            class="hover:bg-muted/35"
+                            class="transition-colors hover:bg-muted/35"
                         >
                             <td
                                 class="px-5 py-4 whitespace-nowrap text-muted-foreground"
@@ -88,19 +119,44 @@ defineOptions({
                                     {{ transaction.customer_name }}
                                 </Link>
                             </td>
-                            <td class="px-5 py-4">{{ transaction.pax }}</td>
-                            <td class="px-5 py-4 text-muted-foreground">
-                                {{ transaction.provider || '—' }}
+                            <td class="px-5 py-4 whitespace-nowrap">
+                                <Badge variant="secondary" class="font-normal">
+                                    {{
+                                        formatTransactionType(transaction.type)
+                                    }}
+                                </Badge>
                             </td>
                             <td
-                                class="max-w-70 truncate px-5 py-4 text-muted-foreground"
+                                class="max-w-60 truncate px-5 py-4 text-muted-foreground"
                             >
-                                {{ transaction.service_details || '—' }}
+                                {{ getTransactionServiceDetail(transaction) }}
+                            </td>
+                            <td class="px-5 py-4 whitespace-nowrap">
+                                <Badge
+                                    variant="outline"
+                                    class="text-xs uppercase"
+                                >
+                                    {{
+                                        formatPaymentMethod(
+                                            transaction.payment_method,
+                                        )
+                                    }}
+                                </Badge>
                             </td>
                             <td
                                 class="px-5 py-4 text-right font-medium whitespace-nowrap"
                             >
                                 {{ formatPhp(transaction.amount) }}
+                            </td>
+                            <td
+                                class="px-5 py-4 text-right font-semibold whitespace-nowrap text-primary"
+                            >
+                                {{
+                                    formatPhp(
+                                        transaction.ddn_amount ??
+                                            transaction.amount,
+                                    )
+                                }}
                             </td>
                         </tr>
                     </tbody>
