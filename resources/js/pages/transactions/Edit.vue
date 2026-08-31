@@ -2,17 +2,38 @@
 import { Head } from '@inertiajs/vue3';
 import TransactionController from '@/actions/App/Http/Controllers/TransactionController';
 import TransactionForm from '@/components/TransactionForm.vue';
-import type { Transaction } from '@/types/transaction';
+import { index } from '@/routes/transactions';
+import type {
+    BaggageOption,
+    DdnSplitConfig,
+    OnlineAssistanceType,
+    PsaDocumentType,
+    Transaction,
+} from '@/types/transaction';
 
 const props = defineProps<{
     transaction: Transaction;
+    baggageOptions?: BaggageOption[];
+    onlineAssistanceTypes?: OnlineAssistanceType[];
+    psaDocumentTypes?: PsaDocumentType[];
+    ddnSplitConfig?: DdnSplitConfig;
 }>();
 
-defineOptions({ layout: { breadcrumbs: [] } });
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Transactions', href: index() },
+            {
+                title: 'Edit transaction',
+                href: '#',
+            },
+        ],
+    },
+});
 </script>
 
 <template>
-    <Head title="Edit transaction" />
+    <Head :title="`Edit: ${props.transaction.customer_name}`" />
 
     <main class="flex flex-1 flex-col gap-6 p-4 sm:p-6">
         <section>
@@ -21,7 +42,8 @@ defineOptions({ layout: { breadcrumbs: [] } });
                 Edit transaction
             </h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                Update the details for {{ props.transaction.customer_name }}.
+                Update the record details for
+                {{ props.transaction.customer_name }}.
             </p>
         </section>
 
@@ -31,6 +53,10 @@ defineOptions({ layout: { breadcrumbs: [] } });
                 method="put"
                 submit-label="Save changes"
                 :transaction="props.transaction"
+                :baggage-options="baggageOptions"
+                :online-assistance-types="onlineAssistanceTypes"
+                :psa-document-types="psaDocumentTypes"
+                :ddn-split-config="ddnSplitConfig"
             />
         </section>
     </main>
