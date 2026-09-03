@@ -1,23 +1,15 @@
 <?php
 
-namespace App\Http\Controllers\Settings;
+namespace App\Http\Controllers\Configuration;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExpenseCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
 
 class ExpenseCategoryController extends Controller
 {
-    public function index(): Response
-    {
-        return Inertia::render('settings/ExpenseCategories', [
-            'expenseCategories' => ExpenseCategory::orderBy('sort_order')->orderBy('name')->get(),
-        ]);
-    }
-
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -29,7 +21,9 @@ class ExpenseCategoryController extends Controller
 
         ExpenseCategory::create($validated);
 
-        return back()->with('success', 'Expense category created successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense category created successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'expense-categories']);
     }
 
     public function update(Request $request, ExpenseCategory $expenseCategory): RedirectResponse
@@ -43,17 +37,27 @@ class ExpenseCategoryController extends Controller
 
         $expenseCategory->update($validated);
 
-        return back()->with('success', 'Expense category updated successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense category updated successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'expense-categories']);
     }
 
     public function destroy(ExpenseCategory $expenseCategory): RedirectResponse
     {
         if ($expenseCategory->expenses()->exists()) {
-            return back()->with('error', 'Cannot delete expense category because it is used in existing expenses. Deactivate it instead.');
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'Cannot delete expense category because it is used in existing expenses. Deactivate it instead.',
+            ]);
+
+            return redirect()->route('configurations.index', ['tab' => 'expense-categories'])
+                ->with('error', 'Cannot delete expense category because it is used in existing expenses. Deactivate it instead.');
         }
 
         $expenseCategory->delete();
 
-        return back()->with('success', 'Expense category deleted successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense category deleted successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'expense-categories']);
     }
 }

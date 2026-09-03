@@ -24,10 +24,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
+});
 
-    Route::resource('settings/baggage-options', \App\Http\Controllers\Settings\BaggageOptionController::class)->only(['index', 'store', 'update', 'destroy']);
-    Route::resource('settings/online-assistance-types', \App\Http\Controllers\Settings\OnlineAssistanceTypeController::class)->only(['index', 'store', 'update', 'destroy']);
-    Route::resource('settings/expense-categories', \App\Http\Controllers\Settings\ExpenseCategoryController::class)->only(['index', 'store', 'update', 'destroy']);
+Route::middleware(['auth'])->group(function () {
+    Route::redirect('settings/baggage-options', '/configurations?tab=baggage');
+    Route::redirect('settings/online-assistance-types', '/configurations?tab=online-assistance');
+    Route::redirect('settings/expense-categories', '/configurations?tab=expense-categories');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

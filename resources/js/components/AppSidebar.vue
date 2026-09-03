@@ -6,6 +6,7 @@ import {
     LayoutDashboard,
     ReceiptText,
     Settings,
+    SlidersHorizontal,
     UtilityPole,
 } from '@lucide/vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -53,6 +54,11 @@ const mainNavItems: NavItem[] = [
         href: '#',
         icon: BarChart3,
         disabled: true,
+    },
+    {
+        title: 'Configurations',
+        href: '/configurations',
+        icon: SlidersHorizontal,
     },
     {
         title: 'Settings',

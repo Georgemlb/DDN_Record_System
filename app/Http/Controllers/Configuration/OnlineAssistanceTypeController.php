@@ -1,23 +1,15 @@
 <?php
 
-namespace App\Http\Controllers\Settings;
+namespace App\Http\Controllers\Configuration;
 
 use App\Http\Controllers\Controller;
 use App\Models\OnlineAssistanceType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
 
 class OnlineAssistanceTypeController extends Controller
 {
-    public function index(): Response
-    {
-        return Inertia::render('settings/OnlineAssistanceTypes', [
-            'onlineAssistanceTypes' => OnlineAssistanceType::orderBy('sort_order')->orderBy('name')->get(),
-        ]);
-    }
-
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -29,7 +21,9 @@ class OnlineAssistanceTypeController extends Controller
 
         OnlineAssistanceType::create($validated);
 
-        return back()->with('success', 'Online assistance type created successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Online assistance type created successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'online-assistance']);
     }
 
     public function update(Request $request, OnlineAssistanceType $onlineAssistanceType): RedirectResponse
@@ -43,17 +37,27 @@ class OnlineAssistanceTypeController extends Controller
 
         $onlineAssistanceType->update($validated);
 
-        return back()->with('success', 'Online assistance type updated successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Online assistance type updated successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'online-assistance']);
     }
 
     public function destroy(OnlineAssistanceType $onlineAssistanceType): RedirectResponse
     {
         if ($onlineAssistanceType->transactions()->exists()) {
-            return back()->with('error', 'Cannot delete online assistance type because it is used in existing transactions. Deactivate it instead.');
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'Cannot delete online assistance type because it is used in existing transactions. Deactivate it instead.',
+            ]);
+
+            return redirect()->route('configurations.index', ['tab' => 'online-assistance'])
+                ->with('error', 'Cannot delete online assistance type because it is used in existing transactions. Deactivate it instead.');
         }
 
         $onlineAssistanceType->delete();
 
-        return back()->with('success', 'Online assistance type deleted successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Online assistance type deleted successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'online-assistance']);
     }
 }

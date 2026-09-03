@@ -23,18 +23,6 @@ const sidebarNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
     },
-    {
-        title: 'Baggage Options',
-        href: '/settings/baggage-options',
-    },
-    {
-        title: 'Online Assistance',
-        href: '/settings/online-assistance-types',
-    },
-    {
-        title: 'Expense Categories',
-        href: '/settings/expense-categories',
-    },
 ];
 
 const { isCurrentOrParentUrl } = useCurrentUrl();

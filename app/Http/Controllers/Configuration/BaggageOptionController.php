@@ -1,23 +1,15 @@
 <?php
 
-namespace App\Http\Controllers\Settings;
+namespace App\Http\Controllers\Configuration;
 
 use App\Http\Controllers\Controller;
 use App\Models\BaggageOption;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
 
 class BaggageOptionController extends Controller
 {
-    public function index(): Response
-    {
-        return Inertia::render('settings/BaggageOptions', [
-            'baggageOptions' => BaggageOption::orderBy('sort_order')->orderBy('weight_kg')->get(),
-        ]);
-    }
-
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -31,7 +23,9 @@ class BaggageOptionController extends Controller
 
         BaggageOption::create($validated);
 
-        return back()->with('success', 'Baggage option created successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Baggage option created successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'baggage']);
     }
 
     public function update(Request $request, BaggageOption $baggageOption): RedirectResponse
@@ -47,17 +41,27 @@ class BaggageOptionController extends Controller
 
         $baggageOption->update($validated);
 
-        return back()->with('success', 'Baggage option updated successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Baggage option updated successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'baggage']);
     }
 
     public function destroy(BaggageOption $baggageOption): RedirectResponse
     {
         if ($baggageOption->transactions()->exists()) {
-            return back()->with('error', 'Cannot delete baggage option because it is used in existing transactions. Deactivate it instead.');
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'Cannot delete baggage option because it is used in existing transactions. Deactivate it instead.',
+            ]);
+
+            return redirect()->route('configurations.index', ['tab' => 'baggage'])
+                ->with('error', 'Cannot delete baggage option because it is used in existing transactions. Deactivate it instead.');
         }
 
         $baggageOption->delete();
 
-        return back()->with('success', 'Baggage option deleted successfully.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Baggage option deleted successfully.']);
+
+        return redirect()->route('configurations.index', ['tab' => 'baggage']);
     }
 }
