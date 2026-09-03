@@ -115,9 +115,6 @@ class Transaction extends Model
         return $this->belongsTo(BaggageOption::class);
     }
 
-    /**
-     * @return BelongsTo<OnlineAssistanceType, $this>
-     */
     public function onlineAssistanceType(): BelongsTo
     {
         return $this->belongsTo(OnlineAssistanceType::class);

@@ -17,18 +17,74 @@ class TransactionController extends Controller
      */
     public function index(): Response
     {
+        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType']);
+
+        // Filtering
+        if ($search = request('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('customer_name', 'like', "%{$search}%")
+                    ->orWhere('service_details', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%");
+            });
+        }
+
+        if ($type = request('type')) {
+            if ($type !== 'all') {
+                $query->where('type', $type);
+            }
+        }
+
+        if ($paymentMethod = request('payment_method')) {
+            if ($paymentMethod !== 'all') {
+                $query->where('payment_method', $paymentMethod);
+            }
+        }
+
+        if ($date = request('date')) {
+            $now = now();
+            if ($date === 'today') {
+                $query->whereDate('transaction_date', $now->toDateString());
+            } elseif ($date === 'last_7_days') {
+                $query->whereBetween('transaction_date', [$now->copy()->subDays(7)->toDateString(), $now->toDateString()]);
+            } elseif ($date === 'this_month') {
+                $query->whereMonth('transaction_date', $now->month)
+                    ->whereYear('transaction_date', $now->year);
+            }
+        }
+
+        // Summary Calculations (before pagination)
+        $summaryQuery = clone $query;
+        $summary = [
+            'total_payments' => $summaryQuery->sum('amount'),
+            'total_ddn' => $summaryQuery->sum('ddn_amount'),
+            'total_cash' => (clone $summaryQuery)->where('payment_method', 'cash')->sum('amount'),
+            'total_gcash' => (clone $summaryQuery)->where('payment_method', 'gcash')->sum('amount'),
+        ];
+
+        // Sorting
+        $sort = request('sort', 'transaction_date');
+        $direction = request('direction', 'desc');
+
+        $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name'];
+        if (in_array($sort, $allowedSorts)) {
+            $query->orderBy($sort, $direction);
+        }
+
+        // Secondary sort to ensure stable pagination
+        if ($sort !== 'id') {
+            $query->orderBy('id', 'desc');
+        }
+
+        $transactions = $query->paginate(15)->withQueryString();
+
         return Inertia::render('transactions/Index', [
-            'transactions' => Transaction::query()
-                ->with(['baggageOption', 'onlineAssistanceType'])
-                ->orderByDesc('transaction_date')
-                ->orderByDesc('id')
-                ->get(),
+            'transactions' => $transactions,
+            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'sort', 'direction']),
+            'summary' => $summary,
         ]);
     }
 
     /**
-     * Show the form for recording a transaction.
-     */
     public function create(): Response
     {
         return Inertia::render('transactions/Create', [

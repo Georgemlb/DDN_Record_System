@@ -48,8 +48,8 @@ test('an authenticated user can view recorded transactions', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('transactions/Index')
-            ->has('transactions', 2)
-            ->where('transactions.0.id', $latest->id));
+            ->has('transactions.data', 2)
+            ->where('transactions.data.0.id', $latest->id));
 });
 
 test('an authenticated user can record an airline transaction', function () {
