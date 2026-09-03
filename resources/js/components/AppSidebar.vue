@@ -21,6 +21,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as expenses } from '@/routes/expenses';
 import { edit as editProfile } from '@/routes/profile';
 import { index as transactions } from '@/routes/transactions';
 import type { NavItem } from '@/types';
@@ -38,9 +39,8 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Expenses',
-        href: '#',
+        href: expenses(),
         icon: FileText,
-        disabled: true,
     },
     {
         title: 'Utilities',

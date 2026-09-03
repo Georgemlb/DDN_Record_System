@@ -85,6 +85,8 @@ class TransactionController extends Controller
     }
 
     /**
+     * Show the form for creating a new transaction.
+     */
     public function create(): Response
     {
         return Inertia::render('transactions/Create', [
