@@ -116,7 +116,6 @@ class Transaction extends Model
     }
 
     /**
-     * @return BelongsTo<OnlineAssistanceType, $this>
      */
     public function onlineAssistanceType(): BelongsTo
     {
