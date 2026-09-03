@@ -23,8 +23,8 @@ class TransactionController extends Controller
         if ($search = request('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('customer_name', 'like', "%{$search}%")
-                  ->orWhere('service_details', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
+                    ->orWhere('service_details', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%");
             });
         }
 
@@ -48,7 +48,7 @@ class TransactionController extends Controller
                 $query->whereBetween('transaction_date', [$now->copy()->subDays(7)->toDateString(), $now->toDateString()]);
             } elseif ($date === 'this_month') {
                 $query->whereMonth('transaction_date', $now->month)
-                      ->whereYear('transaction_date', $now->year);
+                    ->whereYear('transaction_date', $now->year);
             }
         }
 
@@ -64,12 +64,12 @@ class TransactionController extends Controller
         // Sorting
         $sort = request('sort', 'transaction_date');
         $direction = request('direction', 'desc');
-        
+
         $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name'];
         if (in_array($sort, $allowedSorts)) {
             $query->orderBy($sort, $direction);
         }
-        
+
         // Secondary sort to ensure stable pagination
         if ($sort !== 'id') {
             $query->orderBy('id', 'desc');
