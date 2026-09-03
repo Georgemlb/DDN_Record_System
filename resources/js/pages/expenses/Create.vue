@@ -47,6 +47,7 @@ defineOptions({
 
         <section class="max-w-3xl rounded-lg border bg-card p-5 sm:p-6">
             <ExpenseForm
+                :key="sourceExpense?.id ?? 'new'"
                 :action="ExpenseController.store().url"
                 method="post"
                 submit-label="Save expense"

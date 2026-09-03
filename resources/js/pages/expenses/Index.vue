@@ -466,7 +466,14 @@ const toggleSort = (field: string) => {
                                         title="Duplicate"
                                     >
                                         <Link
-                                            :href="`${expenseCreate()}?duplicate_id=${expense.id}`"
+                                            :href="
+                                                expenseCreate({
+                                                    query: {
+                                                        duplicate_id:
+                                                            expense.id,
+                                                    },
+                                                })
+                                            "
                                         >
                                             <Copy class="size-3.5" />
                                         </Link>
