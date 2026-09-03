@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { Copy, Pencil, Trash2 } from '@lucide/vue';
+import { ArrowLeft, Copy, Pencil, Trash2 } from '@lucide/vue';
 import ExpenseController from '@/actions/App/Http/Controllers/ExpenseController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,7 +81,11 @@ defineOptions({
                 <!-- Duplicate Button -->
                 <Button variant="outline" as-child>
                     <Link
-                        :href="`${expenseCreate()}?duplicate_id=${props.expense.id}`"
+                        :href="
+                            expenseCreate({
+                                query: { duplicate_id: props.expense.id },
+                            })
+                        "
                     >
                         <Copy class="size-4" />
                         <span>Duplicate</span>
@@ -300,5 +304,12 @@ defineOptions({
                 </CardContent>
             </Card>
         </section>
+
+        <Button variant="outline" class="w-fit" as-child>
+            <Link :href="expensesIndex()">
+                <ArrowLeft class="size-4" />
+                <span>Back to expenses</span>
+            </Link>
+        </Button>
     </main>
 </template>
