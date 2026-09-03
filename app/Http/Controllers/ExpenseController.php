@@ -157,9 +157,16 @@ class ExpenseController extends Controller
     {
         $expense->load('category');
 
+        $categories = ExpenseCategory::query()->active()->get();
+        if ($expense->category && !$expense->category->is_active) {
+            $inactiveCategory = clone $expense->category;
+            $inactiveCategory->name .= ' (Inactive)';
+            $categories->push($inactiveCategory);
+        }
+
         return Inertia::render('expenses/Edit', [
             'expense' => $expense,
-            'categories' => ExpenseCategory::query()->active()->get(),
+            'categories' => $categories,
             'paymentMethods' => Expense::PAYMENT_METHODS,
             'recurringFrequencies' => Expense::RECURRING_FREQUENCIES,
         ]);

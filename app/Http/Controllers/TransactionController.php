@@ -130,10 +130,24 @@ class TransactionController extends Controller
     {
         $transaction->load(['baggageOption', 'onlineAssistanceType']);
 
+        $baggageOptions = BaggageOption::query()->active()->get();
+        if ($transaction->baggageOption && !$transaction->baggageOption->is_active) {
+            $inactiveOption = clone $transaction->baggageOption;
+            $inactiveOption->label .= ' (Inactive)';
+            $baggageOptions->push($inactiveOption);
+        }
+
+        $onlineAssistanceTypes = OnlineAssistanceType::query()->active()->get();
+        if ($transaction->onlineAssistanceType && !$transaction->onlineAssistanceType->is_active) {
+            $inactiveType = clone $transaction->onlineAssistanceType;
+            $inactiveType->name .= ' (Inactive)';
+            $onlineAssistanceTypes->push($inactiveType);
+        }
+
         return Inertia::render('transactions/Edit', [
             'transaction' => $transaction,
-            'baggageOptions' => BaggageOption::query()->active()->get(),
-            'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
+            'baggageOptions' => $baggageOptions,
+            'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
         ]);

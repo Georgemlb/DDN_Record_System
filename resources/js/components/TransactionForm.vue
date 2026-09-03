@@ -102,6 +102,25 @@ watch(
     { immediate: true },
 );
 
+const filteredBaggageOptions = computed(() => {
+    const currentProvider = provider.value.trim().toLowerCase();
+    
+    return props.baggageOptions.filter(option => {
+        // Always include currently selected option
+        if (String(option.id) === baggageOptionId.value) {
+            return true;
+        }
+
+        // Include universal options
+        if (!option.airline) {
+            return true;
+        }
+
+        // Include airline specific options
+        return option.airline.toLowerCase() === currentProvider;
+    });
+});
+
 // Client-side computed previews
 const numAmount = computed(() => Number(amount.value) || 0);
 const numThirdParty = computed(() => Number(thirdPartyPayment.value) || 0);
@@ -254,7 +273,13 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         name="provider"
                         v-model="provider"
                         placeholder="e.g. Cebu Pacific"
+                        list="airlines"
                     />
+                    <datalist id="airlines">
+                        <option value="Cebu Pacific"></option>
+                        <option value="Philippine Airlines"></option>
+                        <option value="AirAsia"></option>
+                    </datalist>
                     <InputError :message="errors.provider" />
                 </div>
 
@@ -276,7 +301,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 None / Default
                             </SelectItem>
                             <SelectItem
-                                v-for="option in baggageOptions"
+                                v-for="option in filteredBaggageOptions"
                                 :key="option.id"
                                 :value="String(option.id)"
                             >

@@ -184,6 +184,9 @@ defineOptions({
                             </dt>
                             <dd class="mt-1 font-medium">
                                 <span v-if="transaction.baggage_option">
+                                    <template v-if="transaction.baggage_option.airline">
+                                        {{ transaction.baggage_option.airline }} —
+                                    </template>
                                     {{ transaction.baggage_option.label }} ({{
                                         formatPhp(
                                             transaction.baggage_option.price,
