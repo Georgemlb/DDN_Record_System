@@ -26,6 +26,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
 });
 
+Route::middleware(['auth'])->group(function () {
+    Route::redirect('settings/baggage-options', '/configurations?tab=baggage');
+    Route::redirect('settings/online-assistance-types', '/configurations?tab=online-assistance');
+    Route::redirect('settings/expense-categories', '/configurations?tab=expense-categories');
+});
+
 Route::get('.well-known/passkey-endpoints', function () {
     return response()->json([
         'enroll' => route('security.edit'),

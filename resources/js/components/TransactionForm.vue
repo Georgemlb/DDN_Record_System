@@ -102,6 +102,34 @@ watch(
     { immediate: true },
 );
 
+const filteredBaggageOptions = computed(() => {
+    const currentProvider = provider.value.trim().toLowerCase();
+
+    return props.baggageOptions.filter((option) => {
+        // Always include currently selected option
+        if (String(option.id) === baggageOptionId.value) {
+            return true;
+        }
+
+        // Include universal options
+        if (!option.airline) {
+            return true;
+        }
+
+        // Include airline specific options
+        return option.airline.toLowerCase() === currentProvider;
+    });
+});
+
+const airlineSuggestions = computed(() => {
+    const defaultAirlines = ['Cebu Pacific', 'Philippine Airlines', 'AirAsia'];
+    const configuredAirlines = props.baggageOptions
+        .map((opt) => opt.airline?.trim())
+        .filter((airline): airline is string => Boolean(airline));
+
+    return Array.from(new Set([...defaultAirlines, ...configuredAirlines]));
+});
+
 // Client-side computed previews
 const numAmount = computed(() => Number(amount.value) || 0);
 const numThirdParty = computed(() => Number(thirdPartyPayment.value) || 0);
@@ -254,7 +282,15 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         name="provider"
                         v-model="provider"
                         placeholder="e.g. Cebu Pacific"
+                        list="airlines"
                     />
+                    <datalist id="airlines">
+                        <option
+                            v-for="airline in airlineSuggestions"
+                            :key="airline"
+                            :value="airline"
+                        />
+                    </datalist>
                     <InputError :message="errors.provider" />
                 </div>
 
@@ -276,11 +312,15 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 None / Default
                             </SelectItem>
                             <SelectItem
-                                v-for="option in baggageOptions"
+                                v-for="option in filteredBaggageOptions"
                                 :key="option.id"
                                 :value="String(option.id)"
                             >
-                                {{ option.label }} ({{
+                                [{{
+                                    option.airline
+                                        ? option.airline
+                                        : 'Universal'
+                                }}] {{ option.label }} ({{
                                     formatPhp(option.price)
                                 }})
                             </SelectItem>

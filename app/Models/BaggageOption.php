@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
  * @property string $label
+ * @property string|null $airline
  * @property int $weight_kg
  * @property string $price
  * @property bool $is_active
@@ -19,6 +21,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'label',
+    'airline',
     'weight_kg',
     'price',
     'is_active',
@@ -49,5 +52,13 @@ class BaggageOption extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true)->orderBy('sort_order')->orderBy('weight_kg');
+    }
+
+    /**
+     * @return HasMany<Transaction, $this>
+     */
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
     }
 }

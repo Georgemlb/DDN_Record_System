@@ -6,6 +6,7 @@ import {
     LayoutDashboard,
     ReceiptText,
     Settings,
+    SlidersHorizontal,
     UtilityPole,
 } from '@lucide/vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -21,6 +22,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
 import { edit as editProfile } from '@/routes/profile';
 import { index as transactions } from '@/routes/transactions';
@@ -53,6 +55,11 @@ const mainNavItems: NavItem[] = [
         href: '#',
         icon: BarChart3,
         disabled: true,
+    },
+    {
+        title: 'Configurations',
+        href: configurations(),
+        icon: SlidersHorizontal,
     },
     {
         title: 'Settings',

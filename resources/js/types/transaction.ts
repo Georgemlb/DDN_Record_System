@@ -7,6 +7,7 @@ export type PsaDocumentType = 'BC' | 'MC' | 'DC' | 'Cenomar';
 
 export type BaggageOption = {
     id: number;
+    airline?: string | null;
     label: string;
     weight_kg: number;
     price: string | number;
