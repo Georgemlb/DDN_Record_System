@@ -16,7 +16,7 @@ class ConfigurationController extends Controller
         $allowedTabs = ['baggage', 'online-assistance', 'expense-categories'];
         $tab = $request->query('tab', 'baggage');
 
-        if (!in_array($tab, $allowedTabs, true)) {
+        if (! in_array($tab, $allowedTabs, true)) {
             $tab = 'baggage';
         }
 

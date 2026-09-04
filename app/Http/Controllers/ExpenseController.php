@@ -158,7 +158,7 @@ class ExpenseController extends Controller
         $expense->load('category');
 
         $categories = ExpenseCategory::query()->active()->get();
-        if ($expense->category && !$expense->category->is_active) {
+        if ($expense->category && ! $expense->category->is_active) {
             $inactiveCategory = clone $expense->category;
             $inactiveCategory->name .= ' (Inactive)';
             $categories->push($inactiveCategory);

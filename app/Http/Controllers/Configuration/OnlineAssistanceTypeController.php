@@ -32,7 +32,7 @@ class OnlineAssistanceTypeController extends Controller
     public function update(Request $request, OnlineAssistanceType $onlineAssistanceType): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name,' . $onlineAssistanceType->id],
+            'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name,'.$onlineAssistanceType->id],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],

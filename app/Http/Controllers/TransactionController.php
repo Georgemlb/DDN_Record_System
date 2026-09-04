@@ -131,14 +131,14 @@ class TransactionController extends Controller
         $transaction->load(['baggageOption', 'onlineAssistanceType']);
 
         $baggageOptions = BaggageOption::query()->active()->get();
-        if ($transaction->baggageOption && !$transaction->baggageOption->is_active) {
+        if ($transaction->baggageOption && ! $transaction->baggageOption->is_active) {
             $inactiveOption = clone $transaction->baggageOption;
             $inactiveOption->label .= ' (Inactive)';
             $baggageOptions->push($inactiveOption);
         }
 
         $onlineAssistanceTypes = OnlineAssistanceType::query()->active()->get();
-        if ($transaction->onlineAssistanceType && !$transaction->onlineAssistanceType->is_active) {
+        if ($transaction->onlineAssistanceType && ! $transaction->onlineAssistanceType->is_active) {
             $inactiveType = clone $transaction->onlineAssistanceType;
             $inactiveType->name .= ' (Inactive)';
             $onlineAssistanceTypes->push($inactiveType);
