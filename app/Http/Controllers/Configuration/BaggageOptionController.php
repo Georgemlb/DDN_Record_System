@@ -15,11 +15,14 @@ class BaggageOptionController extends Controller
         $validated = $request->validate([
             'label' => ['required', 'string', 'max:255'],
             'airline' => ['nullable', 'string', 'max:255'],
-            'weight_kg' => ['required', 'integer', 'min:0'],
-            'price' => ['required', 'numeric', 'min:0'],
+            'weight_kg' => ['required', 'integer', 'min:0', 'max:1000'],
+            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         BaggageOption::create($validated);
 
@@ -33,11 +36,14 @@ class BaggageOptionController extends Controller
         $validated = $request->validate([
             'label' => ['required', 'string', 'max:255'],
             'airline' => ['nullable', 'string', 'max:255'],
-            'weight_kg' => ['required', 'integer', 'min:0'],
-            'price' => ['required', 'numeric', 'min:0'],
+            'weight_kg' => ['required', 'integer', 'min:0', 'max:1000'],
+            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         $baggageOption->update($validated);
 

@@ -104,8 +104,8 @@ watch(
 
 const filteredBaggageOptions = computed(() => {
     const currentProvider = provider.value.trim().toLowerCase();
-    
-    return props.baggageOptions.filter(option => {
+
+    return props.baggageOptions.filter((option) => {
         // Always include currently selected option
         if (String(option.id) === baggageOptionId.value) {
             return true;
@@ -119,6 +119,15 @@ const filteredBaggageOptions = computed(() => {
         // Include airline specific options
         return option.airline.toLowerCase() === currentProvider;
     });
+});
+
+const airlineSuggestions = computed(() => {
+    const defaultAirlines = ['Cebu Pacific', 'Philippine Airlines', 'AirAsia'];
+    const configuredAirlines = props.baggageOptions
+        .map((opt) => opt.airline?.trim())
+        .filter((airline): airline is string => Boolean(airline));
+
+    return Array.from(new Set([...defaultAirlines, ...configuredAirlines]));
 });
 
 // Client-side computed previews
@@ -276,9 +285,11 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         list="airlines"
                     />
                     <datalist id="airlines">
-                        <option value="Cebu Pacific"></option>
-                        <option value="Philippine Airlines"></option>
-                        <option value="AirAsia"></option>
+                        <option
+                            v-for="airline in airlineSuggestions"
+                            :key="airline"
+                            :value="airline"
+                        />
                     </datalist>
                     <InputError :message="errors.provider" />
                 </div>
@@ -305,7 +316,11 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 :key="option.id"
                                 :value="String(option.id)"
                             >
-                                {{ option.label }} ({{
+                                [{{
+                                    option.airline
+                                        ? option.airline
+                                        : 'Universal'
+                                }}] {{ option.label }} ({{
                                     formatPhp(option.price)
                                 }})
                             </SelectItem>

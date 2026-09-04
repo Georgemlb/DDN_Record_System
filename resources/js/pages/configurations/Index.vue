@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
+    AlertCircle,
     Headphones,
     Luggage,
     Pencil,
@@ -8,7 +9,7 @@ import {
     Tag,
     Trash,
 } from '@lucide/vue';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -92,6 +93,45 @@ watch(
 );
 
 // --------------------------------------------------------
+// Reusable Delete Confirmation Modal
+// --------------------------------------------------------
+const isDeleteModalOpen = ref(false);
+const isDeleting = ref(false);
+const itemToDelete = ref<{
+    id: number;
+    title: string;
+    endpoint: string;
+    description: string;
+} | null>(null);
+
+const confirmDelete = (
+    id: number,
+    title: string,
+    endpoint: string,
+    description: string,
+) => {
+    itemToDelete.value = { id, title, endpoint, description };
+    isDeleteModalOpen.value = true;
+};
+
+const executeDelete = () => {
+    if (!itemToDelete.value) {
+        return;
+    }
+
+    isDeleting.value = true;
+
+    router.delete(`${itemToDelete.value.endpoint}/${itemToDelete.value.id}`, {
+        preserveScroll: true,
+        onFinish: () => {
+            isDeleting.value = false;
+            isDeleteModalOpen.value = false;
+            itemToDelete.value = null;
+        },
+    });
+};
+
+// --------------------------------------------------------
 // Baggage Modal & Form
 // --------------------------------------------------------
 const isBaggageModalOpen = ref(false);
@@ -104,6 +144,21 @@ const baggageForm = useForm({
     price: 0,
     sort_order: 0,
     is_active: true,
+});
+
+const hasDuplicateBaggageWarning = computed(() => {
+    const airline = baggageForm.airline.trim().toLowerCase();
+    const weight = Number(baggageForm.weight_kg);
+
+    return props.baggageOptions.some((opt) => {
+        if (editingBaggageId.value && opt.id === editingBaggageId.value) {
+            return false;
+        }
+
+        const optAirline = (opt.airline ?? '').trim().toLowerCase();
+
+        return optAirline === airline && opt.weight_kg === weight;
+    });
 });
 
 const openCreateBaggage = () => {
@@ -127,24 +182,19 @@ const openEditBaggage = (option: BaggageOption) => {
 
 const submitBaggage = () => {
     if (editingBaggageId.value) {
-        baggageForm.put(`/configurations/baggage-options/${editingBaggageId.value}`, {
-            onSuccess: () => {
-                isBaggageModalOpen.value = false;
+        baggageForm.put(
+            `/configurations/baggage-options/${editingBaggageId.value}`,
+            {
+                onSuccess: () => {
+                    isBaggageModalOpen.value = false;
+                },
             },
-        });
+        );
     } else {
         baggageForm.post('/configurations/baggage-options', {
             onSuccess: () => {
                 isBaggageModalOpen.value = false;
             },
-        });
-    }
-};
-
-const deleteBaggage = (id: number) => {
-    if (confirm('Are you sure you want to delete this baggage option?')) {
-        router.delete(`/configurations/baggage-options/${id}`, {
-            preserveScroll: true,
         });
     }
 };
@@ -181,24 +231,19 @@ const openEditAssistance = (item: OnlineAssistanceType) => {
 
 const submitAssistance = () => {
     if (editingAssistanceId.value) {
-        assistanceForm.put(`/configurations/online-assistance-types/${editingAssistanceId.value}`, {
-            onSuccess: () => {
-                isAssistanceModalOpen.value = false;
+        assistanceForm.put(
+            `/configurations/online-assistance-types/${editingAssistanceId.value}`,
+            {
+                onSuccess: () => {
+                    isAssistanceModalOpen.value = false;
+                },
             },
-        });
+        );
     } else {
         assistanceForm.post('/configurations/online-assistance-types', {
             onSuccess: () => {
                 isAssistanceModalOpen.value = false;
             },
-        });
-    }
-};
-
-const deleteAssistance = (id: number) => {
-    if (confirm('Are you sure you want to delete this online assistance type?')) {
-        router.delete(`/configurations/online-assistance-types/${id}`, {
-            preserveScroll: true,
         });
     }
 };
@@ -235,24 +280,19 @@ const openEditCategory = (cat: ExpenseCategory) => {
 
 const submitCategory = () => {
     if (editingCategoryId.value) {
-        categoryForm.put(`/configurations/expense-categories/${editingCategoryId.value}`, {
-            onSuccess: () => {
-                isCategoryModalOpen.value = false;
+        categoryForm.put(
+            `/configurations/expense-categories/${editingCategoryId.value}`,
+            {
+                onSuccess: () => {
+                    isCategoryModalOpen.value = false;
+                },
             },
-        });
+        );
     } else {
         categoryForm.post('/configurations/expense-categories', {
             onSuccess: () => {
                 isCategoryModalOpen.value = false;
             },
-        });
-    }
-};
-
-const deleteCategory = (id: number) => {
-    if (confirm('Are you sure you want to delete this expense category?')) {
-        router.delete(`/configurations/expense-categories/${id}`, {
-            preserveScroll: true,
         });
     }
 };
@@ -265,12 +305,17 @@ const deleteCategory = (id: number) => {
         <!-- Top Title & Description -->
         <section class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-sm font-medium text-primary">Master Data & Settings</p>
-                <h1 class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+                <p class="text-sm font-medium text-primary">
+                    Master Data & Settings
+                </p>
+                <h1
+                    class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl"
+                >
                     Configurations
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Manage master dropdown options for transactions, operational services, and expense tracking.
+                    Manage master dropdown options for transactions, operational
+                    services, and expense tracking.
                 </p>
             </div>
         </section>
@@ -294,7 +339,7 @@ const deleteCategory = (id: number) => {
                     <span>{{ tab.label }}</span>
                     <Badge
                         variant="secondary"
-                        class="ml-1 px-1.5 py-0.2 text-xs font-normal"
+                        class="py-0.2 ml-1 px-1.5 text-xs font-normal"
                     >
                         {{ tab.count() }}
                     </Badge>
@@ -308,9 +353,12 @@ const deleteCategory = (id: number) => {
         <section v-if="activeTab === 'baggage'" class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-lg font-semibold tracking-tight">Baggage Options</h2>
+                    <h2 class="text-lg font-semibold tracking-tight">
+                        Baggage Options
+                    </h2>
                     <p class="text-sm text-muted-foreground">
-                        Configure weight tiers and default pricing per airline or universal.
+                        Configure weight tiers and default pricing per airline
+                        or universal.
                     </p>
                 </div>
                 <Button @click="openCreateBaggage">
@@ -322,18 +370,34 @@ const deleteCategory = (id: number) => {
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b bg-muted/50 text-left text-muted-foreground">
+                            <tr
+                                class="border-b bg-muted/50 text-left text-muted-foreground"
+                            >
+                                <th class="w-16 p-4 text-center font-medium">
+                                    Order
+                                </th>
                                 <th class="p-4 font-medium">Airline</th>
                                 <th class="p-4 font-medium">Label</th>
-                                <th class="p-4 font-medium text-right">Weight</th>
-                                <th class="p-4 font-medium text-right">Price</th>
-                                <th class="p-4 font-medium text-center">Status</th>
-                                <th class="p-4 font-medium text-right">Actions</th>
+                                <th class="p-4 text-right font-medium">
+                                    Weight
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Price
+                                </th>
+                                <th class="p-4 text-center font-medium">
+                                    Status
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="baggageOptions.length === 0">
-                                <td colspan="6" class="p-8 text-center text-muted-foreground">
+                                <td
+                                    colspan="7"
+                                    class="p-8 text-center text-muted-foreground"
+                                >
                                     No baggage options configured yet.
                                 </td>
                             </tr>
@@ -342,25 +406,52 @@ const deleteCategory = (id: number) => {
                                 :key="option.id"
                                 class="border-b transition-colors hover:bg-muted/50"
                             >
+                                <td
+                                    class="p-4 text-center align-middle font-mono text-xs text-muted-foreground"
+                                >
+                                    #{{ option.sort_order ?? 0 }}
+                                </td>
                                 <td class="p-4 align-middle">
-                                    <span v-if="option.airline" class="font-medium text-foreground">
+                                    <span
+                                        v-if="option.airline"
+                                        class="font-medium text-foreground"
+                                    >
                                         {{ option.airline }}
                                     </span>
-                                    <span v-else class="italic text-muted-foreground">
+                                    <span
+                                        v-else
+                                        class="text-muted-foreground italic"
+                                    >
                                         Universal (All Airlines)
                                     </span>
                                 </td>
-                                <td class="p-4 align-middle font-medium">{{ option.label }}</td>
-                                <td class="p-4 align-middle text-right">{{ option.weight_kg }} KG</td>
-                                <td class="p-4 align-middle text-right font-medium">
+                                <td class="p-4 align-middle font-medium">
+                                    {{ option.label }}
+                                </td>
+                                <td class="p-4 text-right align-middle">
+                                    {{ option.weight_kg }} KG
+                                </td>
+                                <td
+                                    class="p-4 text-right align-middle font-medium"
+                                >
                                     {{ formatPhp(option.price) }}
                                 </td>
-                                <td class="p-4 align-middle text-center">
-                                    <Badge :variant="option.is_active ? 'default' : 'secondary'">
-                                        {{ option.is_active ? 'Active' : 'Inactive' }}
+                                <td class="p-4 text-center align-middle">
+                                    <Badge
+                                        :variant="
+                                            option.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            option.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
                                     </Badge>
                                 </td>
-                                <td class="p-4 align-middle text-right">
+                                <td class="p-4 text-right align-middle">
                                     <div class="flex justify-end gap-1">
                                         <Button
                                             variant="ghost"
@@ -375,7 +466,14 @@ const deleteCategory = (id: number) => {
                                             size="icon"
                                             title="Delete"
                                             class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            @click="deleteBaggage(option.id)"
+                                            @click="
+                                                confirmDelete(
+                                                    option.id,
+                                                    option.label,
+                                                    '/configurations/baggage-options',
+                                                    'This baggage option will be permanently removed if it is not associated with existing transactions.',
+                                                )
+                                            "
                                         >
                                             <Trash class="size-4" />
                                         </Button>
@@ -394,9 +492,12 @@ const deleteCategory = (id: number) => {
         <section v-if="activeTab === 'online-assistance'" class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-lg font-semibold tracking-tight">Online Assistance Types</h2>
+                    <h2 class="text-lg font-semibold tracking-tight">
+                        Online Assistance Types
+                    </h2>
                     <p class="text-sm text-muted-foreground">
-                        Configure digital assistance service types and base fee amounts.
+                        Configure digital assistance service types and base fee
+                        amounts.
                     </p>
                 </div>
                 <Button @click="openCreateAssistance">
@@ -408,16 +509,30 @@ const deleteCategory = (id: number) => {
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b bg-muted/50 text-left text-muted-foreground">
+                            <tr
+                                class="border-b bg-muted/50 text-left text-muted-foreground"
+                            >
+                                <th class="w-16 p-4 text-center font-medium">
+                                    Order
+                                </th>
                                 <th class="p-4 font-medium">Service Name</th>
-                                <th class="p-4 font-medium text-right">Base Price</th>
-                                <th class="p-4 font-medium text-center">Status</th>
-                                <th class="p-4 font-medium text-right">Actions</th>
+                                <th class="p-4 text-right font-medium">
+                                    Base Price
+                                </th>
+                                <th class="p-4 text-center font-medium">
+                                    Status
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="onlineAssistanceTypes.length === 0">
-                                <td colspan="4" class="p-8 text-center text-muted-foreground">
+                                <td
+                                    colspan="5"
+                                    class="p-8 text-center text-muted-foreground"
+                                >
                                     No online assistance types configured yet.
                                 </td>
                             </tr>
@@ -426,18 +541,37 @@ const deleteCategory = (id: number) => {
                                 :key="item.id"
                                 class="border-b transition-colors hover:bg-muted/50"
                             >
-                                <td class="p-4 align-middle font-medium text-foreground">
+                                <td
+                                    class="p-4 text-center align-middle font-mono text-xs text-muted-foreground"
+                                >
+                                    #{{ item.sort_order ?? 0 }}
+                                </td>
+                                <td
+                                    class="p-4 align-middle font-medium text-foreground"
+                                >
                                     {{ item.name }}
                                 </td>
-                                <td class="p-4 align-middle text-right font-medium">
+                                <td
+                                    class="p-4 text-right align-middle font-medium"
+                                >
                                     {{ formatPhp(item.price) }}
                                 </td>
-                                <td class="p-4 align-middle text-center">
-                                    <Badge :variant="item.is_active ? 'default' : 'secondary'">
-                                        {{ item.is_active ? 'Active' : 'Inactive' }}
+                                <td class="p-4 text-center align-middle">
+                                    <Badge
+                                        :variant="
+                                            item.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            item.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
                                     </Badge>
                                 </td>
-                                <td class="p-4 align-middle text-right">
+                                <td class="p-4 text-right align-middle">
                                     <div class="flex justify-end gap-1">
                                         <Button
                                             variant="ghost"
@@ -452,7 +586,14 @@ const deleteCategory = (id: number) => {
                                             size="icon"
                                             title="Delete"
                                             class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            @click="deleteAssistance(item.id)"
+                                            @click="
+                                                confirmDelete(
+                                                    item.id,
+                                                    item.name,
+                                                    '/configurations/online-assistance-types',
+                                                    'This online assistance type will be permanently removed if it is not associated with existing transactions.',
+                                                )
+                                            "
                                         >
                                             <Trash class="size-4" />
                                         </Button>
@@ -471,9 +612,12 @@ const deleteCategory = (id: number) => {
         <section v-if="activeTab === 'expense-categories'" class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-lg font-semibold tracking-tight">Expense Categories</h2>
+                    <h2 class="text-lg font-semibold tracking-tight">
+                        Expense Categories
+                    </h2>
                     <p class="text-sm text-muted-foreground">
-                        Categorize expenditures and disbursements for clear financial reporting.
+                        Categorize expenditures and disbursements for clear
+                        financial reporting.
                     </p>
                 </div>
                 <Button @click="openCreateCategory">
@@ -485,16 +629,28 @@ const deleteCategory = (id: number) => {
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b bg-muted/50 text-left text-muted-foreground">
+                            <tr
+                                class="border-b bg-muted/50 text-left text-muted-foreground"
+                            >
+                                <th class="w-16 p-4 text-center font-medium">
+                                    Order
+                                </th>
                                 <th class="p-4 font-medium">Category Name</th>
                                 <th class="p-4 font-medium">Description</th>
-                                <th class="p-4 font-medium text-center">Status</th>
-                                <th class="p-4 font-medium text-right">Actions</th>
+                                <th class="p-4 text-center font-medium">
+                                    Status
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="expenseCategories.length === 0">
-                                <td colspan="4" class="p-8 text-center text-muted-foreground">
+                                <td
+                                    colspan="5"
+                                    class="p-8 text-center text-muted-foreground"
+                                >
                                     No expense categories configured yet.
                                 </td>
                             </tr>
@@ -503,18 +659,37 @@ const deleteCategory = (id: number) => {
                                 :key="cat.id"
                                 class="border-b transition-colors hover:bg-muted/50"
                             >
-                                <td class="p-4 align-middle font-medium text-foreground">
+                                <td
+                                    class="p-4 text-center align-middle font-mono text-xs text-muted-foreground"
+                                >
+                                    #{{ cat.sort_order ?? 0 }}
+                                </td>
+                                <td
+                                    class="p-4 align-middle font-medium text-foreground"
+                                >
                                     {{ cat.name }}
                                 </td>
-                                <td class="p-4 align-middle text-muted-foreground">
+                                <td
+                                    class="p-4 align-middle text-muted-foreground"
+                                >
                                     {{ cat.description || '—' }}
                                 </td>
-                                <td class="p-4 align-middle text-center">
-                                    <Badge :variant="cat.is_active ? 'default' : 'secondary'">
-                                        {{ cat.is_active ? 'Active' : 'Inactive' }}
+                                <td class="p-4 text-center align-middle">
+                                    <Badge
+                                        :variant="
+                                            cat.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            cat.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
                                     </Badge>
                                 </td>
-                                <td class="p-4 align-middle text-right">
+                                <td class="p-4 text-right align-middle">
                                     <div class="flex justify-end gap-1">
                                         <Button
                                             variant="ghost"
@@ -529,7 +704,14 @@ const deleteCategory = (id: number) => {
                                             size="icon"
                                             title="Delete"
                                             class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            @click="deleteCategory(cat.id)"
+                                            @click="
+                                                confirmDelete(
+                                                    cat.id,
+                                                    cat.name,
+                                                    '/configurations/expense-categories',
+                                                    'This expense category will be permanently removed if it is not associated with existing expenses.',
+                                                )
+                                            "
                                         >
                                             <Trash class="size-4" />
                                         </Button>
@@ -550,7 +732,11 @@ const deleteCategory = (id: number) => {
                 <form @submit.prevent="submitBaggage">
                     <DialogHeader>
                         <DialogTitle>
-                            {{ editingBaggageId ? 'Edit Baggage Option' : 'Add Baggage Option' }}
+                            {{
+                                editingBaggageId
+                                    ? 'Edit Baggage Option'
+                                    : 'Add Baggage Option'
+                            }}
                         </DialogTitle>
                         <DialogDescription>
                             {{
@@ -563,16 +749,22 @@ const deleteCategory = (id: number) => {
 
                     <div class="grid gap-4 py-4">
                         <div class="space-y-1.5">
-                            <Label for="baggage-airline">Airline (Optional)</Label>
+                            <Label for="baggage-airline"
+                                >Airline (Optional)</Label
+                            >
                             <Input
                                 id="baggage-airline"
                                 v-model="baggageForm.airline"
                                 placeholder="e.g. Cebu Pacific (Leave empty for all)"
                             />
                             <p class="text-xs text-muted-foreground">
-                                Leave blank to make this option available for all airlines.
+                                Leave blank to make this option available for
+                                all airlines.
                             </p>
-                            <div v-if="baggageForm.errors.airline" class="text-xs text-destructive">
+                            <div
+                                v-if="baggageForm.errors.airline"
+                                class="text-xs text-destructive"
+                            >
                                 {{ baggageForm.errors.airline }}
                             </div>
                         </div>
@@ -585,7 +777,10 @@ const deleteCategory = (id: number) => {
                                 placeholder="e.g. +20 KG"
                                 required
                             />
-                            <div v-if="baggageForm.errors.label" class="text-xs text-destructive">
+                            <div
+                                v-if="baggageForm.errors.label"
+                                class="text-xs text-destructive"
+                            >
                                 {{ baggageForm.errors.label }}
                             </div>
                         </div>
@@ -600,7 +795,10 @@ const deleteCategory = (id: number) => {
                                     v-model="baggageForm.weight_kg"
                                     required
                                 />
-                                <div v-if="baggageForm.errors.weight_kg" class="text-xs text-destructive">
+                                <div
+                                    v-if="baggageForm.errors.weight_kg"
+                                    class="text-xs text-destructive"
+                                >
                                     {{ baggageForm.errors.weight_kg }}
                                 </div>
                             </div>
@@ -615,10 +813,30 @@ const deleteCategory = (id: number) => {
                                     v-model="baggageForm.price"
                                     required
                                 />
-                                <div v-if="baggageForm.errors.price" class="text-xs text-destructive">
+                                <div
+                                    v-if="baggageForm.errors.price"
+                                    class="text-xs text-destructive"
+                                >
                                     {{ baggageForm.errors.price }}
                                 </div>
                             </div>
+                        </div>
+
+                        <div
+                            v-if="hasDuplicateBaggageWarning"
+                            class="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400"
+                        >
+                            <AlertCircle class="size-4 shrink-0" />
+                            <span>
+                                Note: A baggage option for
+                                {{
+                                    baggageForm.airline
+                                        ? baggageForm.airline
+                                        : 'Universal'
+                                }}
+                                with {{ baggageForm.weight_kg }} KG already
+                                exists.
+                            </span>
                         </div>
 
                         <div class="space-y-1.5">
@@ -628,7 +846,10 @@ const deleteCategory = (id: number) => {
                                 type="number"
                                 v-model="baggageForm.sort_order"
                             />
-                            <div v-if="baggageForm.errors.sort_order" class="text-xs text-destructive">
+                            <div
+                                v-if="baggageForm.errors.sort_order"
+                                class="text-xs text-destructive"
+                            >
                                 {{ baggageForm.errors.sort_order }}
                             </div>
                         </div>
@@ -639,7 +860,10 @@ const deleteCategory = (id: number) => {
                                 :checked="baggageForm.is_active"
                                 @update:checked="baggageForm.is_active = $event"
                             />
-                            <Label for="baggage-active" class="font-normal cursor-pointer">
+                            <Label
+                                for="baggage-active"
+                                class="cursor-pointer font-normal"
+                            >
                                 Active (Visible in transaction forms)
                             </Label>
                         </div>
@@ -653,8 +877,15 @@ const deleteCategory = (id: number) => {
                         >
                             Cancel
                         </Button>
-                        <Button type="submit" :disabled="baggageForm.processing">
-                            {{ editingBaggageId ? 'Save Changes' : 'Create Option' }}
+                        <Button
+                            type="submit"
+                            :disabled="baggageForm.processing"
+                        >
+                            {{
+                                editingBaggageId
+                                    ? 'Save Changes'
+                                    : 'Create Option'
+                            }}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -693,7 +924,10 @@ const deleteCategory = (id: number) => {
                                 placeholder="e.g. Visa Processing"
                                 required
                             />
-                            <div v-if="assistanceForm.errors.name" class="text-xs text-destructive">
+                            <div
+                                v-if="assistanceForm.errors.name"
+                                class="text-xs text-destructive"
+                            >
                                 {{ assistanceForm.errors.name }}
                             </div>
                         </div>
@@ -708,7 +942,10 @@ const deleteCategory = (id: number) => {
                                 v-model="assistanceForm.price"
                                 required
                             />
-                            <div v-if="assistanceForm.errors.price" class="text-xs text-destructive">
+                            <div
+                                v-if="assistanceForm.errors.price"
+                                class="text-xs text-destructive"
+                            >
                                 {{ assistanceForm.errors.price }}
                             </div>
                         </div>
@@ -720,7 +957,10 @@ const deleteCategory = (id: number) => {
                                 type="number"
                                 v-model="assistanceForm.sort_order"
                             />
-                            <div v-if="assistanceForm.errors.sort_order" class="text-xs text-destructive">
+                            <div
+                                v-if="assistanceForm.errors.sort_order"
+                                class="text-xs text-destructive"
+                            >
                                 {{ assistanceForm.errors.sort_order }}
                             </div>
                         </div>
@@ -729,9 +969,14 @@ const deleteCategory = (id: number) => {
                             <Checkbox
                                 id="assistance-active"
                                 :checked="assistanceForm.is_active"
-                                @update:checked="assistanceForm.is_active = $event"
+                                @update:checked="
+                                    assistanceForm.is_active = $event
+                                "
                             />
-                            <Label for="assistance-active" class="font-normal cursor-pointer">
+                            <Label
+                                for="assistance-active"
+                                class="cursor-pointer font-normal"
+                            >
                                 Active (Visible in transaction forms)
                             </Label>
                         </div>
@@ -745,8 +990,15 @@ const deleteCategory = (id: number) => {
                         >
                             Cancel
                         </Button>
-                        <Button type="submit" :disabled="assistanceForm.processing">
-                            {{ editingAssistanceId ? 'Save Changes' : 'Create Type' }}
+                        <Button
+                            type="submit"
+                            :disabled="assistanceForm.processing"
+                        >
+                            {{
+                                editingAssistanceId
+                                    ? 'Save Changes'
+                                    : 'Create Type'
+                            }}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -761,7 +1013,11 @@ const deleteCategory = (id: number) => {
                 <form @submit.prevent="submitCategory">
                     <DialogHeader>
                         <DialogTitle>
-                            {{ editingCategoryId ? 'Edit Expense Category' : 'Add Expense Category' }}
+                            {{
+                                editingCategoryId
+                                    ? 'Edit Expense Category'
+                                    : 'Add Expense Category'
+                            }}
                         </DialogTitle>
                         <DialogDescription>
                             {{
@@ -781,19 +1037,27 @@ const deleteCategory = (id: number) => {
                                 placeholder="e.g. Utilities"
                                 required
                             />
-                            <div v-if="categoryForm.errors.name" class="text-xs text-destructive">
+                            <div
+                                v-if="categoryForm.errors.name"
+                                class="text-xs text-destructive"
+                            >
                                 {{ categoryForm.errors.name }}
                             </div>
                         </div>
 
                         <div class="space-y-1.5">
-                            <Label for="category-desc">Description (Optional)</Label>
+                            <Label for="category-desc"
+                                >Description (Optional)</Label
+                            >
                             <Input
                                 id="category-desc"
                                 v-model="categoryForm.description"
                                 placeholder="e.g. Electricity, water, and internet bills"
                             />
-                            <div v-if="categoryForm.errors.description" class="text-xs text-destructive">
+                            <div
+                                v-if="categoryForm.errors.description"
+                                class="text-xs text-destructive"
+                            >
                                 {{ categoryForm.errors.description }}
                             </div>
                         </div>
@@ -805,7 +1069,10 @@ const deleteCategory = (id: number) => {
                                 type="number"
                                 v-model="categoryForm.sort_order"
                             />
-                            <div v-if="categoryForm.errors.sort_order" class="text-xs text-destructive">
+                            <div
+                                v-if="categoryForm.errors.sort_order"
+                                class="text-xs text-destructive"
+                            >
                                 {{ categoryForm.errors.sort_order }}
                             </div>
                         </div>
@@ -814,9 +1081,14 @@ const deleteCategory = (id: number) => {
                             <Checkbox
                                 id="category-active"
                                 :checked="categoryForm.is_active"
-                                @update:checked="categoryForm.is_active = $event"
+                                @update:checked="
+                                    categoryForm.is_active = $event
+                                "
                             />
-                            <Label for="category-active" class="font-normal cursor-pointer">
+                            <Label
+                                for="category-active"
+                                class="cursor-pointer font-normal"
+                            >
                                 Active (Visible in expense forms)
                             </Label>
                         </div>
@@ -830,11 +1102,56 @@ const deleteCategory = (id: number) => {
                         >
                             Cancel
                         </Button>
-                        <Button type="submit" :disabled="categoryForm.processing">
-                            {{ editingCategoryId ? 'Save Changes' : 'Create Category' }}
+                        <Button
+                            type="submit"
+                            :disabled="categoryForm.processing"
+                        >
+                            {{
+                                editingCategoryId
+                                    ? 'Save Changes'
+                                    : 'Create Category'
+                            }}
                         </Button>
                     </DialogFooter>
                 </form>
+            </DialogContent>
+        </Dialog>
+
+        <!-- ============================================== -->
+        <!-- MODAL: DELETE CONFIRMATION                     -->
+        <!-- ============================================== -->
+        <Dialog v-model:open="isDeleteModalOpen">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Delete Confirmation</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete
+                        <strong class="text-foreground">{{
+                            itemToDelete?.title
+                        }}</strong
+                        >?
+                        {{ itemToDelete?.description }}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <DialogFooter class="mt-4 gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        :disabled="isDeleting"
+                        @click="isDeleteModalOpen = false"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        :disabled="isDeleting"
+                        @click="executeDelete"
+                    >
+                        {{ isDeleting ? 'Deleting...' : 'Delete' }}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     </main>

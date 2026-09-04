@@ -233,3 +233,57 @@ test('legacy settings configuration routes redirect to configurations with tab q
         ->get('/settings/expense-categories')
         ->assertRedirect('/configurations?tab=expense-categories');
 });
+
+test('an authenticated user cannot create online assistance type with duplicate name', function () {
+    $user = User::factory()->create();
+    $existing = OnlineAssistanceType::first();
+
+    $response = $this->actingAs($user)->post('/configurations/online-assistance-types', [
+        'name' => $existing->name,
+        'price' => '600.00',
+        'is_active' => true,
+    ]);
+
+    $response->assertSessionHasErrors(['name']);
+});
+
+test('submitting null or empty sort_order defaults safely to 0 across configuration entities', function () {
+    $user = User::factory()->create();
+
+    // Baggage Option with null sort_order
+    $this->actingAs($user)->post('/configurations/baggage-options', [
+        'airline' => 'Test Air',
+        'label' => '+15 KG Test',
+        'weight_kg' => 15,
+        'price' => '800.00',
+        'sort_order' => null,
+    ])->assertRedirect('/configurations?tab=baggage');
+
+    $this->assertDatabaseHas('baggage_options', [
+        'label' => '+15 KG Test',
+        'sort_order' => 0,
+    ]);
+
+    // Online Assistance Type with null sort_order
+    $this->actingAs($user)->post('/configurations/online-assistance-types', [
+        'name' => 'Custom Form Assistance',
+        'price' => '450.00',
+        'sort_order' => null,
+    ])->assertRedirect('/configurations?tab=online-assistance');
+
+    $this->assertDatabaseHas('online_assistance_types', [
+        'name' => 'Custom Form Assistance',
+        'sort_order' => 0,
+    ]);
+
+    // Expense Category with null sort_order
+    $this->actingAs($user)->post('/configurations/expense-categories', [
+        'name' => 'Marketing & Ads',
+        'sort_order' => null,
+    ])->assertRedirect('/configurations?tab=expense-categories');
+
+    $this->assertDatabaseHas('expense_categories', [
+        'name' => 'Marketing & Ads',
+        'sort_order' => 0,
+    ]);
+});

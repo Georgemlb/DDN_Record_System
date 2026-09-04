@@ -22,6 +22,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
 import { edit as editProfile } from '@/routes/profile';
 import { index as transactions } from '@/routes/transactions';
@@ -57,7 +58,7 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Configurations',
-        href: '/configurations',
+        href: configurations(),
         icon: SlidersHorizontal,
     },
     {

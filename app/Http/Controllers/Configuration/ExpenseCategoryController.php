@@ -16,8 +16,11 @@ class ExpenseCategoryController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:expense_categories,name'],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         ExpenseCategory::create($validated);
 
@@ -32,8 +35,11 @@ class ExpenseCategoryController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:expense_categories,name,' . $expenseCategory->id],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         $expenseCategory->update($validated);
 

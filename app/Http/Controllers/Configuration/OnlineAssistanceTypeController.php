@@ -13,11 +13,14 @@ class OnlineAssistanceTypeController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'price' => ['required', 'numeric', 'min:0'],
+            'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name'],
+            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         OnlineAssistanceType::create($validated);
 
@@ -29,11 +32,14 @@ class OnlineAssistanceTypeController extends Controller
     public function update(Request $request, OnlineAssistanceType $onlineAssistanceType): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'price' => ['required', 'numeric', 'min:0'],
+            'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name,' . $onlineAssistanceType->id],
+            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
-            'sort_order' => ['integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['is_active'] = $request->boolean('is_active', true);
 
         $onlineAssistanceType->update($validated);
 
