@@ -49,16 +49,23 @@ class TransactionController extends Controller
             } elseif ($date === 'this_month') {
                 $query->whereMonth('transaction_date', $now->month)
                     ->whereYear('transaction_date', $now->year);
+            } elseif ($date === 'custom') {
+                if ($dateFrom = request('date_from')) {
+                    $query->whereDate('transaction_date', '>=', $dateFrom);
+                }
+                if ($dateTo = request('date_to')) {
+                    $query->whereDate('transaction_date', '<=', $dateTo);
+                }
             }
         }
 
         // Summary Calculations (before pagination)
         $summaryQuery = clone $query;
         $summary = [
-            'total_payments' => $summaryQuery->sum('amount'),
-            'total_ddn' => $summaryQuery->sum('ddn_amount'),
-            'total_cash' => (clone $summaryQuery)->where('payment_method', 'cash')->sum('amount'),
-            'total_gcash' => (clone $summaryQuery)->where('payment_method', 'gcash')->sum('amount'),
+            'total_payments' => (float) $summaryQuery->sum('amount'),
+            'total_ddn' => (float) $summaryQuery->sum('ddn_amount'),
+            'total_cash' => (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount'),
+            'total_gcash' => (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)->sum('amount'),
         ];
 
         // Sorting
@@ -79,7 +86,7 @@ class TransactionController extends Controller
 
         return Inertia::render('transactions/Index', [
             'transactions' => $transactions,
-            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'sort', 'direction']),
+            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction']),
             'summary' => $summary,
         ]);
     }

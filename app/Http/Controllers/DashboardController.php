@@ -100,8 +100,8 @@ class DashboardController extends Controller
                 $now->copy()->endOfWeek()->toDateString(),
             ],
             'last_month' => [
-                $now->copy()->subMonth()->startOfMonth()->toDateString(),
-                $now->copy()->subMonth()->endOfMonth()->toDateString(),
+                $now->copy()->startOfMonth()->subMonth()->toDateString(),
+                $now->copy()->startOfMonth()->subMonth()->endOfMonth()->toDateString(),
             ],
             'this_year' => [
                 $now->copy()->startOfYear()->toDateString(),
