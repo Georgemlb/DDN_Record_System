@@ -25,7 +25,11 @@ import { Doughnut, Line } from 'vue-chartjs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatPhp, formatTransactionDate, formatTransactionType } from '@/lib/transactionFormat';
+import {
+    formatPhp,
+    formatTransactionDate,
+    formatTransactionType,
+} from '@/lib/transactionFormat';
 import { dashboard } from '@/routes';
 import { show as transactionShow } from '@/routes/transactions';
 import type { Transaction } from '@/types/transaction';
@@ -84,7 +88,11 @@ const periods: { key: Period; label: string }[] = [
 const activePeriod = computed(() => props.period as Period);
 
 function switchPeriod(period: Period) {
-    router.get('/dashboard', { period }, { preserveScroll: true, replace: true });
+    router.get(
+        '/dashboard',
+        { period },
+        { preserveScroll: true, replace: true },
+    );
 }
 
 // -------------------------------------------------------
@@ -94,7 +102,10 @@ const lineChartData = computed(() => {
     const labels = props.salesTrend.map((d) => {
         const date = new Date(`${d.date}T00:00:00`);
 
-        return new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(date);
+        return new Intl.DateTimeFormat('en-PH', {
+            month: 'short',
+            day: 'numeric',
+        }).format(date);
     });
 
     return {
@@ -206,9 +217,13 @@ const donutChartOptions = {
 const getServiceDetail = (tx: Transaction): string => {
     switch (tx.type) {
         case 'airline':
-            return tx.provider ? `${tx.provider} (${tx.pax ?? 1} pax)` : `${tx.pax ?? 1} pax`;
+            return tx.provider
+                ? `${tx.provider} (${tx.pax ?? 1} pax)`
+                : `${tx.pax ?? 1} pax`;
         case 'psa':
-            return tx.psa_document_type ? `Doc: ${tx.psa_document_type}` : 'PSA Assistance';
+            return tx.psa_document_type
+                ? `Doc: ${tx.psa_document_type}`
+                : 'PSA Assistance';
         case 'online_assistance':
             return tx.online_assistance_type?.name ?? 'Online Assistance';
         case 'translation':
@@ -231,15 +246,23 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
         <!-- Header -->
         <section class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-sm font-medium text-primary">Business overview</p>
-                <h1 class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Dashboard</h1>
+                <p class="text-sm font-medium text-primary">
+                    Business overview
+                </p>
+                <h1
+                    class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl"
+                >
+                    Dashboard
+                </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Real-time summary of your sales and expenses.
                 </p>
             </div>
 
             <!-- Period Selector -->
-            <div class="flex flex-wrap items-center gap-1 rounded-lg border bg-muted/50 p-1">
+            <div
+                class="flex flex-wrap items-center gap-1 rounded-lg border bg-muted/50 p-1"
+            >
                 <Button
                     v-for="p in periods"
                     :key="p.key"
@@ -259,22 +282,32 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <article class="rounded-lg border bg-card p-5">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-muted-foreground">Total Sales</p>
+                        <p class="text-sm font-medium text-muted-foreground">
+                            Total Sales
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.total_sales) }}
                         </p>
                     </div>
-                    <span class="rounded-md bg-secondary p-2 text-secondary-foreground">
+                    <span
+                        class="rounded-md bg-secondary p-2 text-secondary-foreground"
+                    >
                         <BanknoteArrowUp class="size-5" />
                     </span>
                 </div>
-                <div class="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground">
+                <div
+                    class="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground"
+                >
                     <span class="flex items-center gap-1">
-                        <span class="inline-block size-2 rounded-full bg-slate-400" />
+                        <span
+                            class="inline-block size-2 rounded-full bg-slate-400"
+                        />
                         Cash {{ formatPhp(kpis.total_cash) }}
                     </span>
                     <span class="flex items-center gap-1">
-                        <span class="inline-block size-2 rounded-full bg-blue-500" />
+                        <span
+                            class="inline-block size-2 rounded-full bg-blue-500"
+                        />
                         GCash {{ formatPhp(kpis.total_gcash) }}
                     </span>
                 </div>
@@ -284,12 +317,16 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <article class="rounded-lg border bg-card p-5">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-muted-foreground">DDN Earnings</p>
+                        <p class="text-sm font-medium text-muted-foreground">
+                            DDN Earnings
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.total_ddn) }}
                         </p>
                     </div>
-                    <span class="rounded-md bg-secondary p-2 text-secondary-foreground">
+                    <span
+                        class="rounded-md bg-secondary p-2 text-secondary-foreground"
+                    >
                         <TrendingUp class="size-5" />
                     </span>
                 </div>
@@ -302,7 +339,9 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <article class="rounded-lg border bg-card p-5">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-muted-foreground">Total Expenses</p>
+                        <p class="text-sm font-medium text-muted-foreground">
+                            Total Expenses
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.total_expenses) }}
                         </p>
@@ -322,7 +361,11 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             >
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-primary-foreground/75">Net Profit</p>
+                        <p
+                            class="text-sm font-medium text-primary-foreground/75"
+                        >
+                            Net Profit
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.net_profit) }}
                         </p>
@@ -331,7 +374,9 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                         <WalletCards class="size-5" />
                     </span>
                 </div>
-                <p class="mt-3 border-t border-white/20 pt-3 text-xs text-primary-foreground/75">
+                <p
+                    class="mt-3 border-t border-white/20 pt-3 text-xs text-primary-foreground/75"
+                >
                     DDN Earnings minus Total Expenses
                 </p>
             </article>
@@ -340,7 +385,9 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <article class="rounded-lg border bg-card p-5">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-muted-foreground">Cash Collections</p>
+                        <p class="text-sm font-medium text-muted-foreground">
+                            Cash Collections
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.total_cash) }}
                         </p>
@@ -358,12 +405,16 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <article class="rounded-lg border bg-card p-5">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-sm font-medium text-muted-foreground">GCash Collections</p>
+                        <p class="text-sm font-medium text-muted-foreground">
+                            GCash Collections
+                        </p>
                         <p class="mt-3 text-2xl font-semibold tracking-tight">
                             {{ formatPhp(kpis.total_gcash) }}
                         </p>
                     </div>
-                    <span class="rounded-md bg-blue-50 p-2 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                    <span
+                        class="rounded-md bg-blue-50 p-2 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                    >
                         <WalletCards class="size-5" />
                     </span>
                 </div>
@@ -385,7 +436,10 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                 </CardHeader>
                 <CardContent>
                     <div v-if="hasSalesTrend" class="h-64">
-                        <Line :data="lineChartData" :options="lineChartOptions" />
+                        <Line
+                            :data="lineChartData"
+                            :options="lineChartOptions"
+                        />
                     </div>
                     <div
                         v-else
@@ -401,13 +455,20 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
             <!-- Donut Chart — Expenses by Category -->
             <Card class="lg:col-span-2">
                 <CardHeader>
-                    <CardTitle class="text-base">Expenses by Category</CardTitle>
-                    <p class="text-sm text-muted-foreground">Breakdown for the period</p>
+                    <CardTitle class="text-base"
+                        >Expenses by Category</CardTitle
+                    >
+                    <p class="text-sm text-muted-foreground">
+                        Breakdown for the period
+                    </p>
                 </CardHeader>
                 <CardContent>
                     <div v-if="hasExpenses" class="flex flex-col gap-4">
                         <div class="mx-auto h-44 w-44">
-                            <Doughnut :data="donutChartData" :options="donutChartOptions" />
+                            <Doughnut
+                                :data="donutChartData"
+                                :options="donutChartOptions"
+                            />
                         </div>
                         <ul class="space-y-1.5">
                             <li
@@ -418,11 +479,17 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                                 <span class="flex items-center gap-2">
                                     <span
                                         class="inline-block size-2.5 flex-shrink-0 rounded-full"
-                                        :style="{ backgroundColor: PALETTE[idx] }"
+                                        :style="{
+                                            backgroundColor: PALETTE[idx],
+                                        }"
                                     />
-                                    <span class="text-muted-foreground">{{ item.category }}</span>
+                                    <span class="text-muted-foreground">{{
+                                        item.category
+                                    }}</span>
                                 </span>
-                                <span class="font-medium">{{ formatPhp(item.total) }}</span>
+                                <span class="font-medium">{{
+                                    formatPhp(item.total)
+                                }}</span>
                             </li>
                         </ul>
                     </div>
@@ -440,13 +507,20 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
 
         <!-- Recent Transactions -->
         <Card>
-            <CardHeader class="flex flex-row items-center justify-between gap-4">
+            <CardHeader
+                class="flex flex-row items-center justify-between gap-4"
+            >
                 <div>
                     <CardTitle class="text-base">Recent Transactions</CardTitle>
-                    <p class="mt-0.5 text-sm text-muted-foreground">Latest 5 recorded transactions</p>
+                    <p class="mt-0.5 text-sm text-muted-foreground">
+                        Latest 5 recorded transactions
+                    </p>
                 </div>
                 <Button variant="ghost" size="sm" as-child>
-                    <a href="/transactions" class="flex items-center gap-1.5 text-xs">
+                    <a
+                        href="/transactions"
+                        class="flex items-center gap-1.5 text-xs"
+                    >
                         View all <ArrowRight class="size-3.5" />
                     </a>
                 </Button>
@@ -461,25 +535,41 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                     >
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
-                                <p class="truncate text-sm font-medium">{{ tx.customer_name }}</p>
-                                <Badge variant="outline" class="hidden shrink-0 text-xs sm:inline-flex">
+                                <p class="truncate text-sm font-medium">
+                                    {{ tx.customer_name }}
+                                </p>
+                                <Badge
+                                    variant="outline"
+                                    class="hidden shrink-0 text-xs sm:inline-flex"
+                                >
                                     {{ formatTransactionType(tx.type) }}
                                 </Badge>
                             </div>
-                            <p class="mt-0.5 truncate text-xs text-muted-foreground">
-                                {{ getServiceDetail(tx) }} · {{ formatTransactionDate(tx.transaction_date) }}
+                            <p
+                                class="mt-0.5 truncate text-xs text-muted-foreground"
+                            >
+                                {{ getServiceDetail(tx) }} ·
+                                {{ formatTransactionDate(tx.transaction_date) }}
                             </p>
                         </div>
                         <div class="text-right">
-                            <p class="text-sm font-semibold">{{ formatPhp(tx.amount) }}</p>
+                            <p class="text-sm font-semibold">
+                                {{ formatPhp(tx.amount) }}
+                            </p>
                             <p class="mt-0.5 text-xs text-muted-foreground">
-                                {{ tx.payment_method === 'cash' ? 'Cash' : 'GCash' }}
+                                {{
+                                    tx.payment_method === 'cash'
+                                        ? 'Cash'
+                                        : 'GCash'
+                                }}
                             </p>
                         </div>
                     </a>
                 </div>
                 <div v-else class="flex h-32 items-center justify-center">
-                    <p class="text-sm text-muted-foreground">No transactions recorded yet.</p>
+                    <p class="text-sm text-muted-foreground">
+                        No transactions recorded yet.
+                    </p>
                 </div>
             </CardContent>
         </Card>
