@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import {
+    ArrowRight,
+    BanknoteArrowUp,
+    Receipt,
+    ReceiptText,
+    TrendingUp,
+    WalletCards,
+} from '@lucide/vue';
+import {
     ArcElement,
     CategoryScale,
     Chart as ChartJS,
@@ -12,14 +20,6 @@ import {
     Title,
     Tooltip,
 } from 'chart.js';
-import {
-    ArrowRight,
-    BanknoteArrowUp,
-    Receipt,
-    ReceiptText,
-    TrendingUp,
-    WalletCards,
-} from '@lucide/vue';
 import { computed } from 'vue';
 import { Doughnut, Line } from 'vue-chartjs';
 import { Badge } from '@/components/ui/badge';
@@ -93,6 +93,7 @@ function switchPeriod(period: Period) {
 const lineChartData = computed(() => {
     const labels = props.salesTrend.map((d) => {
         const date = new Date(`${d.date}T00:00:00`);
+
         return new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(date);
     });
 
