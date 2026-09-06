@@ -530,7 +530,7 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                     <a
                         v-for="tx in recentTransactions"
                         :key="tx.id"
-                        :href="transactionShow({ transaction: tx.id })"
+                        :href="transactionShow.url({ transaction: tx.id })"
                         class="flex items-center justify-between gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
                     >
                         <div class="min-w-0 flex-1">
