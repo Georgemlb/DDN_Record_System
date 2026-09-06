@@ -224,3 +224,33 @@ test('an authenticated user can view, update, and delete a transaction', functio
 
     $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
 });
+
+test('transactions can be filtered by custom date range', function () {
+    $user = User::factory()->create();
+
+    Transaction::query()->create(transactionData([
+        'customer_name' => 'InRange Customer',
+        'transaction_date' => '2026-08-15',
+        'amount' => '1500.00',
+    ]));
+
+    Transaction::query()->create(transactionData([
+        'customer_name' => 'OutOfRange Customer',
+        'transaction_date' => '2026-08-01',
+        'amount' => '2500.00',
+    ]));
+
+    $this->actingAs($user)
+        ->get(route('transactions.index', [
+            'date' => 'custom',
+            'date_from' => '2026-08-10',
+            'date_to' => '2026-08-20',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transactions/Index')
+            ->has('transactions.data', 1)
+            ->where('transactions.data.0.customer_name', 'InRange Customer')
+            ->where('summary.total_payments', 1500)
+        );
+});

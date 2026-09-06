@@ -25,6 +25,7 @@ import {
     formatPhp,
     formatTransactionDate,
     formatTransactionType,
+    getTransactionServiceDetail,
 } from '@/lib/transactionFormat';
 import { create, show } from '@/routes/transactions';
 import type { Transaction } from '@/types/transaction';
@@ -40,6 +41,8 @@ const props = defineProps<{
         type?: string;
         payment_method?: string;
         date?: string;
+        date_from?: string;
+        date_to?: string;
         sort?: string;
         direction?: string;
     };
@@ -62,31 +65,12 @@ defineOptions({
     },
 });
 
-const getTransactionServiceDetail = (tx: Transaction): string => {
-    switch (tx.type) {
-        case 'airline':
-            return tx.provider
-                ? `${tx.provider} (${tx.pax ?? 1} pax)`
-                : `${tx.pax ?? 1} pax`;
-        case 'psa':
-            return tx.psa_document_type
-                ? `Doc: ${tx.psa_document_type}`
-                : 'PSA Assistance';
-        case 'online_assistance':
-            return tx.online_assistance_type?.name ?? 'Online Assistance';
-        case 'translation':
-            return 'Document Translation';
-        case 'printing':
-            return 'Printing Service';
-        default:
-            return tx.service_details || '—';
-    }
-};
-
 const search = ref(props.filters.search ?? '');
 const type = ref(props.filters.type ?? 'all');
 const paymentMethod = ref(props.filters.payment_method ?? 'all');
 const date = ref(props.filters.date ?? 'all');
+const dateFrom = ref(props.filters.date_from ?? '');
+const dateTo = ref(props.filters.date_to ?? '');
 const sort = ref(props.filters.sort ?? 'transaction_date');
 const direction = ref(props.filters.direction ?? 'desc');
 
@@ -101,6 +85,8 @@ const applyFilters = () => {
                 type: type.value,
                 payment_method: paymentMethod.value,
                 date: date.value,
+                date_from: date.value === 'custom' ? dateFrom.value : undefined,
+                date_to: date.value === 'custom' ? dateTo.value : undefined,
                 sort: sort.value,
                 direction: direction.value,
             },
@@ -109,7 +95,7 @@ const applyFilters = () => {
     }, 300);
 };
 
-watch([search, type, paymentMethod, date], applyFilters);
+watch([search, type, paymentMethod, date, dateFrom, dateTo], applyFilters);
 
 const toggleSort = (field: string) => {
     if (sort.value === field) {
@@ -201,7 +187,7 @@ const toggleSort = (field: string) => {
         <section
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
-            <div class="flex flex-1 items-center gap-4">
+            <div class="flex flex-1 flex-wrap items-center gap-4">
                 <Input
                     v-model="search"
                     placeholder="Search transactions..."
@@ -241,8 +227,28 @@ const toggleSort = (field: string) => {
                         <SelectItem value="today">Today</SelectItem>
                         <SelectItem value="last_7_days">Last 7 Days</SelectItem>
                         <SelectItem value="this_month">This Month</SelectItem>
+                        <SelectItem value="custom">Custom Range</SelectItem>
                     </SelectContent>
                 </Select>
+
+                <div
+                    v-if="date === 'custom'"
+                    class="flex flex-wrap items-center gap-2"
+                >
+                    <Input
+                        v-model="dateFrom"
+                        type="date"
+                        placeholder="From date"
+                        class="w-auto text-xs"
+                    />
+                    <span class="text-xs text-muted-foreground">to</span>
+                    <Input
+                        v-model="dateTo"
+                        type="date"
+                        placeholder="To date"
+                        class="w-auto text-xs"
+                    />
+                </div>
             </div>
         </section>
 

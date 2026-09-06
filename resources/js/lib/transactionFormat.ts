@@ -1,4 +1,8 @@
-import type { PaymentMethod, TransactionType } from '@/types/transaction';
+import type {
+    PaymentMethod,
+    Transaction,
+    TransactionType,
+} from '@/types/transaction';
 
 export const formatPhp = (
     amount: string | number | null | undefined,
@@ -46,6 +50,27 @@ export const formatPaymentMethod = (method: PaymentMethod | string): string => {
     };
 
     return labels[method] || method;
+};
+
+export const getTransactionServiceDetail = (tx: Transaction): string => {
+    switch (tx.type) {
+        case 'airline':
+            return tx.provider
+                ? `${tx.provider} (${tx.pax ?? 1} pax)`
+                : `${tx.pax ?? 1} pax`;
+        case 'psa':
+            return tx.psa_document_type
+                ? `Doc: ${tx.psa_document_type}`
+                : 'PSA Assistance';
+        case 'online_assistance':
+            return tx.online_assistance_type?.name ?? 'Online Assistance';
+        case 'translation':
+            return 'Document Translation';
+        case 'printing':
+            return 'Printing Service';
+        default:
+            return tx.service_details || '—';
+    }
 };
 
 export const getTodayDateString = (): string => {

@@ -29,6 +29,7 @@ import {
     formatPhp,
     formatTransactionDate,
     formatTransactionType,
+    getTransactionServiceDetail,
 } from '@/lib/transactionFormat';
 import { dashboard } from '@/routes';
 import { show as transactionShow } from '@/routes/transactions';
@@ -209,30 +210,6 @@ const donutChartOptions = {
             },
         },
     },
-};
-
-// -------------------------------------------------------
-// Recent Transactions — service detail helper (reused from transactions/Index)
-// -------------------------------------------------------
-const getServiceDetail = (tx: Transaction): string => {
-    switch (tx.type) {
-        case 'airline':
-            return tx.provider
-                ? `${tx.provider} (${tx.pax ?? 1} pax)`
-                : `${tx.pax ?? 1} pax`;
-        case 'psa':
-            return tx.psa_document_type
-                ? `Doc: ${tx.psa_document_type}`
-                : 'PSA Assistance';
-        case 'online_assistance':
-            return tx.online_assistance_type?.name ?? 'Online Assistance';
-        case 'translation':
-            return 'Document Translation';
-        case 'printing':
-            return 'Printing Service';
-        default:
-            return '—';
-    }
 };
 
 const hasExpenses = computed(() => props.expensesByCategory.length > 0);
@@ -548,7 +525,7 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                             <p
                                 class="mt-0.5 truncate text-xs text-muted-foreground"
                             >
-                                {{ getServiceDetail(tx) }} ·
+                                {{ getTransactionServiceDetail(tx) }} ·
                                 {{ formatTransactionDate(tx.transaction_date) }}
                             </p>
                         </div>
