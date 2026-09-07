@@ -17,12 +17,19 @@ class TransactionController extends Controller
      */
     public function index(): Response
     {
-        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType']);
+        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType', 'user']);
+
+        // Status / Trash filtering
+        $status = request('status', 'active');
+        if ($status === 'trash') {
+            $query->onlyTrashed();
+        }
 
         // Filtering
         if ($search = request('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('customer_name', 'like', "%{$search}%")
+                    ->orWhere('reference_number', 'like', "%{$search}%")
                     ->orWhere('service_details', 'like', "%{$search}%")
                     ->orWhere('notes', 'like', "%{$search}%");
             });
@@ -72,7 +79,7 @@ class TransactionController extends Controller
         $sort = request('sort', 'transaction_date');
         $direction = request('direction', 'desc');
 
-        $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name'];
+        $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name', 'reference_number'];
         if (in_array($sort, $allowedSorts)) {
             $query->orderBy($sort, $direction);
         }
@@ -86,8 +93,12 @@ class TransactionController extends Controller
 
         return Inertia::render('transactions/Index', [
             'transactions' => $transactions,
-            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction']),
+            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction', 'status']),
             'summary' => $summary,
+            'counts' => [
+                'active' => Transaction::count(),
+                'trash' => Transaction::onlyTrashed()->count(),
+            ],
         ]);
     }
 
@@ -110,6 +121,9 @@ class TransactionController extends Controller
     public function store(TransactionRequest $request): RedirectResponse
     {
         $payload = $this->prepareTransactionData($request->validated());
+        if (empty($payload['user_id']) && auth()->check()) {
+            $payload['user_id'] = auth()->id();
+        }
 
         $transaction = Transaction::query()->create($payload);
 
@@ -123,7 +137,7 @@ class TransactionController extends Controller
      */
     public function show(Transaction $transaction): Response
     {
-        $transaction->load(['baggageOption', 'onlineAssistanceType']);
+        $transaction->load(['baggageOption', 'onlineAssistanceType', 'user']);
 
         return Inertia::render('transactions/Show', [
             'transaction' => $transaction,
@@ -175,15 +189,39 @@ class TransactionController extends Controller
     }
 
     /**
-     * Remove a transaction.
+     * Remove a transaction (move to trash).
      */
     public function destroy(Transaction $transaction): RedirectResponse
     {
         $transaction->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction deleted.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
         return to_route('transactions.index');
+    }
+
+    /**
+     * Restore a soft-deleted transaction.
+     */
+    public function restore(Transaction $transaction): RedirectResponse
+    {
+        $transaction->restore();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
+
+        return back();
+    }
+
+    /**
+     * Permanently remove a transaction.
+     */
+    public function forceDelete(Transaction $transaction): RedirectResponse
+    {
+        $transaction->forceDelete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
+
+        return back();
     }
 
     /**

@@ -222,7 +222,84 @@ test('an authenticated user can view, update, and delete a transaction', functio
         ->delete(route('transactions.destroy', $transaction))
         ->assertRedirect(route('transactions.index'));
 
-    $this->assertDatabaseMissing('transactions', ['id' => $transaction->id]);
+    $this->assertSoftDeleted('transactions', ['id' => $transaction->id]);
+});
+
+test('transaction automatically generates date-based sequential reference number', function () {
+    $user = User::factory()->create();
+
+    $tx1 = Transaction::query()->create(transactionData([
+        'transaction_date' => '2026-09-07',
+        'customer_name' => 'Client A',
+    ]));
+
+    $tx2 = Transaction::query()->create(transactionData([
+        'transaction_date' => '2026-09-07',
+        'customer_name' => 'Client B',
+    ]));
+
+    expect($tx1->reference_number)->toBe('TRX-20260907-0001')
+        ->and($tx2->reference_number)->toBe('TRX-20260907-0002');
+});
+
+test('transaction automatically associates authenticated user', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), transactionData());
+
+    $transaction = Transaction::query()->latest('id')->first();
+    expect($transaction->user_id)->toBe($user->id);
+});
+
+test('soft-deleted transactions can be viewed in trash and restored', function () {
+    $user = User::factory()->create();
+    $tx = Transaction::query()->create(transactionData());
+
+    $tx->delete();
+
+    // Not visible in active index
+    $this->actingAs($user)
+        ->get(route('transactions.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transactions/Index')
+            ->has('transactions.data', 0)
+            ->where('counts.trash', 1)
+        );
+
+    // Visible in trash index
+    $this->actingAs($user)
+        ->get(route('transactions.index', ['status' => 'trash']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transactions/Index')
+            ->has('transactions.data', 1)
+            ->where('transactions.data.0.id', $tx->id)
+        );
+
+    // Restore transaction
+    $this->actingAs($user)
+        ->post(route('transactions.restore', $tx))
+        ->assertRedirect();
+
+    expect($tx->fresh()->trashed())->toBeFalse();
+});
+
+test('transactions can be searched by reference number', function () {
+    $user = User::factory()->create();
+    $tx = Transaction::query()->create(transactionData([
+        'customer_name' => 'Unique Search Person',
+    ]));
+
+    $this->actingAs($user)
+        ->get(route('transactions.index', ['search' => $tx->reference_number]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transactions/Index')
+            ->has('transactions.data', 1)
+            ->where('transactions.data.0.id', $tx->id)
+        );
 });
 
 test('transactions can be filtered by custom date range', function () {

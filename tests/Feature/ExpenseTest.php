@@ -268,3 +268,47 @@ test('deleting a category with associated expenses is restricted', function () {
 
     expect(fn () => $category->delete())->toThrow(QueryException::class);
 });
+
+test('expense automatically associates authenticated user', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('expenses.store'), expenseData());
+
+    $expense = Expense::query()->latest('id')->first();
+    expect($expense->user_id)->toBe($user->id);
+});
+
+test('soft-deleted expenses can be viewed in trash and restored', function () {
+    $user = User::factory()->create();
+    $expense = Expense::query()->create(expenseData());
+
+    $expense->delete();
+
+    // Not visible in active index
+    $this->actingAs($user)
+        ->get(route('expenses.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('expenses/Index')
+            ->has('expenses.data', 0)
+            ->where('counts.trash', 1)
+        );
+
+    // Visible in trash index
+    $this->actingAs($user)
+        ->get(route('expenses.index', ['status' => 'trash']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('expenses/Index')
+            ->has('expenses.data', 1)
+            ->where('expenses.data.0.id', $expense->id)
+        );
+
+    // Restore expense
+    $this->actingAs($user)
+        ->post(route('expenses.restore', $expense))
+        ->assertRedirect();
+
+    expect($expense->fresh()->trashed())->toBeFalse();
+});

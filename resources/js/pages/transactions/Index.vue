@@ -6,6 +6,10 @@ import {
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
+    RotateCcw,
+    Trash2,
+    CheckCircle2,
+    Eye,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import Pagination from '@/components/Pagination.vue';
@@ -28,7 +32,12 @@ import {
     getTransactionServiceDetail,
 } from '@/lib/transactionFormat';
 import { create, show } from '@/routes/transactions';
-import type { Transaction } from '@/types/transaction';
+import type {
+    Transaction,
+    TransactionCounts,
+    TransactionFilters,
+    TransactionSummary,
+} from '@/types/transaction';
 
 const props = defineProps<{
     transactions: {
@@ -36,22 +45,9 @@ const props = defineProps<{
         links: any[];
         total: number;
     };
-    filters: {
-        search?: string;
-        type?: string;
-        payment_method?: string;
-        date?: string;
-        date_from?: string;
-        date_to?: string;
-        sort?: string;
-        direction?: string;
-    };
-    summary: {
-        total_payments: number;
-        total_ddn: number;
-        total_cash: number;
-        total_gcash: number;
-    };
+    filters: TransactionFilters;
+    summary: TransactionSummary;
+    counts?: TransactionCounts;
 }>();
 
 defineOptions({
@@ -73,6 +69,9 @@ const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 const sort = ref(props.filters.sort ?? 'transaction_date');
 const direction = ref(props.filters.direction ?? 'desc');
+const status = ref<'active' | 'trash'>(
+    props.filters.status === 'trash' ? 'trash' : 'active',
+);
 
 let timeout: ReturnType<typeof setTimeout>;
 const applyFilters = () => {
@@ -89,13 +88,55 @@ const applyFilters = () => {
                 date_to: date.value === 'custom' ? dateTo.value : undefined,
                 sort: sort.value,
                 direction: direction.value,
+                status: status.value,
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }, 300);
 };
 
-watch([search, type, paymentMethod, date, dateFrom, dateTo], applyFilters);
+watch(
+    [search, type, paymentMethod, date, dateFrom, dateTo, status],
+    applyFilters,
+);
+
+const setStatus = (newStatus: 'active' | 'trash') => {
+    if (status.value !== newStatus) {
+        status.value = newStatus;
+    }
+};
+
+const restoringId = ref<number | null>(null);
+const restoreTransaction = (id: number) => {
+    restoringId.value = id;
+    router.post(
+        `/transactions/${id}/restore`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                restoringId.value = null;
+            },
+        },
+    );
+};
+
+const forceDeletingId = ref<number | null>(null);
+const forceDeleteTransaction = (id: number) => {
+    if (
+        confirm(
+            'Are you sure you want to permanently delete this transaction? This action cannot be undone.',
+        )
+    ) {
+        forceDeletingId.value = id;
+        router.delete(`/transactions/${id}/force-delete`, {
+            preserveScroll: true,
+            onFinish: () => {
+                forceDeletingId.value = null;
+            },
+        });
+    }
+};
 
 const toggleSort = (field: string) => {
     if (sort.value === field) {
@@ -128,6 +169,42 @@ const toggleSort = (field: string) => {
             </div>
             <Button as-child>
                 <Link :href="create()"><Plus /> Record transaction</Link>
+            </Button>
+        </section>
+
+        <!-- Status View Tabs (Active vs Trash) -->
+        <section class="flex items-center gap-2 border-b pb-3">
+            <Button
+                :variant="status === 'active' ? 'default' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('active')"
+            >
+                <CheckCircle2 class="size-4" />
+                Active Records
+                <Badge
+                    v-if="counts"
+                    :variant="status === 'active' ? 'secondary' : 'outline'"
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.active }}
+                </Badge>
+            </Button>
+            <Button
+                :variant="status === 'trash' ? 'destructive' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('trash')"
+            >
+                <Trash2 class="size-4" />
+                Trash
+                <Badge
+                    v-if="counts"
+                    :variant="status === 'trash' ? 'secondary' : 'outline'"
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.trash }}
+                </Badge>
             </Button>
         </section>
 
@@ -183,58 +260,69 @@ const toggleSort = (field: string) => {
             </Card>
         </section>
 
-        <!-- Filters Section -->
+        <!-- Filter and Search Section -->
         <section
-            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+            class="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:p-5"
         >
-            <div class="flex flex-1 flex-wrap items-center gap-4">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Input
                     v-model="search"
-                    placeholder="Search transactions..."
-                    class="max-w-xs"
+                    placeholder="Search customer, ref #, or details..."
+                    class="w-full"
                 />
+
                 <Select v-model="type">
-                    <SelectTrigger class="w-[180px]">
-                        <SelectValue placeholder="Transaction Type" />
+                    <SelectTrigger class="w-full">
+                        <SelectValue placeholder="All types" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="all">All Service Types</SelectItem>
                         <SelectItem value="airline">Airline</SelectItem>
                         <SelectItem value="translation">Translation</SelectItem>
-                        <SelectItem value="psa">PSA</SelectItem>
+                        <SelectItem value="psa">PSA Application</SelectItem>
                         <SelectItem value="online_assistance"
                             >Online Assistance</SelectItem
                         >
-                        <SelectItem value="printing">Printing</SelectItem>
+                        <SelectItem value="printing"
+                            >Printing & Services</SelectItem
+                        >
                     </SelectContent>
                 </Select>
+
                 <Select v-model="paymentMethod">
-                    <SelectTrigger class="w-[160px]">
-                        <SelectValue placeholder="Payment Method" />
+                    <SelectTrigger class="w-full">
+                        <SelectValue placeholder="All methods" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Methods</SelectItem>
+                        <SelectItem value="all">All Payment Methods</SelectItem>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="gcash">GCash</SelectItem>
                     </SelectContent>
                 </Select>
+
                 <Select v-model="date">
-                    <SelectTrigger class="w-[160px]">
-                        <SelectValue placeholder="Date Range" />
+                    <SelectTrigger class="w-full">
+                        <SelectValue placeholder="All dates" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="all">All Dates</SelectItem>
                         <SelectItem value="today">Today</SelectItem>
                         <SelectItem value="last_7_days">Last 7 Days</SelectItem>
                         <SelectItem value="this_month">This Month</SelectItem>
                         <SelectItem value="custom">Custom Range</SelectItem>
                     </SelectContent>
                 </Select>
+            </div>
 
-                <div
-                    v-if="date === 'custom'"
-                    class="flex flex-wrap items-center gap-2"
+            <!-- Custom Date Range Row -->
+            <div
+                v-if="date === 'custom'"
+                class="flex flex-wrap items-center gap-2 border-t pt-3"
+            >
+                <span class="text-xs font-medium text-muted-foreground"
+                    >Date range:</span
                 >
+                <div class="flex items-center gap-2">
                     <Input
                         v-model="dateFrom"
                         type="date"
@@ -272,6 +360,24 @@ const toggleSort = (field: string) => {
                                     <component
                                         :is="
                                             sort === 'transaction_date'
+                                                ? direction === 'asc'
+                                                    ? ArrowUp
+                                                    : ArrowDown
+                                                : ArrowUpDown
+                                        "
+                                        class="size-3"
+                                    />
+                                </div>
+                            </th>
+                            <th
+                                class="cursor-pointer px-5 py-3 font-medium hover:bg-muted"
+                                @click="toggleSort('reference_number')"
+                            >
+                                <div class="flex items-center gap-1">
+                                    Ref #
+                                    <component
+                                        :is="
+                                            sort === 'reference_number'
                                                 ? direction === 'asc'
                                                     ? ArrowUp
                                                     : ArrowDown
@@ -342,6 +448,9 @@ const toggleSort = (field: string) => {
                                     />
                                 </div>
                             </th>
+                            <th class="px-5 py-3 text-right font-medium">
+                                Actions
+                            </th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -359,13 +468,29 @@ const toggleSort = (field: string) => {
                                     )
                                 }}
                             </td>
-                            <td class="px-5 py-4 font-medium">
-                                <Link
-                                    :href="show(transaction)"
-                                    class="hover:text-primary hover:underline"
+                            <td class="px-5 py-4 whitespace-nowrap">
+                                <Badge
+                                    variant="outline"
+                                    class="font-mono text-xs font-normal"
                                 >
-                                    {{ transaction.customer_name }}
-                                </Link>
+                                    {{ transaction.reference_number || '—' }}
+                                </Badge>
+                            </td>
+                            <td class="px-5 py-4 font-medium">
+                                <div>
+                                    <Link
+                                        :href="show(transaction)"
+                                        class="hover:text-primary hover:underline"
+                                    >
+                                        {{ transaction.customer_name }}
+                                    </Link>
+                                    <span
+                                        v-if="transaction.user"
+                                        class="block text-xs font-normal text-muted-foreground"
+                                    >
+                                        by {{ transaction.user.name }}
+                                    </span>
+                                </div>
                             </td>
                             <td class="px-5 py-4 whitespace-nowrap">
                                 <Badge variant="secondary" class="font-normal">
@@ -405,6 +530,61 @@ const toggleSort = (field: string) => {
                                             transaction.amount,
                                     )
                                 }}
+                            </td>
+                            <td class="px-5 py-4 text-right whitespace-nowrap">
+                                <div
+                                    v-if="status === 'trash'"
+                                    class="flex items-center justify-end gap-1.5"
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1 text-xs"
+                                        :disabled="
+                                            restoringId === transaction.id
+                                        "
+                                        @click="
+                                            restoreTransaction(transaction.id)
+                                        "
+                                    >
+                                        <RotateCcw class="size-3.5" />
+                                        Restore
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        class="h-8 gap-1 text-xs"
+                                        :disabled="
+                                            forceDeletingId === transaction.id
+                                        "
+                                        @click="
+                                            forceDeleteTransaction(
+                                                transaction.id,
+                                            )
+                                        "
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                        Delete
+                                    </Button>
+                                </div>
+                                <div
+                                    v-else
+                                    class="flex items-center justify-end"
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-8 px-2"
+                                        as-child
+                                    >
+                                        <Link
+                                            :href="show(transaction)"
+                                            title="View details"
+                                        >
+                                            <Eye class="size-4" />
+                                        </Link>
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>

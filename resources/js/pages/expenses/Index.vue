@@ -4,10 +4,13 @@ import {
     ArrowDown,
     ArrowUp,
     ArrowUpDown,
+    CheckCircle2,
     Copy,
     FileText,
     Pencil,
     Plus,
+    RotateCcw,
+    Trash2,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import Pagination from '@/components/Pagination.vue';
@@ -36,6 +39,7 @@ import {
 import type {
     Expense,
     ExpenseCategory,
+    ExpenseCounts,
     ExpenseFilters,
     ExpenseSummary,
 } from '@/types/expense';
@@ -49,6 +53,7 @@ const props = defineProps<{
     categories: ExpenseCategory[];
     filters: ExpenseFilters;
     summary: ExpenseSummary;
+    counts?: ExpenseCounts;
 }>();
 
 defineOptions({
@@ -72,6 +77,9 @@ const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 const sort = ref(props.filters.sort ?? 'expense_date');
 const direction = ref(props.filters.direction ?? 'desc');
+const status = ref<'active' | 'trash'>(
+    props.filters.status === 'trash' ? 'trash' : 'active',
+);
 
 let timeout: ReturnType<typeof setTimeout>;
 const applyFilters = () => {
@@ -88,6 +96,7 @@ const applyFilters = () => {
                 date_to: date.value === 'custom' ? dateTo.value : undefined,
                 sort: sort.value,
                 direction: direction.value,
+                status: status.value,
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -95,9 +104,47 @@ const applyFilters = () => {
 };
 
 watch(
-    [search, categoryId, paymentMethod, date, dateFrom, dateTo],
+    [search, categoryId, paymentMethod, date, dateFrom, dateTo, status],
     applyFilters,
 );
+
+const setStatus = (newStatus: 'active' | 'trash') => {
+    if (status.value !== newStatus) {
+        status.value = newStatus;
+    }
+};
+
+const restoringId = ref<number | null>(null);
+const restoreExpense = (id: number) => {
+    restoringId.value = id;
+    router.post(
+        `/expenses/${id}/restore`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                restoringId.value = null;
+            },
+        },
+    );
+};
+
+const forceDeletingId = ref<number | null>(null);
+const forceDeleteExpense = (id: number) => {
+    if (
+        confirm(
+            'Are you sure you want to permanently delete this expense? This action cannot be undone.',
+        )
+    ) {
+        forceDeletingId.value = id;
+        router.delete(`/expenses/${id}/force-delete`, {
+            preserveScroll: true,
+            onFinish: () => {
+                forceDeletingId.value = null;
+            },
+        });
+    }
+};
 
 const toggleSort = (field: string) => {
     if (sort.value === field) {
@@ -131,6 +178,42 @@ const toggleSort = (field: string) => {
             </div>
             <Button as-child>
                 <Link :href="expenseCreate()"><Plus /> Record expense</Link>
+            </Button>
+        </section>
+
+        <!-- Status View Tabs (Active vs Trash) -->
+        <section class="flex items-center gap-2 border-b pb-3">
+            <Button
+                :variant="status === 'active' ? 'default' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('active')"
+            >
+                <CheckCircle2 class="size-4" />
+                Active Expenses
+                <Badge
+                    v-if="counts"
+                    :variant="status === 'active' ? 'secondary' : 'outline'"
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.active }}
+                </Badge>
+            </Button>
+            <Button
+                :variant="status === 'trash' ? 'destructive' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('trash')"
+            >
+                <Trash2 class="size-4" />
+                Trash
+                <Badge
+                    v-if="counts"
+                    :variant="status === 'trash' ? 'secondary' : 'outline'"
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.trash }}
+                </Badge>
             </Button>
         </section>
 
@@ -398,6 +481,12 @@ const toggleSort = (field: string) => {
                                 >
                                     {{ expense.title }}
                                 </Link>
+                                <span
+                                    v-if="expense.user"
+                                    class="block text-xs font-normal text-muted-foreground"
+                                >
+                                    by {{ expense.user.name }}
+                                </span>
                                 <div
                                     v-if="
                                         expense.recurring_frequency !== 'none'
@@ -457,6 +546,34 @@ const toggleSort = (field: string) => {
                             <!-- Actions -->
                             <td class="px-5 py-4 text-right whitespace-nowrap">
                                 <div
+                                    v-if="status === 'trash'"
+                                    class="flex items-center justify-end gap-1.5"
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1 text-xs"
+                                        :disabled="restoringId === expense.id"
+                                        @click="restoreExpense(expense.id)"
+                                    >
+                                        <RotateCcw class="size-3.5" />
+                                        Restore
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        class="h-8 gap-1 text-xs"
+                                        :disabled="
+                                            forceDeletingId === expense.id
+                                        "
+                                        @click="forceDeleteExpense(expense.id)"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                        Delete
+                                    </Button>
+                                </div>
+                                <div
+                                    v-else
                                     class="flex items-center justify-end gap-1"
                                 >
                                     <Button

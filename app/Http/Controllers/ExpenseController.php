@@ -16,7 +16,13 @@ class ExpenseController extends Controller
      */
     public function index(): Response
     {
-        $query = Expense::query()->with('category');
+        $query = Expense::query()->with(['category', 'user']);
+
+        // Status / Trash filtering
+        $status = request('status', 'active');
+        if ($status === 'trash') {
+            $query->onlyTrashed();
+        }
 
         // Search filtering
         if ($search = request('search')) {
@@ -101,8 +107,12 @@ class ExpenseController extends Controller
         return Inertia::render('expenses/Index', [
             'expenses' => $expenses,
             'categories' => ExpenseCategory::query()->active()->get(),
-            'filters' => request()->only(['search', 'category_id', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction']),
+            'filters' => request()->only(['search', 'category_id', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction', 'status']),
             'summary' => $summary,
+            'counts' => [
+                'active' => Expense::count(),
+                'trash' => Expense::onlyTrashed()->count(),
+            ],
         ]);
     }
 
@@ -131,7 +141,12 @@ class ExpenseController extends Controller
      */
     public function store(ExpenseRequest $request): RedirectResponse
     {
-        $expense = Expense::query()->create($request->validated());
+        $payload = $request->validated();
+        if (empty($payload['user_id']) && auth()->check()) {
+            $payload['user_id'] = auth()->id();
+        }
+
+        $expense = Expense::query()->create($payload);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense recorded.']);
 
@@ -143,7 +158,7 @@ class ExpenseController extends Controller
      */
     public function show(Expense $expense): Response
     {
-        $expense->load('category');
+        $expense->load(['category', 'user']);
 
         return Inertia::render('expenses/Show', [
             'expense' => $expense,
@@ -185,14 +200,38 @@ class ExpenseController extends Controller
     }
 
     /**
-     * Soft-delete an expense record.
+     * Remove an expense record (move to trash).
      */
     public function destroy(Expense $expense): RedirectResponse
     {
         $expense->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense deleted.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense moved to trash.']);
 
         return to_route('expenses.index');
+    }
+
+    /**
+     * Restore a soft-deleted expense.
+     */
+    public function restore(Expense $expense): RedirectResponse
+    {
+        $expense->restore();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense restored.']);
+
+        return back();
+    }
+
+    /**
+     * Permanently remove an expense.
+     */
+    public function forceDelete(Expense $expense): RedirectResponse
+    {
+        $expense->forceDelete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense permanently deleted.']);
+
+        return back();
     }
 }
