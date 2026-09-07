@@ -200,4 +200,16 @@ class DailySettlement extends Model
             $this->discrepancy = round((float) $this->actual_cash - (float) $this->expected_cash, 2);
         }
     }
+
+    /**
+     * Synchronize daily settlement for a specific date if it exists.
+     */
+    public static function syncForDate(string $date): void
+    {
+        $settlement = static::where('settlement_date', $date)->first();
+        if ($settlement) {
+            $settlement->syncMetricsWithRecords();
+            $settlement->save();
+        }
+    }
 }

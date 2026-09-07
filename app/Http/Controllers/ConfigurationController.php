@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
 use App\Models\ExpenseCategory;
 use App\Models\OnlineAssistanceType;
@@ -13,7 +14,7 @@ class ConfigurationController extends Controller
 {
     public function index(Request $request): Response
     {
-        $allowedTabs = ['baggage', 'online-assistance', 'expense-categories'];
+        $allowedTabs = ['baggage', 'online-assistance', 'expense-categories', 'airline-markups'];
         $tab = $request->query('tab', 'baggage');
 
         if (! in_array($tab, $allowedTabs, true)) {
@@ -24,6 +25,7 @@ class ConfigurationController extends Controller
             'baggageOptions' => BaggageOption::orderBy('sort_order')->orderBy('weight_kg')->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::orderBy('sort_order')->orderBy('name')->get(),
             'expenseCategories' => ExpenseCategory::orderBy('sort_order')->orderBy('name')->get(),
+            'airlineMarkups' => AirlineMarkup::orderBy('airline')->orderBy('flight_type')->get(),
             'currentTab' => $tab,
         ]);
     }

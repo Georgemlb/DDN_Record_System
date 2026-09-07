@@ -50,7 +50,6 @@ test('an authenticated user can create, update, and delete a baggage option', fu
         'airline' => 'Philippine Airlines',
         'label' => '+25 KG',
         'weight_kg' => 25,
-        'price' => '1400.00',
         'is_active' => true,
         'sort_order' => 10,
     ]);
@@ -69,7 +68,6 @@ test('an authenticated user can create, update, and delete a baggage option', fu
         'airline' => 'Philippine Airlines',
         'label' => '+25 KG Extra',
         'weight_kg' => 25,
-        'price' => '1500.00',
         'is_active' => false,
         'sort_order' => 11,
     ]);

@@ -15,6 +15,7 @@ defineProps<{
     onlineAssistanceTypes?: OnlineAssistanceType[];
     psaDocumentTypes?: PsaDocumentType[];
     ddnSplitConfig?: DdnSplitConfig;
+    portalBalance?: number;
 }>();
 
 defineOptions({
@@ -50,6 +51,7 @@ defineOptions({
                 :online-assistance-types="onlineAssistanceTypes"
                 :psa-document-types="psaDocumentTypes"
                 :ddn-split-config="ddnSplitConfig"
+                :portal-balance="portalBalance"
             />
         </section>
     </main>

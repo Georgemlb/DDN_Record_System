@@ -16,8 +16,10 @@ import {
 import { formatPhp, getTodayDateString } from '@/lib/transactionFormat';
 import { index } from '@/routes/transactions';
 import type {
+    AirlineMarkup,
     BaggageOption,
     DdnSplitConfig,
+    FlightType,
     OnlineAssistanceType,
     PaymentMethod,
     PsaDocumentType,
@@ -33,12 +35,15 @@ const props = withDefaults(
         transaction?: Transaction;
         baggageOptions?: BaggageOption[];
         onlineAssistanceTypes?: OnlineAssistanceType[];
+        airlineMarkups?: AirlineMarkup[];
         psaDocumentTypes?: PsaDocumentType[];
         ddnSplitConfig?: DdnSplitConfig;
+        portalBalance?: number;
     }>(),
     {
         baggageOptions: () => [],
         onlineAssistanceTypes: () => [],
+        airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
         ddnSplitConfig: () => ({ ddn: 0.6, employee: 0.4 }),
     },
@@ -54,6 +59,9 @@ const transactionDate = ref<string>(
 const customerName = ref<string>(props.transaction?.customer_name ?? '');
 const pax = ref<number | string>(props.transaction?.pax ?? 1);
 const provider = ref<string>(props.transaction?.provider ?? '');
+const flightType = ref<FlightType | ''>(
+    props.transaction?.flight_type ?? 'local',
+);
 const baggageOptionId = ref<string>(
     props.transaction?.baggage_option_id
         ? String(props.transaction.baggage_option_id)
@@ -70,10 +78,61 @@ const onlineAssistanceTypeId = ref<string>(
           : '',
 );
 const amount = ref<number | string>(props.transaction?.amount ?? '');
+const cashAmount = ref<number | string>(props.transaction?.cash_amount ?? '');
+const gcashAmount = ref<number | string>(props.transaction?.gcash_amount ?? '');
 const thirdPartyPayment = ref<number | string>(
     props.transaction?.third_party_payment ?? '0.00',
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
+
+// Auto-calculation for Airline Markups
+
+watch(
+    [provider, flightType, amount],
+    ([newProvider, newFlightType, newAmount]) => {
+        if (formType.value !== 'airline') {
+            return;
+        }
+
+        const numAmt = Number(newAmount) || 0;
+
+        if (!newProvider || !newFlightType || numAmt <= 0) {
+            return;
+        }
+
+        const markup = props.airlineMarkups.find(
+            (m) =>
+                m.airline.toLowerCase() === newProvider.toLowerCase() &&
+                m.flight_type === newFlightType,
+        );
+
+        if (markup) {
+            const markupAmt = Number(markup.markup_amount) || 0;
+            const calculatedCost = Math.max(0, numAmt - markupAmt);
+
+            thirdPartyPayment.value = calculatedCost;
+        }
+    },
+);
+
+// Split payment logic
+const handleCashChange = () => {
+    const total = Number(amount.value) || 0;
+    const cash = Number(cashAmount.value) || 0;
+
+    if (total > 0 && cash <= total) {
+        gcashAmount.value = total - cash;
+    }
+};
+
+const handleGcashChange = () => {
+    const total = Number(amount.value) || 0;
+    const gcash = Number(gcashAmount.value) || 0;
+
+    if (total > 0 && gcash <= total) {
+        cashAmount.value = total - gcash;
+    }
+};
 
 // Auto-fill amount when online assistance type changes (if creating or user selects new type)
 const handleOnlineAssistanceTypeChange = (value: unknown) => {
@@ -171,6 +230,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
         <input
             v-if="formType === 'airline'"
             type="hidden"
+            name="flight_type"
+            :value="flightType"
+        />
+        <input
+            v-if="formType === 'airline'"
+            type="hidden"
             name="baggage_option_id"
             :value="baggageOptionId === 'none' ? '' : baggageOptionId"
         />
@@ -249,10 +314,49 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="gcash">GCash</SelectItem>
+                        <SelectItem value="split"
+                            >Split (Cash & GCash)</SelectItem
+                        >
                     </SelectContent>
                 </Select>
                 <InputError :message="errors.payment_method" />
             </div>
+
+            <!-- SPLIT PAYMENT FIELDS -->
+            <template v-if="paymentMethod === 'split'">
+                <div class="grid gap-2">
+                    <Label for="cash_amount">Cash Amount (PHP)</Label>
+                    <Input
+                        id="cash_amount"
+                        name="cash_amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="cashAmount"
+                        @input="handleCashChange"
+                        required
+                        placeholder="0.00"
+                    />
+                    <InputError :message="errors.cash_amount" />
+                </div>
+                <div class="grid gap-2">
+                    <Label for="gcash_amount">GCash Amount (PHP)</Label>
+                    <Input
+                        id="gcash_amount"
+                        name="gcash_amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="gcashAmount"
+                        @input="handleGcashChange"
+                        required
+                        placeholder="0.00"
+                    />
+                    <InputError :message="errors.gcash_amount" />
+                </div>
+            </template>
 
             <!-- ============================================== -->
             <!-- 5. TYPE-SPECIFIC FIELDS                        -->
@@ -294,6 +398,22 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.provider" />
                 </div>
 
+                <div class="grid gap-2">
+                    <Label for="flight_type_select">Flight Type</Label>
+                    <Select v-model="flightType">
+                        <SelectTrigger id="flight_type_select" class="w-full">
+                            <SelectValue placeholder="Select flight type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="local">Local</SelectItem>
+                            <SelectItem value="international"
+                                >International</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.flight_type" />
+                </div>
+
                 <div class="grid gap-2 md:col-span-2">
                     <Label for="baggage_option_select"
                         >Additional Baggage</Label
@@ -320,17 +440,15 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                     option.airline
                                         ? option.airline
                                         : 'Universal'
-                                }}] {{ option.label }} ({{
-                                    formatPhp(option.price)
-                                }})
+                                }}] {{ option.label }}
                             </SelectItem>
                         </SelectContent>
                     </Select>
                     <InputError :message="errors.baggage_option_id" />
                 </div>
 
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="amount">Total Ticket Price (PHP)</Label>
+                <div class="grid gap-2">
+                    <Label for="amount">Customer Ticket Price (PHP)</Label>
                     <Input
                         id="amount"
                         name="amount"
@@ -343,9 +461,92 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="0.00"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Enter the total customer payment in Philippine pesos.
+                        Total amount collected from customer.
                     </p>
                     <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <div class="flex items-center justify-between">
+                        <Label for="third_party_payment"
+                            >Portal Net Cost (PHP)</Label
+                        >
+                        <span
+                            v-if="props.portalBalance !== undefined"
+                            :class="[
+                                'text-xs font-medium',
+                                props.portalBalance < 10000
+                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground',
+                            ]"
+                        >
+                            Balance: {{ formatPhp(props.portalBalance) }}
+                        </span>
+                    </div>
+                    <Input
+                        id="third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (Optional)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Net ticket fare deducted from flight portal deposit.
+                        Auto-calculates if markup rule is set.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Auto Calculation Preview -->
+                <div
+                    v-if="numAmount > 0 && numThirdParty > 0"
+                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div
+                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                    >
+                        <Calculator class="size-4" />
+                        <span>Ticketing Margin Preview</span>
+                    </div>
+                    <div
+                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
+                    >
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-semibold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Portal Cost</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >DDN Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(
+                                        Math.max(0, numAmount - numThirdParty),
+                                    )
+                                }}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </template>
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowRight,
     BanknoteArrowUp,
     Receipt,
     ReceiptText,
     TrendingUp,
+    Wallet,
     WalletCards,
 } from '@lucide/vue';
 import {
@@ -56,6 +57,11 @@ const props = defineProps<{
         net_profit: number;
         total_cash: number;
         total_gcash: number;
+    };
+    portal?: {
+        balance: number;
+        is_low_balance: boolean;
+        low_balance_threshold: number;
     };
     salesTrend: { date: string; total_sales: number; total_ddn: number }[];
     expensesByCategory: { category: string; total: number }[];
@@ -398,6 +404,60 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                 <p class="mt-3 border-t pt-3 text-xs text-muted-foreground">
                     Transactions paid via GCash
                 </p>
+            </article>
+
+            <!-- Flight Portal Deposit -->
+            <article
+                :class="[
+                    'rounded-lg border p-5 transition-all',
+                    portal?.is_low_balance
+                        ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-transparent'
+                        : 'border-border bg-card',
+                ]"
+            >
+                <div class="flex items-start justify-between">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <p
+                                class="text-sm font-medium text-muted-foreground"
+                            >
+                                Flight Portal Deposit
+                            </p>
+                            <span
+                                v-if="portal?.is_low_balance"
+                                class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                            >
+                                Low
+                            </span>
+                        </div>
+                        <p class="mt-3 text-2xl font-semibold tracking-tight">
+                            {{ formatPhp(portal?.balance ?? 0) }}
+                        </p>
+                    </div>
+                    <Link
+                        href="/portal-deposits"
+                        :class="[
+                            'rounded-md p-2 transition-colors',
+                            portal?.is_low_balance
+                                ? 'bg-amber-500/20 text-amber-600 hover:bg-amber-500/30'
+                                : 'bg-primary/10 text-primary hover:bg-primary/20',
+                        ]"
+                        title="Manage Portal Deposit"
+                    >
+                        <Wallet class="size-5" />
+                    </Link>
+                </div>
+                <div
+                    class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
+                >
+                    <span>Available ticket funds</span>
+                    <Link
+                        href="/portal-deposits"
+                        class="font-medium text-primary hover:underline"
+                    >
+                        Manage &rarr;
+                    </Link>
+                </div>
             </article>
         </section>
 

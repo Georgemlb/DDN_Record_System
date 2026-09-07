@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\FlightPortalDeposit;
 use App\Models\Transaction;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -65,6 +66,9 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
+        $portalBalance = FlightPortalDeposit::getCurrentBalance();
+        $portalLowBalance = $portalBalance < FlightPortalDeposit::LOW_BALANCE_THRESHOLD;
+
         return Inertia::render('Dashboard', [
             'period' => $period,
             'kpis' => [
@@ -74,6 +78,11 @@ class DashboardController extends Controller
                 'net_profit' => $netProfit,
                 'total_cash' => $totalCash,
                 'total_gcash' => $totalGcash,
+            ],
+            'portal' => [
+                'balance' => $portalBalance,
+                'is_low_balance' => $portalLowBalance,
+                'low_balance_threshold' => FlightPortalDeposit::LOW_BALANCE_THRESHOLD,
             ],
             'salesTrend' => $salesTrend,
             'expensesByCategory' => $expensesByCategory,

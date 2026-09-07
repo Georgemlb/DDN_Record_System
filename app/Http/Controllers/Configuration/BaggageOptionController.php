@@ -16,7 +16,6 @@ class BaggageOptionController extends Controller
             'label' => ['required', 'string', 'max:255'],
             'airline' => ['nullable', 'string', 'max:255'],
             'weight_kg' => ['required', 'integer', 'min:0', 'max:1000'],
-            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
@@ -37,7 +36,6 @@ class BaggageOptionController extends Controller
             'label' => ['required', 'string', 'max:255'],
             'airline' => ['nullable', 'string', 'max:255'],
             'weight_kg' => ['required', 'integer', 'min:0', 'max:1000'],
-            'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);

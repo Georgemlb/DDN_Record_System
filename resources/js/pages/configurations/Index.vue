@@ -5,6 +5,7 @@ import {
     Headphones,
     Luggage,
     Pencil,
+    Plane,
     Plus,
     Tag,
     Trash,
@@ -26,13 +27,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatPhp } from '@/lib/transactionFormat';
 import type { ExpenseCategory } from '@/types/expense';
-import type { BaggageOption, OnlineAssistanceType } from '@/types/transaction';
+import type {
+    AirlineMarkup,
+    BaggageOption,
+    OnlineAssistanceType,
+} from '@/types/transaction';
 
 const props = defineProps<{
     baggageOptions: BaggageOption[];
+    airlineMarkups: AirlineMarkup[];
     onlineAssistanceTypes: OnlineAssistanceType[];
     expenseCategories: ExpenseCategory[];
-    currentTab: 'baggage' | 'online-assistance' | 'expense-categories';
+    currentTab:
+        | 'baggage'
+        | 'online-assistance'
+        | 'expense-categories'
+        | 'airline-markups';
 }>();
 
 defineOptions({
@@ -49,7 +59,8 @@ defineOptions({
 // --------------------------------------------------------
 // Tabs Navigation
 // --------------------------------------------------------
-type TabKey = 'baggage' | 'online-assistance' | 'expense-categories';
+type TabKey =
+    'baggage' | 'airline-markups' | 'online-assistance' | 'expense-categories';
 
 const activeTab = ref<TabKey>(props.currentTab || 'baggage');
 
@@ -59,6 +70,12 @@ const tabs = [
         label: 'Baggage Options',
         icon: Luggage,
         count: () => props.baggageOptions.length,
+    },
+    {
+        key: 'airline-markups' as TabKey,
+        label: 'Airline Markups',
+        icon: Plane,
+        count: () => props.airlineMarkups.length,
     },
     {
         key: 'online-assistance' as TabKey,
@@ -141,7 +158,6 @@ const baggageForm = useForm({
     airline: '',
     label: '',
     weight_kg: 20,
-    price: 0,
     sort_order: 0,
     is_active: true,
 });
@@ -174,7 +190,6 @@ const openEditBaggage = (option: BaggageOption) => {
     baggageForm.airline = option.airline ?? '';
     baggageForm.label = option.label;
     baggageForm.weight_kg = option.weight_kg;
-    baggageForm.price = Number(option.price);
     baggageForm.sort_order = option.sort_order ?? 0;
     baggageForm.is_active = option.is_active ?? true;
     isBaggageModalOpen.value = true;
@@ -243,6 +258,55 @@ const submitAssistance = () => {
         assistanceForm.post('/configurations/online-assistance-types', {
             onSuccess: () => {
                 isAssistanceModalOpen.value = false;
+            },
+        });
+    }
+};
+
+// --------------------------------------------------------
+// Airline Markup Modal & Form
+// --------------------------------------------------------
+const isMarkupModalOpen = ref(false);
+const editingMarkupId = ref<number | null>(null);
+
+const markupForm = useForm({
+    airline: '',
+    flight_type: 'local',
+    markup_amount: 0,
+    is_active: true,
+});
+
+const openCreateMarkup = () => {
+    editingMarkupId.value = null;
+    markupForm.reset();
+    markupForm.clearErrors();
+    isMarkupModalOpen.value = true;
+};
+
+const openEditMarkup = (markup: AirlineMarkup) => {
+    editingMarkupId.value = markup.id;
+    markupForm.clearErrors();
+    markupForm.airline = markup.airline;
+    markupForm.flight_type = markup.flight_type;
+    markupForm.markup_amount = Number(markup.markup_amount);
+    markupForm.is_active = markup.is_active ?? true;
+    isMarkupModalOpen.value = true;
+};
+
+const submitMarkup = () => {
+    if (editingMarkupId.value) {
+        markupForm.put(
+            `/configurations/airline-markups/${editingMarkupId.value}`,
+            {
+                onSuccess: () => {
+                    isMarkupModalOpen.value = false;
+                },
+            },
+        );
+    } else {
+        markupForm.post('/configurations/airline-markups', {
+            onSuccess: () => {
+                isMarkupModalOpen.value = false;
             },
         });
     }
@@ -381,9 +445,6 @@ const submitCategory = () => {
                                 <th class="p-4 text-right font-medium">
                                     Weight
                                 </th>
-                                <th class="p-4 text-right font-medium">
-                                    Price
-                                </th>
                                 <th class="p-4 text-center font-medium">
                                     Status
                                 </th>
@@ -431,11 +492,6 @@ const submitCategory = () => {
                                 <td class="p-4 text-right align-middle">
                                     {{ option.weight_kg }} KG
                                 </td>
-                                <td
-                                    class="p-4 text-right align-middle font-medium"
-                                >
-                                    {{ formatPhp(option.price) }}
-                                </td>
                                 <td class="p-4 text-center align-middle">
                                     <Badge
                                         :variant="
@@ -472,6 +528,122 @@ const submitCategory = () => {
                                                     option.label,
                                                     '/configurations/baggage-options',
                                                     'This baggage option will be permanently removed if it is not associated with existing transactions.',
+                                                )
+                                            "
+                                        >
+                                            <Trash class="size-4" />
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+        </section>
+
+        <!-- ============================================== -->
+        <!-- TAB 1.5: AIRLINE MARKUPS                       -->
+        <!-- ============================================== -->
+        <section v-if="activeTab === 'airline-markups'" class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold tracking-tight">
+                        Airline Markups
+                    </h2>
+                    <p class="text-sm text-muted-foreground">
+                        Configure dynamic pricing markups for local and
+                        international flights.
+                    </p>
+                </div>
+                <Button @click="openCreateMarkup">
+                    <Plus class="mr-1.5 size-4" /> Add Markup
+                </Button>
+            </div>
+
+            <Card>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b bg-muted/50 text-left text-muted-foreground"
+                            >
+                                <th class="p-4 font-medium">Airline</th>
+                                <th class="p-4 font-medium">Flight Type</th>
+                                <th class="p-4 text-right font-medium">
+                                    Markup Amount
+                                </th>
+                                <th class="p-4 text-center font-medium">
+                                    Status
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-if="airlineMarkups.length === 0">
+                                <td
+                                    colspan="5"
+                                    class="p-8 text-center text-muted-foreground"
+                                >
+                                    No airline markups configured yet.
+                                </td>
+                            </tr>
+                            <tr
+                                v-for="markup in airlineMarkups"
+                                :key="markup.id"
+                                class="border-b transition-colors hover:bg-muted/50"
+                            >
+                                <td
+                                    class="p-4 align-middle font-medium text-foreground"
+                                >
+                                    {{ markup.airline }}
+                                </td>
+                                <td class="p-4 align-middle capitalize">
+                                    {{ markup.flight_type }}
+                                </td>
+                                <td
+                                    class="p-4 text-right align-middle font-medium"
+                                >
+                                    {{ formatPhp(markup.markup_amount) }}
+                                </td>
+                                <td class="p-4 text-center align-middle">
+                                    <Badge
+                                        :variant="
+                                            markup.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            markup.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
+                                    </Badge>
+                                </td>
+                                <td class="p-4 text-right align-middle">
+                                    <div class="flex justify-end gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Edit"
+                                            @click="openEditMarkup(markup)"
+                                        >
+                                            <Pencil class="size-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Delete"
+                                            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            @click="
+                                                confirmDelete(
+                                                    markup.id,
+                                                    markup.airline,
+                                                    '/configurations/airline-markups',
+                                                    'This airline markup rule will be permanently deleted.',
                                                 )
                                             "
                                         >
@@ -802,24 +974,6 @@ const submitCategory = () => {
                                     {{ baggageForm.errors.weight_kg }}
                                 </div>
                             </div>
-
-                            <div class="space-y-1.5">
-                                <Label for="baggage-price">Price (₱)</Label>
-                                <Input
-                                    id="baggage-price"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    v-model="baggageForm.price"
-                                    required
-                                />
-                                <div
-                                    v-if="baggageForm.errors.price"
-                                    class="text-xs text-destructive"
-                                >
-                                    {{ baggageForm.errors.price }}
-                                </div>
-                            </div>
                         </div>
 
                         <div
@@ -885,6 +1039,116 @@ const submitCategory = () => {
                                 editingBaggageId
                                     ? 'Save Changes'
                                     : 'Create Option'
+                            }}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+
+        <!-- ============================================== -->
+        <!-- MODAL: AIRLINE MARKUP (CREATE / EDIT)          -->
+        <!-- ============================================== -->
+        <Dialog v-model:open="isMarkupModalOpen">
+            <DialogContent class="sm:max-w-md">
+                <form @submit.prevent="submitMarkup">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {{
+                                editingMarkupId
+                                    ? 'Edit Airline Markup'
+                                    : 'Add Airline Markup'
+                            }}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Configure dynamic markup for airline flights.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div class="grid gap-4 py-4">
+                        <div class="space-y-1.5">
+                            <Label for="markup-airline">Airline</Label>
+                            <Input
+                                id="markup-airline"
+                                v-model="markupForm.airline"
+                                placeholder="e.g. Cebu Pacific"
+                                required
+                            />
+                            <div
+                                v-if="markupForm.errors.airline"
+                                class="text-xs text-destructive"
+                            >
+                                {{ markupForm.errors.airline }}
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="markup-flight">Flight Type</Label>
+                            <select
+                                id="markup-flight"
+                                v-model="markupForm.flight_type"
+                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                required
+                            >
+                                <option value="local">Local</option>
+                                <option value="international">
+                                    International
+                                </option>
+                            </select>
+                            <div
+                                v-if="markupForm.errors.flight_type"
+                                class="text-xs text-destructive"
+                            >
+                                {{ markupForm.errors.flight_type }}
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="markup-amount">Markup Amount (₱)</Label>
+                            <Input
+                                id="markup-amount"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                v-model="markupForm.markup_amount"
+                                required
+                            />
+                            <div
+                                v-if="markupForm.errors.markup_amount"
+                                class="text-xs text-destructive"
+                            >
+                                {{ markupForm.errors.markup_amount }}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-2 pt-1">
+                            <Checkbox
+                                id="markup-active"
+                                :checked="markupForm.is_active"
+                                @update:checked="markupForm.is_active = $event"
+                            />
+                            <Label
+                                for="markup-active"
+                                class="cursor-pointer font-normal"
+                            >
+                                Active
+                            </Label>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="isMarkupModalOpen = false"
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" :disabled="markupForm.processing">
+                            {{
+                                editingMarkupId
+                                    ? 'Save Changes'
+                                    : 'Create Markup'
                             }}
                         </Button>
                     </DialogFooter>
