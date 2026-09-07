@@ -34,9 +34,15 @@ class TransactionRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
 
+        if ($this->input('payment_method') === Transaction::PAYMENT_METHOD_SPLIT) {
+            $rules['cash_amount'] = ['required', 'numeric', 'decimal:0,2', 'min:0'];
+            $rules['gcash_amount'] = ['required', 'numeric', 'decimal:0,2', 'min:0'];
+        }
+
         if ($type === Transaction::TYPE_AIRLINE) {
             $rules['pax'] = ['required', 'integer', 'min:1'];
             $rules['provider'] = ['nullable', 'string', 'max:255'];
+            $rules['flight_type'] = ['nullable', 'string', Rule::in(['local', 'international'])];
             $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];
             $rules['service_details'] = ['nullable', 'string', 'max:1000'];
             $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
@@ -64,6 +70,8 @@ class TransactionRequest extends FormRequest
             'third_party_payment.required' => 'Please enter the payment amount.',
             'psa_document_type.required' => 'Please select a PSA document type.',
             'online_assistance_type_id.required' => 'Please select an online assistance type.',
+            'cash_amount.required' => 'Please enter the cash amount for split payment.',
+            'gcash_amount.required' => 'Please enter the GCash amount for split payment.',
         ];
     }
 }

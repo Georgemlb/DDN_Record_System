@@ -23,7 +23,6 @@ use Illuminate\Support\Carbon;
     'label',
     'airline',
     'weight_kg',
-    'price',
     'is_active',
     'sort_order',
 ])]
@@ -38,7 +37,6 @@ class BaggageOption extends Model
     {
         return [
             'weight_kg' => 'integer',
-            'price' => 'decimal:2',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];

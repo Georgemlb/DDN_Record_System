@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TransactionRequest;
+use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
 use App\Models\FlightPortalDeposit;
 use App\Models\OnlineAssistanceType;
@@ -69,11 +70,22 @@ class TransactionController extends Controller
 
         // Summary Calculations (before pagination)
         $summaryQuery = clone $query;
+        $totalPayments = (float) $summaryQuery->sum('amount');
+        $totalDdn = (float) $summaryQuery->sum('ddn_amount');
+
+        $totalCashFromCash = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount');
+        $totalCashFromSplit = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('cash_amount');
+        $totalCash = $totalCashFromCash + $totalCashFromSplit;
+
+        $totalGcashFromGcash = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)->sum('amount');
+        $totalGcashFromSplit = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('gcash_amount');
+        $totalGcash = $totalGcashFromGcash + $totalGcashFromSplit;
+
         $summary = [
-            'total_payments' => (float) $summaryQuery->sum('amount'),
-            'total_ddn' => (float) $summaryQuery->sum('ddn_amount'),
-            'total_cash' => (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount'),
-            'total_gcash' => (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)->sum('amount'),
+            'total_payments' => $totalPayments,
+            'total_ddn' => $totalDdn,
+            'total_cash' => $totalCash,
+            'total_gcash' => $totalGcash,
         ];
 
         // Sorting
@@ -111,6 +123,7 @@ class TransactionController extends Controller
         return Inertia::render('transactions/Create', [
             'baggageOptions' => BaggageOption::query()->active()->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
+            'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
             'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
@@ -173,6 +186,7 @@ class TransactionController extends Controller
             'transaction' => $transaction,
             'baggageOptions' => $baggageOptions,
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
+            'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
             'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
@@ -255,9 +269,12 @@ class TransactionController extends Controller
             'transaction_date' => $data['transaction_date'],
             'customer_name' => $data['customer_name'],
             'amount' => $amount,
+            'cash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['cash_amount'] ?? 0) : null,
+            'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
             'notes' => $data['notes'] ?? null,
             'pax' => null,
             'provider' => null,
+            'flight_type' => null,
             'service_details' => null,
             'baggage_option_id' => null,
             'psa_document_type' => null,
@@ -272,6 +289,7 @@ class TransactionController extends Controller
                 $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['pax'] = (int) $data['pax'];
                 $prepared['provider'] = $data['provider'] ?? null;
+                $prepared['flight_type'] = $data['flight_type'] ?? null;
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
                 $prepared['service_details'] = $data['service_details'] ?? null;
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;

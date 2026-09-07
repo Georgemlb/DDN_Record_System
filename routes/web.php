@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Configuration\AirlineMarkupController;
 use App\Http\Controllers\Configuration\BaggageOptionController;
 use App\Http\Controllers\Configuration\OnlineAssistanceTypeController;
 use App\Http\Controllers\ConfigurationController;
@@ -39,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('configurations', [ConfigurationController::class, 'index'])->name('configurations.index');
     Route::prefix('configurations')->name('configurations.')->group(function () {
         Route::resource('baggage-options', BaggageOptionController::class)->only(['store', 'update', 'destroy']);
+        Route::resource('airline-markups', AirlineMarkupController::class)->only(['store', 'update', 'destroy']);
         Route::resource('online-assistance-types', OnlineAssistanceTypeController::class)->only(['store', 'update', 'destroy']);
         Route::resource('expense-categories', App\Http\Controllers\Configuration\ExpenseCategoryController::class)->only(['store', 'update', 'destroy']);
     });

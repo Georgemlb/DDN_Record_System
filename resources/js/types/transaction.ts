@@ -1,7 +1,9 @@
 export type TransactionType =
     'airline' | 'translation' | 'psa' | 'online_assistance' | 'printing';
 
-export type PaymentMethod = 'cash' | 'gcash';
+export type PaymentMethod = 'cash' | 'gcash' | 'split';
+
+export type FlightType = 'local' | 'international';
 
 export type PsaDocumentType = 'BC' | 'MC' | 'DC' | 'Cenomar';
 
@@ -10,9 +12,16 @@ export type BaggageOption = {
     airline?: string | null;
     label: string;
     weight_kg: number;
-    price: string | number;
     is_active?: boolean;
     sort_order?: number;
+};
+
+export type AirlineMarkup = {
+    id: number;
+    airline: string;
+    flight_type: FlightType;
+    markup_amount: string | number;
+    is_active?: boolean;
 };
 
 export type OnlineAssistanceType = {
@@ -38,6 +47,7 @@ export type Transaction = {
     customer_name: string;
     pax: number | null;
     provider: string | null;
+    flight_type: FlightType | null;
     service_details: string | null;
     baggage_option_id: number | null;
     baggage_option?: BaggageOption | null;
@@ -45,6 +55,8 @@ export type Transaction = {
     online_assistance_type_id: number | null;
     online_assistance_type?: OnlineAssistanceType | null;
     amount: string | number;
+    cash_amount: string | number | null;
+    gcash_amount: string | number | null;
     third_party_payment: string | number | null;
     ddn_amount: string | number | null;
     employee_share: string | number | null;

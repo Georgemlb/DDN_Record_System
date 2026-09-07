@@ -48,10 +48,13 @@ use Illuminate\Support\Carbon;
     'psa_document_type',
     'online_assistance_type_id',
     'amount',
+    'cash_amount',
+    'gcash_amount',
     'third_party_payment',
     'ddn_amount',
     'employee_share',
     'notes',
+    'flight_type',
 ])]
 class Transaction extends Model
 {
@@ -79,9 +82,12 @@ class Transaction extends Model
 
     public const PAYMENT_METHOD_GCASH = 'gcash';
 
+    public const PAYMENT_METHOD_SPLIT = 'split';
+
     public const PAYMENT_METHODS = [
         self::PAYMENT_METHOD_CASH,
         self::PAYMENT_METHOD_GCASH,
+        self::PAYMENT_METHOD_SPLIT,
     ];
 
     public const PSA_DOC_BC = 'BC';
@@ -150,6 +156,8 @@ class Transaction extends Model
             'transaction_date' => 'date:Y-m-d',
             'pax' => 'integer',
             'amount' => 'decimal:2',
+            'cash_amount' => 'decimal:2',
+            'gcash_amount' => 'decimal:2',
             'third_party_payment' => 'decimal:2',
             'ddn_amount' => 'decimal:2',
             'employee_share' => 'decimal:2',
