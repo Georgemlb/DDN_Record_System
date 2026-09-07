@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\DailySettlement;
 use App\Models\Expense;
-use App\Models\ExpenseCategory;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
