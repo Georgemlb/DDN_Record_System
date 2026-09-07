@@ -25,6 +25,7 @@ import { dashboard } from '@/routes';
 import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
 import { edit as editProfile } from '@/routes/profile';
+import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
 import type { NavItem } from '@/types';
 
@@ -52,9 +53,8 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Reports',
-        href: '#',
+        href: reports(),
         icon: BarChart3,
-        disabled: true,
     },
     {
         title: 'Configurations',

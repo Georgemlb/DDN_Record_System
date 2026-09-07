@@ -6,6 +6,7 @@ use App\Http\Controllers\ConfigurationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransactionController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('expenses/{expense}/force-delete', [ExpenseController::class, 'forceDelete'])->name('expenses.forceDelete')->withTrashed();
     Route::resource('expenses', ExpenseController::class);
     Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
+    Route::post('reports/settlements', [ReportController::class, 'startDay'])->name('reports.settlements.start');
+    Route::put('reports/settlements/{settlement}/close', [ReportController::class, 'closeDay'])->name('reports.settlements.close');
+    Route::put('reports/settlements/{settlement}/reopen', [ReportController::class, 'reopen'])->name('reports.settlements.reopen');
+    Route::get('reports/settlements/{settlement}', [ReportController::class, 'showSlip'])->name('reports.settlements.show');
 
     Route::get('configurations', [ConfigurationController::class, 'index'])->name('configurations.index');
     Route::prefix('configurations')->name('configurations.')->group(function () {

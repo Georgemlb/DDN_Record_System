@@ -64,4 +64,12 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(Expense::class);
     }
+
+    /**
+     * @return HasMany<DailySettlement, $this>
+     */
+    public function dailySettlements(): HasMany
+    {
+        return $this->hasMany(DailySettlement::class);
+    }
 }
