@@ -27,14 +27,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatPhp } from '@/lib/transactionFormat';
 import type { ExpenseCategory } from '@/types/expense';
-import type { AirlineMarkup, BaggageOption, OnlineAssistanceType } from '@/types/transaction';
+import type {
+    AirlineMarkup,
+    BaggageOption,
+    OnlineAssistanceType,
+} from '@/types/transaction';
 
 const props = defineProps<{
     baggageOptions: BaggageOption[];
     airlineMarkups: AirlineMarkup[];
     onlineAssistanceTypes: OnlineAssistanceType[];
     expenseCategories: ExpenseCategory[];
-    currentTab: 'baggage' | 'online-assistance' | 'expense-categories' | 'airline-markups';
+    currentTab:
+        | 'baggage'
+        | 'online-assistance'
+        | 'expense-categories'
+        | 'airline-markups';
 }>();
 
 defineOptions({
@@ -51,7 +59,8 @@ defineOptions({
 // --------------------------------------------------------
 // Tabs Navigation
 // --------------------------------------------------------
-type TabKey = 'baggage' | 'airline-markups' | 'online-assistance' | 'expense-categories';
+type TabKey =
+    'baggage' | 'airline-markups' | 'online-assistance' | 'expense-categories';
 
 const activeTab = ref<TabKey>(props.currentTab || 'baggage');
 
@@ -543,7 +552,8 @@ const submitCategory = () => {
                         Airline Markups
                     </h2>
                     <p class="text-sm text-muted-foreground">
-                        Configure dynamic pricing markups for local and international flights.
+                        Configure dynamic pricing markups for local and
+                        international flights.
                     </p>
                 </div>
                 <Button @click="openCreateMarkup">
@@ -555,17 +565,28 @@ const submitCategory = () => {
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b bg-muted/50 text-left text-muted-foreground">
+                            <tr
+                                class="border-b bg-muted/50 text-left text-muted-foreground"
+                            >
                                 <th class="p-4 font-medium">Airline</th>
                                 <th class="p-4 font-medium">Flight Type</th>
-                                <th class="p-4 text-right font-medium">Markup Amount</th>
-                                <th class="p-4 text-center font-medium">Status</th>
-                                <th class="p-4 text-right font-medium">Actions</th>
+                                <th class="p-4 text-right font-medium">
+                                    Markup Amount
+                                </th>
+                                <th class="p-4 text-center font-medium">
+                                    Status
+                                </th>
+                                <th class="p-4 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="airlineMarkups.length === 0">
-                                <td colspan="5" class="p-8 text-center text-muted-foreground">
+                                <td
+                                    colspan="5"
+                                    class="p-8 text-center text-muted-foreground"
+                                >
                                     No airline markups configured yet.
                                 </td>
                             </tr>
@@ -574,18 +595,32 @@ const submitCategory = () => {
                                 :key="markup.id"
                                 class="border-b transition-colors hover:bg-muted/50"
                             >
-                                <td class="p-4 align-middle font-medium text-foreground">
+                                <td
+                                    class="p-4 align-middle font-medium text-foreground"
+                                >
                                     {{ markup.airline }}
                                 </td>
                                 <td class="p-4 align-middle capitalize">
                                     {{ markup.flight_type }}
                                 </td>
-                                <td class="p-4 text-right align-middle font-medium">
+                                <td
+                                    class="p-4 text-right align-middle font-medium"
+                                >
                                     {{ formatPhp(markup.markup_amount) }}
                                 </td>
                                 <td class="p-4 text-center align-middle">
-                                    <Badge :variant="markup.is_active ? 'default' : 'secondary'">
-                                        {{ markup.is_active ? 'Active' : 'Inactive' }}
+                                    <Badge
+                                        :variant="
+                                            markup.is_active
+                                                ? 'default'
+                                                : 'secondary'
+                                        "
+                                    >
+                                        {{
+                                            markup.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
                                     </Badge>
                                 </td>
                                 <td class="p-4 text-right align-middle">
@@ -603,12 +638,14 @@ const submitCategory = () => {
                                             size="icon"
                                             title="Delete"
                                             class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            @click="confirmDelete(
-                                                markup.id,
-                                                markup.airline,
-                                                '/configurations/airline-markups',
-                                                'This airline markup rule will be permanently deleted.'
-                                            )"
+                                            @click="
+                                                confirmDelete(
+                                                    markup.id,
+                                                    markup.airline,
+                                                    '/configurations/airline-markups',
+                                                    'This airline markup rule will be permanently deleted.',
+                                                )
+                                            "
                                         >
                                             <Trash class="size-4" />
                                         </Button>
@@ -1017,7 +1054,11 @@ const submitCategory = () => {
                 <form @submit.prevent="submitMarkup">
                     <DialogHeader>
                         <DialogTitle>
-                            {{ editingMarkupId ? 'Edit Airline Markup' : 'Add Airline Markup' }}
+                            {{
+                                editingMarkupId
+                                    ? 'Edit Airline Markup'
+                                    : 'Add Airline Markup'
+                            }}
                         </DialogTitle>
                         <DialogDescription>
                             Configure dynamic markup for airline flights.
@@ -1033,7 +1074,10 @@ const submitCategory = () => {
                                 placeholder="e.g. Cebu Pacific"
                                 required
                             />
-                            <div v-if="markupForm.errors.airline" class="text-xs text-destructive">
+                            <div
+                                v-if="markupForm.errors.airline"
+                                class="text-xs text-destructive"
+                            >
                                 {{ markupForm.errors.airline }}
                             </div>
                         </div>
@@ -1043,13 +1087,18 @@ const submitCategory = () => {
                             <select
                                 id="markup-flight"
                                 v-model="markupForm.flight_type"
-                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                 required
                             >
                                 <option value="local">Local</option>
-                                <option value="international">International</option>
+                                <option value="international">
+                                    International
+                                </option>
                             </select>
-                            <div v-if="markupForm.errors.flight_type" class="text-xs text-destructive">
+                            <div
+                                v-if="markupForm.errors.flight_type"
+                                class="text-xs text-destructive"
+                            >
                                 {{ markupForm.errors.flight_type }}
                             </div>
                         </div>
@@ -1064,7 +1113,10 @@ const submitCategory = () => {
                                 v-model="markupForm.markup_amount"
                                 required
                             />
-                            <div v-if="markupForm.errors.markup_amount" class="text-xs text-destructive">
+                            <div
+                                v-if="markupForm.errors.markup_amount"
+                                class="text-xs text-destructive"
+                            >
                                 {{ markupForm.errors.markup_amount }}
                             </div>
                         </div>
@@ -1075,18 +1127,29 @@ const submitCategory = () => {
                                 :checked="markupForm.is_active"
                                 @update:checked="markupForm.is_active = $event"
                             />
-                            <Label for="markup-active" class="cursor-pointer font-normal">
+                            <Label
+                                for="markup-active"
+                                class="cursor-pointer font-normal"
+                            >
                                 Active
                             </Label>
                         </div>
                     </div>
 
                     <DialogFooter>
-                        <Button type="button" variant="outline" @click="isMarkupModalOpen = false">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="isMarkupModalOpen = false"
+                        >
                             Cancel
                         </Button>
                         <Button type="submit" :disabled="markupForm.processing">
-                            {{ editingMarkupId ? 'Save Changes' : 'Create Markup' }}
+                            {{
+                                editingMarkupId
+                                    ? 'Save Changes'
+                                    : 'Create Markup'
+                            }}
                         </Button>
                     </DialogFooter>
                 </form>

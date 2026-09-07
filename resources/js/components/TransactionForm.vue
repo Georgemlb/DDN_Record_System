@@ -101,7 +101,9 @@ watch(
         }
 
         const markup = props.airlineMarkups.find(
-            (m) => m.airline.toLowerCase() === newProvider.toLowerCase() && m.flight_type === newFlightType,
+            (m) =>
+                m.airline.toLowerCase() === newProvider.toLowerCase() &&
+                m.flight_type === newFlightType,
         );
 
         if (markup) {
@@ -312,7 +314,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <SelectContent>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="gcash">GCash</SelectItem>
-                        <SelectItem value="split">Split (Cash & GCash)</SelectItem>
+                        <SelectItem value="split"
+                            >Split (Cash & GCash)</SelectItem
+                        >
                     </SelectContent>
                 </Select>
                 <InputError :message="errors.payment_method" />
@@ -402,7 +406,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="local">Local</SelectItem>
-                            <SelectItem value="international">International</SelectItem>
+                            <SelectItem value="international"
+                                >International</SelectItem
+                            >
                         </SelectContent>
                     </Select>
                     <InputError :message="errors.flight_type" />
@@ -488,7 +494,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="0.00 (Optional)"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Net ticket fare deducted from flight portal deposit. Auto-calculates if markup rule is set.
+                        Net ticket fare deducted from flight portal deposit.
+                        Auto-calculates if markup rule is set.
                     </p>
                     <InputError :message="errors.third_party_payment" />
                 </div>
