@@ -7,7 +7,7 @@ import {
     ReceiptText,
     Settings,
     SlidersHorizontal,
-    UtilityPole,
+    Wallet,
 } from '@lucide/vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -24,6 +24,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
+import { index as portalDeposits } from '@/routes/portal-deposits';
 import { edit as editProfile } from '@/routes/profile';
 import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
@@ -46,10 +47,9 @@ const mainNavItems: NavItem[] = [
         icon: FileText,
     },
     {
-        title: 'Utilities',
-        href: '#',
-        icon: UtilityPole,
-        disabled: true,
+        title: 'Portal Deposit',
+        href: portalDeposits(),
+        icon: Wallet,
     },
     {
         title: 'Reports',

@@ -35,6 +35,7 @@ const props = withDefaults(
         onlineAssistanceTypes?: OnlineAssistanceType[];
         psaDocumentTypes?: PsaDocumentType[];
         ddnSplitConfig?: DdnSplitConfig;
+        portalBalance?: number;
     }>(),
     {
         baggageOptions: () => [],
@@ -329,8 +330,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.baggage_option_id" />
                 </div>
 
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="amount">Total Ticket Price (PHP)</Label>
+                <div class="grid gap-2">
+                    <Label for="amount">Customer Ticket Price (PHP)</Label>
                     <Input
                         id="amount"
                         name="amount"
@@ -343,9 +344,91 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="0.00"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Enter the total customer payment in Philippine pesos.
+                        Total amount collected from customer.
                     </p>
                     <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <div class="flex items-center justify-between">
+                        <Label for="third_party_payment"
+                            >Portal Net Cost (PHP)</Label
+                        >
+                        <span
+                            v-if="props.portalBalance !== undefined"
+                            :class="[
+                                'text-xs font-medium',
+                                props.portalBalance < 10000
+                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground',
+                            ]"
+                        >
+                            Balance: {{ formatPhp(props.portalBalance) }}
+                        </span>
+                    </div>
+                    <Input
+                        id="third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (Optional)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Net ticket fare deducted from flight portal deposit.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Auto Calculation Preview -->
+                <div
+                    v-if="numAmount > 0 && numThirdParty > 0"
+                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div
+                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                    >
+                        <Calculator class="size-4" />
+                        <span>Ticketing Margin Preview</span>
+                    </div>
+                    <div
+                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
+                    >
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-semibold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Portal Cost</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >DDN Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(
+                                        Math.max(0, numAmount - numThirdParty),
+                                    )
+                                }}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </template>
 

@@ -39,6 +39,7 @@ class TransactionRequest extends FormRequest
             $rules['provider'] = ['nullable', 'string', 'max:255'];
             $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];
             $rules['service_details'] = ['nullable', 'string', 'max:1000'];
+            $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_TRANSLATION) {
             $rules['third_party_payment'] = ['required', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_PSA) {

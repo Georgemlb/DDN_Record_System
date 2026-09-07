@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TransactionRequest;
 use App\Models\BaggageOption;
+use App\Models\FlightPortalDeposit;
 use App\Models\OnlineAssistanceType;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
@@ -112,6 +113,7 @@ class TransactionController extends Controller
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
+            'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
         ]);
     }
 
@@ -126,6 +128,8 @@ class TransactionController extends Controller
         }
 
         $transaction = Transaction::query()->create($payload);
+
+        FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction recorded.']);
 
@@ -171,6 +175,7 @@ class TransactionController extends Controller
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
+            'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
         ]);
     }
 
@@ -182,6 +187,8 @@ class TransactionController extends Controller
         $payload = $this->prepareTransactionData($request->validated());
 
         $transaction->update($payload);
+
+        FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction updated.']);
 
@@ -195,6 +202,8 @@ class TransactionController extends Controller
     {
         $transaction->delete();
 
+        FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
         return to_route('transactions.index');
@@ -207,6 +216,8 @@ class TransactionController extends Controller
     {
         $transaction->restore();
 
+        FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
 
         return back();
@@ -218,6 +229,8 @@ class TransactionController extends Controller
     public function forceDelete(Transaction $transaction): RedirectResponse
     {
         $transaction->forceDelete();
+
+        FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
 
@@ -256,11 +269,13 @@ class TransactionController extends Controller
 
         switch ($type) {
             case Transaction::TYPE_AIRLINE:
+                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['pax'] = (int) $data['pax'];
                 $prepared['provider'] = $data['provider'] ?? null;
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
                 $prepared['service_details'] = $data['service_details'] ?? null;
-                $prepared['ddn_amount'] = $amount;
+                $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
+                $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
             case Transaction::TYPE_TRANSLATION:

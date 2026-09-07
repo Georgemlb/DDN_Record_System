@@ -6,6 +6,7 @@ use App\Http\Controllers\ConfigurationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\FlightPortalDepositController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransactionController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('expenses/{expense}/force-delete', [ExpenseController::class, 'forceDelete'])->name('expenses.forceDelete')->withTrashed();
     Route::resource('expenses', ExpenseController::class);
     Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+
+    Route::get('portal-deposits', [FlightPortalDepositController::class, 'index'])->name('portal-deposits.index');
+    Route::post('portal-deposits/top-up', [FlightPortalDepositController::class, 'storeTopUp'])->name('portal-deposits.top-up');
+    Route::post('portal-deposits/adjustment', [FlightPortalDepositController::class, 'storeAdjustment'])->name('portal-deposits.adjustment');
+    Route::delete('portal-deposits/{deposit}', [FlightPortalDepositController::class, 'destroy'])->name('portal-deposits.destroy');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
