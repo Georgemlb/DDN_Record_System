@@ -203,11 +203,7 @@ defineOptions({
                                         {{ transaction.baggage_option.airline }}
                                         —
                                     </template>
-                                    {{ transaction.baggage_option.label }} ({{
-                                        formatPhp(
-                                            transaction.baggage_option.price,
-                                        )
-                                    }})
+                                    {{ transaction.baggage_option.label }}
                                 </span>
                                 <span v-else>None</span>
                             </dd>
