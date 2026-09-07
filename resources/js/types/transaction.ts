@@ -30,6 +30,8 @@ export type DdnSplitConfig = {
 
 export type Transaction = {
     id: number;
+    user_id?: number | null;
+    reference_number?: string | null;
     type: TransactionType;
     payment_method: PaymentMethod;
     transaction_date: string;
@@ -47,4 +49,36 @@ export type Transaction = {
     ddn_amount: string | number | null;
     employee_share: string | number | null;
     notes: string | null;
+    deleted_at?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    user?: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
+};
+
+export type TransactionFilters = {
+    search?: string;
+    type?: string;
+    payment_method?: string;
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    sort?: string;
+    direction?: string;
+    status?: 'active' | 'trash';
+};
+
+export type TransactionSummary = {
+    total_payments: number;
+    total_ddn: number;
+    total_cash: number;
+    total_gcash: number;
+};
+
+export type TransactionCounts = {
+    active: number;
+    trash: number;
 };

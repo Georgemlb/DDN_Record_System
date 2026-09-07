@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property int|null $user_id
  * @property string $title
  * @property int $expense_category_id
  * @property string $amount
@@ -23,8 +24,10 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property ExpenseCategory $category
+ * @property User|null $user
  */
 #[Fillable([
+    'user_id',
     'title',
     'expense_category_id',
     'amount',
@@ -38,6 +41,18 @@ use Illuminate\Support\Carbon;
 class Expense extends Model
 {
     use SoftDeletes;
+
+    /**
+     * Boot model events to assign user tracking.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Expense $expense) {
+            if (empty($expense->user_id) && auth()->check()) {
+                $expense->user_id = auth()->id();
+            }
+        });
+    }
 
     public const PAYMENT_METHOD_CASH = 'cash';
 
@@ -85,5 +100,13 @@ class Expense extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(ExpenseCategory::class, 'expense_category_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

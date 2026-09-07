@@ -12,6 +12,7 @@ export type ExpenseCategory = {
 
 export type Expense = {
     id: number;
+    user_id?: number | null;
     title: string;
     expense_category_id: number;
     category?: ExpenseCategory | null;
@@ -25,6 +26,11 @@ export type Expense = {
     created_at?: string;
     updated_at?: string;
     deleted_at?: string | null;
+    user?: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
 };
 
 export type ExpenseSummary = {
@@ -47,4 +53,10 @@ export type ExpenseFilters = {
     date_to?: string;
     sort?: string;
     direction?: 'asc' | 'desc';
+    status?: 'active' | 'trash';
+};
+
+export type ExpenseCounts = {
+    active: number;
+    trash: number;
 };

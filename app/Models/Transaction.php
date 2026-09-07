@@ -5,10 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property int|null $user_id
+ * @property string|null $reference_number
  * @property string $type
  * @property string $payment_method
  * @property Carbon $transaction_date
@@ -26,10 +29,14 @@ use Illuminate\Support\Carbon;
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  * @property BaggageOption|null $baggageOption
  * @property OnlineAssistanceType|null $onlineAssistanceType
+ * @property User|null $user
  */
 #[Fillable([
+    'user_id',
+    'reference_number',
     'type',
     'payment_method',
     'transaction_date',
@@ -48,6 +55,8 @@ use Illuminate\Support\Carbon;
 ])]
 class Transaction extends Model
 {
+    use SoftDeletes;
+
     public const TYPE_AIRLINE = 'airline';
 
     public const TYPE_TRANSLATION = 'translation';
@@ -91,6 +100,46 @@ class Transaction extends Model
     ];
 
     /**
+     * Boot model events to assign default reference numbers and user tracking.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Transaction $transaction) {
+            if (empty($transaction->reference_number)) {
+                $transaction->reference_number = static::generateReferenceNumber(
+                    $transaction->transaction_date ? (string) $transaction->transaction_date : null
+                );
+            }
+
+            if (empty($transaction->user_id) && auth()->check()) {
+                $transaction->user_id = auth()->id();
+            }
+        });
+    }
+
+    /**
+     * Generate a unique sequential reference number for a date: TRX-YYYYMMDD-0001
+     */
+    public static function generateReferenceNumber(?string $date = null): string
+    {
+        $carbonDate = $date ? Carbon::parse($date) : now();
+        $datePart = $carbonDate->format('Ymd');
+        $prefix = "TRX-{$datePart}-";
+
+        $latest = static::withTrashed()
+            ->where('reference_number', 'like', "{$prefix}%")
+            ->orderByDesc('reference_number')
+            ->value('reference_number');
+
+        $sequence = 1;
+        if ($latest && preg_match('/-(\d{4})$/', $latest, $matches)) {
+            $sequence = ((int) $matches[1]) + 1;
+        }
+
+        return sprintf('%s%04d', $prefix, $sequence);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -118,5 +167,13 @@ class Transaction extends Model
     public function onlineAssistanceType(): BelongsTo
     {
         return $this->belongsTo(OnlineAssistanceType::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

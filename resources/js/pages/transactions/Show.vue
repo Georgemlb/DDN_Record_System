@@ -47,6 +47,12 @@ defineOptions({
         <section class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <div class="flex items-center gap-2">
+                    <span
+                        v-if="transaction.reference_number"
+                        class="rounded border bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-foreground"
+                    >
+                        {{ transaction.reference_number }}
+                    </span>
                     <p class="text-sm font-medium text-primary">
                         Transaction details
                     </p>
@@ -62,6 +68,9 @@ defineOptions({
                 <p class="mt-1 text-sm text-muted-foreground">
                     Recorded on
                     {{ formatTransactionDate(transaction.transaction_date) }}
+                    <span v-if="transaction.user">
+                        · by {{ transaction.user.name }}
+                    </span>
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -86,12 +95,14 @@ defineOptions({
                         >
                             <DialogHeader>
                                 <DialogTitle
-                                    >Delete this transaction?</DialogTitle
+                                    >Move this transaction to
+                                    trash?</DialogTitle
                                 >
                                 <DialogDescription
-                                    >This permanently removes the record for
-                                    {{ transaction.customer_name }}. This action
-                                    cannot be undone.</DialogDescription
+                                    >This moves the record for
+                                    {{ transaction.customer_name }} to the
+                                    trash. You can view or restore it at any
+                                    time from the Trash tab.</DialogDescription
                                 >
                             </DialogHeader>
                             <DialogFooter class="mt-6 gap-2">
@@ -104,7 +115,7 @@ defineOptions({
                                     type="submit"
                                     variant="destructive"
                                     :disabled="processing"
-                                    >Delete transaction</Button
+                                    >Move to trash</Button
                                 >
                             </DialogFooter>
                         </Form>

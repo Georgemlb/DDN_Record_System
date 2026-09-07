@@ -512,6 +512,12 @@ const hasSalesTrend = computed(() => props.salesTrend.length > 0);
                     >
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
+                                <span
+                                    v-if="tx.reference_number"
+                                    class="hidden font-mono text-xs text-muted-foreground sm:inline"
+                                >
+                                    {{ tx.reference_number }}
+                                </span>
                                 <p class="truncate text-sm font-medium">
                                     {{ tx.customer_name }}
                                 </p>
