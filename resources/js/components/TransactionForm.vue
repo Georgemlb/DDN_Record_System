@@ -85,38 +85,39 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
-// Track if third_party_payment was manually edited
-const isThirdPartyManuallyEdited = ref(false);
-
 // Auto-calculation for Airline Markups
+
 watch(
     [provider, flightType, amount],
     ([newProvider, newFlightType, newAmount]) => {
-        if (formType.value !== 'airline') return;
-        
-        // If it was manually edited, don't overwrite unless they clear it maybe? 
-        // For now, always auto-calculate if it matches to enforce the rule, but user can override after.
-        // Actually, if we want to allow override, we should only set if it matches a markup.
-        
+        if (formType.value !== 'airline') {
+            return;
+        }
+
         const numAmt = Number(newAmount) || 0;
-        if (!newProvider || !newFlightType || numAmt <= 0) return;
+
+        if (!newProvider || !newFlightType || numAmt <= 0) {
+            return;
+        }
 
         const markup = props.airlineMarkups.find(
-            (m) => m.airline.toLowerCase() === newProvider.toLowerCase() && m.flight_type === newFlightType
+            (m) => m.airline.toLowerCase() === newProvider.toLowerCase() && m.flight_type === newFlightType,
         );
 
         if (markup) {
             const markupAmt = Number(markup.markup_amount) || 0;
             const calculatedCost = Math.max(0, numAmt - markupAmt);
+
             thirdPartyPayment.value = calculatedCost;
         }
-    }
+    },
 );
 
 // Split payment logic
 const handleCashChange = () => {
     const total = Number(amount.value) || 0;
     const cash = Number(cashAmount.value) || 0;
+
     if (total > 0 && cash <= total) {
         gcashAmount.value = total - cash;
     }
@@ -125,6 +126,7 @@ const handleCashChange = () => {
 const handleGcashChange = () => {
     const total = Number(amount.value) || 0;
     const gcash = Number(gcashAmount.value) || 0;
+
     if (total > 0 && gcash <= total) {
         cashAmount.value = total - gcash;
     }
