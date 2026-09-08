@@ -191,6 +191,105 @@ class FlightPortalDepositController extends Controller
     }
 
     /**
+     * Update an existing deposit entry.
+     */
+    public function update(Request $request, FlightPortalDeposit $deposit): RedirectResponse
+    {
+        if ($deposit->type === FlightPortalDeposit::TYPE_TICKET_DEDUCTION && $deposit->transaction_id) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'This deduction is linked to an airline transaction. Please edit the transaction directly.',
+            ]);
+
+            return back();
+        }
+
+        if ($deposit->type === FlightPortalDeposit::TYPE_TOP_UP) {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+                'entry_date' => ['required', 'date'],
+                'payment_source' => ['required', 'string', 'in:cash,gcash,bank_transfer'],
+                'reference_number' => ['nullable', 'string', 'max:100'],
+                'notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $oldDate = $deposit->entry_date?->toDateString();
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->payment_source = $validated['payment_source'];
+            $deposit->reference_number = $validated['reference_number'] ?? null;
+            $deposit->notes = $validated['notes'] ?? null;
+            $deposit->save();
+
+            // Synchronize linked expense if exists
+            if ($deposit->expense) {
+                $expense = $deposit->expense;
+                $expense->amount = $validated['amount'];
+                $expense->expense_date = $validated['entry_date'];
+                $expense->payment_method = $validated['payment_source'];
+                $expense->reference_number = $validated['reference_number'] ?? null;
+                $expense->title = 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : '');
+                $expense->notes = $validated['notes'] ?? null;
+                $expense->save();
+
+                if ($oldDate) {
+                    DailySettlement::syncForDate($oldDate);
+                }
+                DailySettlement::syncForDate($validated['entry_date']);
+            }
+        } elseif ($deposit->type === FlightPortalDeposit::TYPE_ADJUSTMENT) {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'not_in:0'],
+                'entry_date' => ['required', 'date'],
+                'notes' => ['required', 'string', 'max:1000'],
+            ]);
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->notes = $validated['notes'];
+            $deposit->save();
+        } else {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+                'entry_date' => ['required', 'date'],
+                'notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->notes = $validated['notes'] ?? null;
+            $deposit->save();
+        }
+
+        // Handle manual running balance anchor override if provided
+        $anchorValidated = $request->validate([
+            'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
+            'is_balance_anchor' => ['nullable', 'boolean'],
+        ]);
+
+        if ($request->has('is_balance_anchor')) {
+            $isAnchor = $request->boolean('is_balance_anchor');
+            $deposit->is_balance_anchor = $isAnchor;
+
+            if ($isAnchor && $request->filled('running_balance')) {
+                $deposit->running_balance = number_format((float) $request->input('running_balance'), 2, '.', '');
+            }
+
+            $deposit->save();
+        }
+
+        FlightPortalDeposit::recalculateRunningBalances();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Deposit entry updated successfully and balances recalculated.',
+        ]);
+
+        return back();
+    }
+
+    /**
      * Delete a deposit entry.
      */
     public function destroy(FlightPortalDeposit $deposit): RedirectResponse

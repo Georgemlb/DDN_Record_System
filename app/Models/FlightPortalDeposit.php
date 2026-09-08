@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property string $type
  * @property string $amount
  * @property string $running_balance
+ * @property bool $is_balance_anchor
  * @property int|null $transaction_id
  * @property int|null $expense_id
  * @property string|null $reference_number
@@ -32,6 +33,7 @@ use Illuminate\Support\Carbon;
     'type',
     'amount',
     'running_balance',
+    'is_balance_anchor',
     'transaction_id',
     'expense_id',
     'reference_number',
@@ -80,6 +82,7 @@ class FlightPortalDeposit extends Model
             'entry_date' => 'date',
             'amount' => 'decimal:2',
             'running_balance' => 'decimal:2',
+            'is_balance_anchor' => 'boolean',
         ];
     }
 
@@ -139,17 +142,21 @@ class FlightPortalDeposit extends Model
         foreach ($entries as $entry) {
             $amount = (float) $entry->amount;
 
-            if ($entry->type === self::TYPE_TOP_UP) {
-                $running += $amount;
-            } elseif ($entry->type === self::TYPE_TICKET_DEDUCTION) {
-                $running -= $amount;
-            } elseif ($entry->type === self::TYPE_ADJUSTMENT) {
-                $running += $amount;
-            }
+            if ($entry->is_balance_anchor) {
+                $running = (float) $entry->running_balance;
+            } else {
+                if ($entry->type === self::TYPE_TOP_UP) {
+                    $running += $amount;
+                } elseif ($entry->type === self::TYPE_TICKET_DEDUCTION) {
+                    $running -= $amount;
+                } elseif ($entry->type === self::TYPE_ADJUSTMENT) {
+                    $running += $amount;
+                }
 
-            if ((float) $entry->running_balance !== $running) {
-                $entry->running_balance = number_format($running, 2, '.', '');
-                $entry->saveQuietly();
+                if ((float) $entry->running_balance !== $running) {
+                    $entry->running_balance = number_format($running, 2, '.', '');
+                    $entry->saveQuietly();
+                }
             }
         }
     }
