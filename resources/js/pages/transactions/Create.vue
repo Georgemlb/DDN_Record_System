@@ -4,17 +4,21 @@ import TransactionController from '@/actions/App/Http/Controllers/TransactionCon
 import TransactionForm from '@/components/TransactionForm.vue';
 import { index } from '@/routes/transactions';
 import type {
+    AirlineMarkup,
     BaggageOption,
     Customer,
     DdnSplitConfig,
     OnlineAssistanceType,
     PsaDocumentType,
+    PsaRate,
 } from '@/types/transaction';
 
 defineProps<{
     baggageOptions?: BaggageOption[];
     onlineAssistanceTypes?: OnlineAssistanceType[];
+    airlineMarkups?: AirlineMarkup[];
     psaDocumentTypes?: PsaDocumentType[];
+    psaRates?: PsaRate[];
     ddnSplitConfig?: DdnSplitConfig;
     portalBalance?: number;
     recurringCustomers?: Customer[];
@@ -52,7 +56,9 @@ defineOptions({
                 submit-label="Save transaction"
                 :baggage-options="baggageOptions"
                 :online-assistance-types="onlineAssistanceTypes"
+                :airline-markups="airlineMarkups"
                 :psa-document-types="psaDocumentTypes"
+                :psa-rates="psaRates"
                 :ddn-split-config="ddnSplitConfig"
                 :portal-balance="portalBalance"
                 :recurring-customers="recurringCustomers || initialCustomers"

@@ -8,6 +8,7 @@ use App\Models\BaggageOption;
 use App\Models\Customer;
 use App\Models\FlightPortalDeposit;
 use App\Models\OnlineAssistanceType;
+use App\Models\PsaRate;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -144,6 +145,7 @@ class TransactionController extends Controller
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
+            'psaRates' => PsaRate::query()->active()->get(),
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
             'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
         ]);
@@ -240,6 +242,7 @@ class TransactionController extends Controller
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
+            'psaRates' => PsaRate::query()->orderBy('sort_order')->orderBy('name')->get(),
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
             'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
         ]);
@@ -443,7 +446,26 @@ class TransactionController extends Controller
                 break;
 
             case Transaction::TYPE_PSA:
-                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                $rate = PsaRate::where('document_type', $data['psa_document_type'])
+                    ->orWhere('document_type', strtoupper($data['psa_document_type']))
+                    ->first();
+                if ($rate) {
+                    $amount = (float) $rate->price;
+                    $thirdParty = (float) $rate->officer_fee;
+                    $prepared['amount'] = $amount;
+                    if ($status === Transaction::PAYMENT_STATUS_PAID) {
+                        $prepared['amount_paid'] = $amount;
+                        $prepared['balance'] = 0.00;
+                    } elseif ($status === Transaction::PAYMENT_STATUS_UNPAID) {
+                        $prepared['amount_paid'] = 0.00;
+                        $prepared['balance'] = $amount;
+                    } else {
+                        $prepared['amount_paid'] = min($amount, (float) ($data['amount_paid'] ?? 0));
+                        $prepared['balance'] = max(0, round($amount - $prepared['amount_paid'], 2));
+                    }
+                } else {
+                    $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                }
                 $prepared['psa_document_type'] = $data['psa_document_type'];
                 $prepared['third_party_payment'] = $thirdParty;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);

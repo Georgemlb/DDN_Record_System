@@ -3,6 +3,7 @@
 use App\Http\Controllers\Configuration\AirlineMarkupController;
 use App\Http\Controllers\Configuration\BaggageOptionController;
 use App\Http\Controllers\Configuration\OnlineAssistanceTypeController;
+use App\Http\Controllers\Configuration\PsaRateController;
 use App\Http\Controllers\ConfigurationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseCategoryController;
@@ -59,6 +60,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::resource('airline-markups', AirlineMarkupController::class)->only(['store', 'update', 'destroy']);
             Route::resource('online-assistance-types', OnlineAssistanceTypeController::class)->only(['store', 'update', 'destroy']);
             Route::resource('expense-categories', App\Http\Controllers\Configuration\ExpenseCategoryController::class)->only(['store', 'update', 'destroy']);
+            Route::resource('psa-rates', PsaRateController::class)->only(['store', 'update', 'destroy']);
         });
     });
 

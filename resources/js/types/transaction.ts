@@ -63,6 +63,17 @@ export type OnlineAssistanceType = {
     sort_order?: number;
 };
 
+export type PsaRate = {
+    id: number;
+    document_type: string;
+    name: string;
+    price: string | number;
+    officer_fee: string | number;
+    net_income?: number;
+    is_active?: boolean;
+    sort_order?: number;
+};
+
 export type DdnSplitConfig = {
     ddn: number;
     employee: number;

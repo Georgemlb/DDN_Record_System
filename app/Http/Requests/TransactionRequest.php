@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\PsaRate;
 use App\Models\Transaction;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,6 +15,31 @@ class TransactionRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('type') === Transaction::TYPE_PSA && ! empty($this->input('psa_document_type'))) {
+            $rate = PsaRate::where('document_type', $this->input('psa_document_type'))
+                ->orWhere('document_type', strtoupper($this->input('psa_document_type')))
+                ->first();
+
+            if ($rate) {
+                $merge = [];
+                if (! $this->has('amount') || $this->input('amount') === null || $this->input('amount') === '') {
+                    $merge['amount'] = $rate->price;
+                }
+                if (! $this->has('third_party_payment') || $this->input('third_party_payment') === null || $this->input('third_party_payment') === '') {
+                    $merge['third_party_payment'] = $rate->officer_fee;
+                }
+                if (! empty($merge)) {
+                    $this->merge($merge);
+                }
+            }
+        }
     }
 
     /**
@@ -57,8 +83,8 @@ class TransactionRequest extends FormRequest
         } elseif ($type === Transaction::TYPE_TRANSLATION) {
             $rules['third_party_payment'] = ['required', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_PSA) {
-            $rules['psa_document_type'] = ['required', 'string', Rule::in(Transaction::PSA_DOCUMENT_TYPES)];
-            $rules['third_party_payment'] = ['required', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
+            $rules['psa_document_type'] = ['required', 'string', 'max:50'];
+            $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_ONLINE_ASSISTANCE) {
             $rules['online_assistance_type_id'] = ['required', 'integer', 'exists:online_assistance_types,id'];
         }

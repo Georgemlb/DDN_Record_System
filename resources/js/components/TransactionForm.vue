@@ -25,6 +25,7 @@ import type {
     PaymentMethod,
     PaymentStatus,
     PsaDocumentType,
+    PsaRate,
     Transaction,
     TransactionType,
 } from '@/types/transaction';
@@ -39,6 +40,7 @@ const props = withDefaults(
         onlineAssistanceTypes?: OnlineAssistanceType[];
         airlineMarkups?: AirlineMarkup[];
         psaDocumentTypes?: PsaDocumentType[];
+        psaRates?: PsaRate[];
         ddnSplitConfig?: DdnSplitConfig;
         portalBalance?: number;
         recurringCustomers?: Customer[];
@@ -49,6 +51,7 @@ const props = withDefaults(
         onlineAssistanceTypes: () => [],
         airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
+        psaRates: () => [],
         ddnSplitConfig: () => ({ ddn: 0.6, employee: 0.4 }),
         recurringCustomers: () => [],
         initialCustomers: () => [],
@@ -194,19 +197,63 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
     }
 };
 
-// If online assistance is selected initially and amount is empty, populate from default option
+// Auto-fill amount and third party fee when PSA document type changes
+const applyPsaRate = (docType: string) => {
+    if (!docType || props.psaRates.length === 0) {
+        return;
+    }
+
+    const selected = props.psaRates.find(
+        (r) => r.document_type.toLowerCase() === docType.toLowerCase(),
+    );
+
+    if (selected) {
+        amount.value = selected.price;
+        thirdPartyPayment.value = selected.officer_fee;
+    }
+};
+
+const handlePsaDocumentTypeChange = (value: unknown) => {
+    const docCode = (value ? String(value) : '') as PsaDocumentType;
+    psaDocumentType.value = docCode;
+    applyPsaRate(docCode);
+};
+
+// Automatically apply configured rates whenever formType or psaRates change
 watch(
     formType,
     (newType) => {
-        if (
-            newType === 'online_assistance' &&
-            !amount.value &&
-            onlineAssistanceTypeId.value
-        ) {
-            handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
+        if (newType === 'online_assistance') {
+            if (!amount.value && onlineAssistanceTypeId.value) {
+                handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
+            }
+        } else if (newType === 'psa') {
+            if (!psaDocumentType.value && props.psaRates.length > 0) {
+                psaDocumentType.value = props.psaRates[0]
+                    .document_type as PsaDocumentType;
+            }
+
+            if (psaDocumentType.value) {
+                applyPsaRate(psaDocumentType.value);
+            }
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => props.psaRates,
+    (rates) => {
+        if (formType.value === 'psa' && rates && rates.length > 0) {
+            if (!psaDocumentType.value) {
+                psaDocumentType.value = rates[0]
+                    .document_type as PsaDocumentType;
+            }
+
+            applyPsaRate(psaDocumentType.value);
+        }
+    },
+    { immediate: true, deep: true },
 );
 
 const filteredBaggageOptions = computed(() => {
@@ -329,6 +376,18 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             type="hidden"
             name="psa_document_type"
             :value="psaDocumentType"
+        />
+        <input
+            v-if="formType === 'psa'"
+            type="hidden"
+            name="amount"
+            :value="amount"
+        />
+        <input
+            v-if="formType === 'psa'"
+            type="hidden"
+            name="third_party_payment"
+            :value="thirdPartyPayment"
         />
         <input
             v-if="formType === 'online_assistance'"
@@ -827,79 +886,100 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <template v-if="formType === 'psa'">
                 <div class="grid gap-2 md:col-span-2">
                     <Label for="psa_doc_select">PSA Document Type</Label>
-                    <Select v-model="psaDocumentType">
+                    <Select
+                        :model-value="psaDocumentType"
+                        @update:model-value="handlePsaDocumentTypeChange"
+                    >
                         <SelectTrigger id="psa_doc_select" class="w-full">
                             <SelectValue
                                 placeholder="Select PSA Document Type"
                             />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem
-                                v-for="docType in psaDocumentTypes"
-                                :key="docType"
-                                :value="docType"
-                            >
-                                {{ psaDocumentTypeLabels[docType] || docType }}
-                            </SelectItem>
+                            <template v-if="props.psaRates.length > 0">
+                                <SelectItem
+                                    v-for="rate in props.psaRates"
+                                    :key="rate.id"
+                                    :value="rate.document_type"
+                                >
+                                    {{ rate.document_type }} —
+                                    {{ rate.name }} ({{
+                                        formatPhp(rate.price)
+                                    }})
+                                </SelectItem>
+                            </template>
+                            <template v-else>
+                                <SelectItem
+                                    v-for="docType in psaDocumentTypes"
+                                    :key="docType"
+                                    :value="docType"
+                                >
+                                    {{
+                                        psaDocumentTypeLabels[docType] ||
+                                        docType
+                                    }}
+                                </SelectItem>
+                            </template>
                         </SelectContent>
                     </Select>
                     <InputError :message="errors.psa_document_type" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="amount"
-                        >Total Price / Customer Payment (PHP)</Label
-                    >
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="third_party_payment"
-                        >PSA Officer Payment (PHP)</Label
-                    >
-                    <Input
-                        id="third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Auto Calculation Preview -->
+                <!-- PSA Margin & Net Breakdown Preview (Price is automated from configuration) -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
                     >
-                        <Calculator class="size-4" />
-                        <span>DDN Amount Calculation</span>
+                        <div class="flex items-center gap-2">
+                            <Calculator class="size-4" />
+                            <span>Configured PSA Fixed Price & Breakdown</span>
+                        </div>
+                        <span class="text-xs font-normal text-muted-foreground">
+                            Automatically set from configuration
+                        </span>
                     </div>
                     <div
-                        class="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3"
+                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
                     >
-                        <span class="text-sm text-muted-foreground">
-                            DDN Net (Price − PSA Officer Payment):
-                        </span>
-                        <span class="text-lg font-bold">
-                            {{ formatPhp(computedTranslationOrPsaDdnAmount) }}
-                        </span>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Price</span
+                            >
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >PSA Officer Fee</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Net DDN Income</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(computedTranslationOrPsaDdnAmount)
+                                }}
+                            </p>
+                        </div>
                     </div>
+                    <p
+                        class="mt-2 text-center text-[11px] text-muted-foreground"
+                    >
+                        Customer price and PSA officer payment are fixed
+                        according to branch configuration.
+                    </p>
+                    <InputError :message="errors.amount" />
+                    <InputError :message="errors.third_party_payment" />
                 </div>
             </template>
 

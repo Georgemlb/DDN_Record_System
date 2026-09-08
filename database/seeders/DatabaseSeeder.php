@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
             BaggageOptionSeeder::class,
             OnlineAssistanceTypeSeeder::class,
             ExpenseCategorySeeder::class,
+            PsaRateSeeder::class,
         ]);
     }
 }
