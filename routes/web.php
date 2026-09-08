@@ -48,6 +48,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
         Route::post('reports/settlements', [ReportController::class, 'startDay'])->name('reports.settlements.start');
+        Route::put('reports/settlements/{settlement}', [ReportController::class, 'update'])->name('reports.settlements.update');
         Route::put('reports/settlements/{settlement}/close', [ReportController::class, 'closeDay'])->name('reports.settlements.close');
         Route::put('reports/settlements/{settlement}/reopen', [ReportController::class, 'reopen'])->name('reports.settlements.reopen');
         Route::get('reports/settlements/{settlement}', [ReportController::class, 'showSlip'])->name('reports.settlements.show');

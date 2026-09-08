@@ -10,6 +10,7 @@ import {
     Eye,
     Info,
     Lock,
+    Pencil,
     Printer,
     Receipt,
     RefreshCw,
@@ -121,7 +122,10 @@ watch(
 // --------------------------------------------------------
 const isStartModalOpen = ref(false);
 const isCloseModalOpen = ref(false);
+const isEditModalOpen = ref(false);
 const isReopenModalOpen = ref(false);
+const settlementToClose = ref<DailySettlement | null>(null);
+const settlementToEdit = ref<DailySettlement | null>(null);
 const settlementToReopen = ref<DailySettlement | null>(null);
 
 // Start Day Form
@@ -146,21 +150,31 @@ const submitStartDay = () => {
     });
 };
 
-// Close Day Form
+// Close Day Form (Handles today or any historical open record)
 const closeForm = useForm({
     actual_cash: '',
     notes: '',
 });
 
-const openCloseDayModal = () => {
+const openCloseDayModal = (settlement?: DailySettlement | null) => {
+    settlementToClose.value =
+        settlement || props.dailySettlements.todaySettlement || null;
     closeForm.actual_cash = '';
     closeForm.notes = '';
     closeForm.clearErrors();
     isCloseModalOpen.value = true;
 };
 
+const activeSettlementToClose = computed(() => {
+    return (
+        settlementToClose.value ||
+        props.dailySettlements.todaySettlement ||
+        null
+    );
+});
+
 const currentExpectedCash = computed(() => {
-    const s = props.dailySettlements.todaySettlement;
+    const s = activeSettlementToClose.value;
 
     if (!s) {
         return 0;
@@ -182,7 +196,7 @@ const liveClosingDiscrepancy = computed(() => {
 });
 
 const submitCloseDay = () => {
-    const s = props.dailySettlements.todaySettlement;
+    const s = activeSettlementToClose.value;
 
     if (!s) {
         return;
@@ -192,6 +206,75 @@ const submitCloseDay = () => {
         preserveScroll: true,
         onSuccess: () => {
             isCloseModalOpen.value = false;
+            settlementToClose.value = null;
+        },
+    });
+};
+
+// Edit Settlement Form
+const editForm = useForm({
+    opening_cash: 0,
+    actual_cash: '' as string | number,
+    status: 'open' as 'open' | 'closed',
+    notes: '',
+    sync_metrics: true,
+});
+
+const openEditModal = (settlement: DailySettlement) => {
+    settlementToEdit.value = settlement;
+    editForm.clearErrors();
+    editForm.opening_cash =
+        typeof settlement.opening_cash === 'string'
+            ? parseFloat(settlement.opening_cash)
+            : settlement.opening_cash;
+    editForm.actual_cash =
+        settlement.actual_cash !== null && settlement.actual_cash !== undefined
+            ? settlement.actual_cash
+            : '';
+    editForm.status = settlement.status as 'open' | 'closed';
+    editForm.notes = settlement.notes || '';
+    editForm.sync_metrics = true;
+    isEditModalOpen.value = true;
+};
+
+const computedEditExpectedCash = computed(() => {
+    if (!settlementToEdit.value) {
+        return 0;
+    }
+
+    const opening = Number(editForm.opening_cash) || 0;
+    const cashIn =
+        typeof settlementToEdit.value.cash_in === 'string'
+            ? parseFloat(settlementToEdit.value.cash_in)
+            : settlementToEdit.value.cash_in;
+    const cashOut =
+        typeof settlementToEdit.value.cash_out === 'string'
+            ? parseFloat(settlementToEdit.value.cash_out)
+            : settlementToEdit.value.cash_out;
+
+    return Math.round((opening + (cashIn || 0) - (cashOut || 0)) * 100) / 100;
+});
+
+const computedEditDiscrepancy = computed(() => {
+    if (editForm.actual_cash === '' || isNaN(Number(editForm.actual_cash))) {
+        return null;
+    }
+
+    const actual = Number(editForm.actual_cash);
+
+    return Math.round((actual - computedEditExpectedCash.value) * 100) / 100;
+});
+
+const submitEditSettlement = () => {
+    if (!settlementToEdit.value) {
+        return;
+    }
+
+    editForm.put(`/reports/settlements/${settlementToEdit.value.id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            isEditModalOpen.value = false;
+            settlementToEdit.value = null;
         },
     });
 };
@@ -599,10 +682,27 @@ const calculateExpenseSharePct = (amount: number): string => {
                                 variant="destructive"
                                 size="lg"
                                 class="shadow-sm"
-                                @click="openCloseDayModal"
+                                @click="
+                                    openCloseDayModal(
+                                        dailySettlements.todaySettlement,
+                                    )
+                                "
                             >
                                 <CheckCircle2 class="mr-2 size-4" />
                                 Close Register (End of Day)
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="lg"
+                                class="shadow-sm"
+                                @click="
+                                    openEditModal(
+                                        dailySettlements.todaySettlement,
+                                    )
+                                "
+                            >
+                                <Pencil class="mr-2 size-4" />
+                                Edit
                             </Button>
                         </div>
                     </div>
@@ -781,6 +881,17 @@ const calculateExpenseSharePct = (amount: number): string => {
                             >
                                 <Eye class="mr-1.5 size-4" />
                                 View & Print Slip
+                            </Button>
+                            <Button
+                                variant="outline"
+                                @click="
+                                    openEditModal(
+                                        dailySettlements.todaySettlement,
+                                    )
+                                "
+                            >
+                                <Pencil class="mr-1.5 size-4" />
+                                Edit
                             </Button>
                             <Button
                                 variant="ghost"
@@ -1011,6 +1122,27 @@ const calculateExpenseSharePct = (amount: number): string => {
                                         <div
                                             class="flex items-center justify-end gap-1.5"
                                         >
+                                            <Button
+                                                v-if="item.status === 'open'"
+                                                variant="default"
+                                                size="sm"
+                                                class="h-8 bg-emerald-600 px-2.5 text-xs text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                                                @click="openCloseDayModal(item)"
+                                            >
+                                                <CheckCircle2
+                                                    class="mr-1 size-3.5"
+                                                />
+                                                Close
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                class="h-8 px-2 text-xs"
+                                                @click="openEditModal(item)"
+                                            >
+                                                <Pencil class="mr-1 size-3.5" />
+                                                Edit
+                                            </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -1533,10 +1665,25 @@ const calculateExpenseSharePct = (amount: number): string => {
         <Dialog v-model:open="isCloseModalOpen">
             <DialogContent class="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Close Daily Register (EOD)</DialogTitle>
+                    <DialogTitle>
+                        Close Register ({{
+                            activeSettlementToClose
+                                ? formatTransactionDate(
+                                      activeSettlementToClose.settlement_date,
+                                  )
+                                : 'EOD'
+                        }})
+                    </DialogTitle>
                     <DialogDescription>
                         Perform physical cash count and reconcile the cash
-                        drawer.
+                        drawer for
+                        {{
+                            activeSettlementToClose
+                                ? formatTransactionDate(
+                                      activeSettlementToClose.settlement_date,
+                                  )
+                                : 'this day'
+                        }}.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -1550,10 +1697,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                                 >Opening Float:</span
                             >
                             <span class="font-mono">{{
-                                formatPhp(
-                                    dailySettlements.todaySettlement
-                                        ?.opening_cash,
-                                )
+                                formatPhp(activeSettlementToClose?.opening_cash)
                             }}</span>
                         </div>
                         <div class="flex justify-between">
@@ -1563,10 +1707,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                             <span
                                 class="font-mono text-emerald-600 dark:text-emerald-400"
                                 >+{{
-                                    formatPhp(
-                                        dailySettlements.todaySettlement
-                                            ?.cash_in,
-                                    )
+                                    formatPhp(activeSettlementToClose?.cash_in)
                                 }}</span
                             >
                         </div>
@@ -1577,10 +1718,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                             <span
                                 class="font-mono text-rose-600 dark:text-rose-400"
                                 >-{{
-                                    formatPhp(
-                                        dailySettlements.todaySettlement
-                                            ?.cash_out,
-                                    )
+                                    formatPhp(activeSettlementToClose?.cash_out)
                                 }}</span
                             >
                         </div>
@@ -1664,6 +1802,196 @@ const calculateExpenseSharePct = (amount: number): string => {
                             :disabled="closeForm.processing"
                         >
                             Confirm & Close Register
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+
+        <!-- ============================================== -->
+        <!-- MODAL: EDIT DAILY SETTLEMENT                   -->
+        <!-- ============================================== -->
+        <Dialog v-model:open="isEditModalOpen">
+            <DialogContent class="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Edit Daily Settlement</DialogTitle>
+                    <DialogDescription>
+                        Adjust opening float, physical cash count, status, or
+                        remarks for
+                        {{
+                            settlementToEdit
+                                ? formatTransactionDate(
+                                      settlementToEdit.settlement_date,
+                                  )
+                                : 'this day'
+                        }}.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <form @submit.prevent="submitEditSettlement" class="space-y-4">
+                    <!-- Read-only Metrics Preview Box -->
+                    <div
+                        class="space-y-2 rounded-lg border bg-muted/40 p-4 text-xs"
+                    >
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground"
+                                >Settlement Date:</span
+                            >
+                            <span class="font-semibold">{{
+                                settlementToEdit
+                                    ? formatTransactionDate(
+                                          settlementToEdit.settlement_date,
+                                      )
+                                    : '—'
+                            }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground"
+                                >Cash In (Sales):</span
+                            >
+                            <span
+                                class="font-mono text-emerald-600 dark:text-emerald-400"
+                                >+{{
+                                    formatPhp(settlementToEdit?.cash_in)
+                                }}</span
+                            >
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground"
+                                >Cash Out (Expenses):</span
+                            >
+                            <span
+                                class="font-mono text-rose-600 dark:text-rose-400"
+                                >-{{
+                                    formatPhp(settlementToEdit?.cash_out)
+                                }}</span
+                            >
+                        </div>
+                        <div
+                            class="flex justify-between border-t pt-2 font-semibold"
+                        >
+                            <span>Computed Expected Cash:</span>
+                            <span class="font-mono text-primary">{{
+                                formatPhp(computedEditExpectedCash)
+                            }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Opening Cash -->
+                    <div class="space-y-2">
+                        <Label for="edit_opening_cash">Opening Float (₱)</Label>
+                        <Input
+                            id="edit_opening_cash"
+                            v-model="editForm.opening_cash"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                        />
+                        <p
+                            v-if="editForm.errors.opening_cash"
+                            class="text-xs text-destructive"
+                        >
+                            {{ editForm.errors.opening_cash }}
+                        </p>
+                    </div>
+
+                    <!-- Status Selection -->
+                    <div class="space-y-2">
+                        <Label for="edit_status">Settlement Status</Label>
+                        <select
+                            id="edit_status"
+                            v-model="editForm.status"
+                            class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                            required
+                        >
+                            <option value="open">Open (In Progress)</option>
+                            <option value="closed">Closed & Reconciled</option>
+                        </select>
+                        <p
+                            v-if="editForm.errors.status"
+                            class="text-xs text-destructive"
+                        >
+                            {{ editForm.errors.status }}
+                        </p>
+                    </div>
+
+                    <!-- Actual Cash Count -->
+                    <div class="space-y-2">
+                        <Label for="edit_actual_cash">
+                            Actual Cash Counted (₱)
+                            <span
+                                v-if="editForm.status === 'open'"
+                                class="text-xs font-normal text-muted-foreground"
+                                >(Optional while Open)</span
+                            >
+                        </Label>
+                        <Input
+                            id="edit_actual_cash"
+                            v-model="editForm.actual_cash"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Physical cash counted"
+                            :required="editForm.status === 'closed'"
+                        />
+                        <p
+                            v-if="editForm.errors.actual_cash"
+                            class="text-xs text-destructive"
+                        >
+                            {{ editForm.errors.actual_cash }}
+                        </p>
+                    </div>
+
+                    <!-- Live Discrepancy Indicator -->
+                    <div
+                        v-if="computedEditDiscrepancy !== null"
+                        class="flex items-center justify-between rounded-md border p-3"
+                    >
+                        <span class="text-xs text-muted-foreground"
+                            >Discrepancy:</span
+                        >
+                        <Badge
+                            :variant="
+                                formatDiscrepancy(computedEditDiscrepancy)
+                                    .variant
+                            "
+                            class="text-xs"
+                        >
+                            {{
+                                formatDiscrepancy(computedEditDiscrepancy).label
+                            }}
+                        </Badge>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="space-y-2">
+                        <Label for="edit_notes">Notes / Remarks</Label>
+                        <textarea
+                            id="edit_notes"
+                            v-model="editForm.notes"
+                            rows="3"
+                            class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+                            placeholder="Reason for adjustment or audit remarks..."
+                        />
+                        <p
+                            v-if="editForm.errors.notes"
+                            class="text-xs text-destructive"
+                        >
+                            {{ editForm.errors.notes }}
+                        </p>
+                    </div>
+
+                    <DialogFooter class="mt-6">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="isEditModalOpen = false"
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" :disabled="editForm.processing">
+                            Save Changes
                         </Button>
                     </DialogFooter>
                 </form>

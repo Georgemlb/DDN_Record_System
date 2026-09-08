@@ -118,6 +118,61 @@ class ReportController extends Controller
     }
 
     /**
+     * Update an existing daily cash settlement record.
+     */
+    public function update(Request $request, DailySettlement $settlement): RedirectResponse
+    {
+        $validated = $request->validate([
+            'opening_cash' => ['required', 'numeric', 'min:0'],
+            'actual_cash' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['required', 'string', 'in:'.DailySettlement::STATUS_OPEN.','.DailySettlement::STATUS_CLOSED],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'sync_metrics' => ['nullable', 'boolean'],
+        ]);
+
+        $settlement->opening_cash = (float) $validated['opening_cash'];
+        $settlement->notes = $validated['notes'] ?? null;
+        $newStatus = $validated['status'];
+
+        if ($request->boolean('sync_metrics', true)) {
+            $settlement->syncMetricsWithRecords();
+        } else {
+            $settlement->expected_cash = round((float) $settlement->opening_cash + (float) $settlement->cash_in - (float) $settlement->cash_out, 2);
+        }
+
+        if ($newStatus === DailySettlement::STATUS_CLOSED) {
+            $actualCash = $validated['actual_cash'] !== null
+                ? (float) $validated['actual_cash']
+                : (float) ($settlement->actual_cash ?? $settlement->expected_cash);
+
+            $settlement->actual_cash = $actualCash;
+            $settlement->discrepancy = round($actualCash - (float) $settlement->expected_cash, 2);
+            $settlement->status = DailySettlement::STATUS_CLOSED;
+            if (! $settlement->closed_at) {
+                $settlement->closed_at = now();
+                $settlement->closed_by_user_id = auth()->id();
+            }
+        } else {
+            $settlement->status = DailySettlement::STATUS_OPEN;
+            $settlement->closed_at = null;
+            $settlement->closed_by_user_id = null;
+            if ($validated['actual_cash'] !== null) {
+                $settlement->actual_cash = (float) $validated['actual_cash'];
+                $settlement->discrepancy = round((float) $settlement->actual_cash - (float) $settlement->expected_cash, 2);
+            }
+        }
+
+        $settlement->save();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Daily settlement for '.$settlement->settlement_date->format('M d, Y').' updated successfully.',
+        ]);
+
+        return back();
+    }
+
+    /**
      * Close the daily settlement drawer and calculate discrepancy.
      */
     public function closeDay(Request $request, DailySettlement $settlement): RedirectResponse
@@ -134,12 +189,14 @@ class ReportController extends Controller
         $settlement->status = DailySettlement::STATUS_CLOSED;
         $settlement->closed_by_user_id = auth()->id();
         $settlement->closed_at = now();
-        $settlement->notes = $validated['notes'] ?? null;
+        if (array_key_exists('notes', $validated)) {
+            $settlement->notes = $validated['notes'];
+        }
         $settlement->save();
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Daily register closed and reconciled.',
+            'message' => 'Daily register for '.$settlement->settlement_date->format('M d, Y').' closed and reconciled.',
         ]);
 
         return back();
