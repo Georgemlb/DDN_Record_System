@@ -122,10 +122,8 @@ class DailySettlement extends Model
 
         $transactions = Transaction::query()
             ->whereDate('transaction_date', $dateString)
-            ->get(['payment_method', 'amount', 'ddn_amount']);
+            ->get(['amount', 'ddn_amount']);
 
-        $cashIn = 0.0;
-        $totalGcash = 0.0;
         $totalSales = 0.0;
         $totalDdnEarnings = 0.0;
 
@@ -135,11 +133,56 @@ class DailySettlement extends Model
 
             $totalSales += $amount;
             $totalDdnEarnings += $ddn;
+        }
+
+        // Cash In and GCash In are calculated from payments collected on this date
+        $payments = TransactionPayment::query()
+            ->whereDate('payment_date', $dateString)
+            ->get(['transaction_id', 'payment_method', 'amount', 'cash_amount', 'gcash_amount']);
+
+        $cashIn = 0.0;
+        $totalGcash = 0.0;
+        $processedTransactionIds = [];
+
+        foreach ($payments as $payment) {
+            $amt = (float) $payment->amount;
+            if ($payment->transaction_id) {
+                $processedTransactionIds[] = $payment->transaction_id;
+            }
+
+            if ($payment->payment_method === Transaction::PAYMENT_METHOD_CASH) {
+                $cashIn += $amt;
+            } elseif ($payment->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
+                $totalGcash += $amt;
+            } elseif ($payment->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashIn += (float) ($payment->cash_amount ?? 0);
+                $totalGcash += (float) ($payment->gcash_amount ?? 0);
+            }
+        }
+
+        // Fallback for transactions on this date that have no payments attached
+        $fallbackTransactions = Transaction::query()
+            ->whereDate('transaction_date', $dateString)
+            ->whereNotIn('id', array_unique($processedTransactionIds))
+            ->whereDoesntHave('payments')
+            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'amount_paid', 'payment_status']);
+
+        foreach ($fallbackTransactions as $tx) {
+            $amountToCount = $tx->amount_paid !== null && (float) $tx->amount_paid > 0
+                ? (float) $tx->amount_paid
+                : ($tx->payment_status === Transaction::PAYMENT_STATUS_UNPAID ? 0.0 : (float) $tx->amount);
+
+            if ($amountToCount <= 0) {
+                continue;
+            }
 
             if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
-                $cashIn += $amount;
+                $cashIn += $amountToCount;
             } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $totalGcash += $amount;
+                $totalGcash += $amountToCount;
+            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashIn += (float) ($tx->cash_amount ?? 0);
+                $totalGcash += (float) ($tx->gcash_amount ?? 0);
             }
         }
 

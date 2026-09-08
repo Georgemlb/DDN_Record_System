@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
+    Banknote,
+    CheckCircle2,
+    Clock,
+    Eye,
     Plus,
     ReceiptText,
-    ArrowUp,
-    ArrowDown,
-    ArrowUpDown,
     RotateCcw,
     Trash2,
-    CheckCircle2,
-    Eye,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
+import CollectBalanceModal from '@/components/CollectBalanceModal.vue';
 import Pagination from '@/components/Pagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,8 +45,17 @@ import type {
 const props = defineProps<{
     transactions: {
         data: Transaction[];
-        links: any[];
+        links: Array<{
+            url: string | null;
+            label: string;
+            active: boolean;
+        }>;
+        current_page: number;
+        last_page: number;
+        from: number;
+        to: number;
         total: number;
+        per_page: number;
     };
     filters: TransactionFilters;
     summary: TransactionSummary;
@@ -64,6 +76,7 @@ defineOptions({
 const search = ref(props.filters.search ?? '');
 const type = ref(props.filters.type ?? 'all');
 const paymentMethod = ref(props.filters.payment_method ?? 'all');
+const paymentStatus = ref(props.filters.payment_status ?? 'all');
 const date = ref(props.filters.date ?? 'all');
 const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
@@ -72,6 +85,14 @@ const direction = ref(props.filters.direction ?? 'desc');
 const status = ref<'active' | 'trash'>(
     props.filters.status === 'trash' ? 'trash' : 'active',
 );
+
+const isCollectModalOpen = ref(false);
+const selectedTransaction = ref<Transaction | null>(null);
+
+const openCollectModal = (tx: Transaction) => {
+    selectedTransaction.value = tx;
+    isCollectModalOpen.value = true;
+};
 
 let timeout: ReturnType<typeof setTimeout>;
 const applyFilters = () => {
@@ -83,6 +104,7 @@ const applyFilters = () => {
                 search: search.value,
                 type: type.value,
                 payment_method: paymentMethod.value,
+                payment_status: paymentStatus.value,
                 date: date.value,
                 date_from: date.value === 'custom' ? dateFrom.value : undefined,
                 date_to: date.value === 'custom' ? dateTo.value : undefined,
@@ -96,7 +118,16 @@ const applyFilters = () => {
 };
 
 watch(
-    [search, type, paymentMethod, date, dateFrom, dateTo, status],
+    [
+        search,
+        type,
+        paymentMethod,
+        paymentStatus,
+        date,
+        dateFrom,
+        dateTo,
+        status,
+    ],
     applyFilters,
 );
 
@@ -209,7 +240,7 @@ const toggleSort = (field: string) => {
         </section>
 
         <!-- Summary Section -->
-        <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <Card>
                 <CardHeader class="pb-2">
                     <CardTitle class="text-sm font-medium text-muted-foreground"
@@ -258,13 +289,32 @@ const toggleSort = (field: string) => {
                     </div>
                 </CardContent>
             </Card>
+            <Card
+                class="border-amber-200 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/10"
+            >
+                <CardHeader class="pb-2">
+                    <CardTitle
+                        class="flex items-center justify-between text-sm font-medium text-amber-700 dark:text-amber-400"
+                    >
+                        <span>Uncollected Balance</span>
+                        <Clock class="size-4 text-amber-600" />
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div
+                        class="text-2xl font-bold text-amber-600 dark:text-amber-400"
+                    >
+                        {{ formatPhp(summary.total_balance || 0) }}
+                    </div>
+                </CardContent>
+            </Card>
         </section>
 
         <!-- Filter and Search Section -->
         <section
             class="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:p-5"
         >
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <Input
                     v-model="search"
                     placeholder="Search customer, ref #, or details..."
@@ -297,6 +347,27 @@ const toggleSort = (field: string) => {
                         <SelectItem value="all">All Payment Methods</SelectItem>
                         <SelectItem value="cash">Cash</SelectItem>
                         <SelectItem value="gcash">GCash</SelectItem>
+                        <SelectItem value="split"
+                            >Split (Cash & GCash)</SelectItem
+                        >
+                    </SelectContent>
+                </Select>
+
+                <Select v-model="paymentStatus">
+                    <SelectTrigger class="w-full">
+                        <SelectValue placeholder="All payment statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all"
+                            >All Payment Statuses</SelectItem
+                        >
+                        <SelectItem value="paid">Fully Paid</SelectItem>
+                        <SelectItem value="partial"
+                            >Downpayment / Partial</SelectItem
+                        >
+                        <SelectItem value="unpaid"
+                            >Unpaid (On Pickup)</SelectItem
+                        >
                     </SelectContent>
                 </Select>
 
@@ -485,8 +556,18 @@ const toggleSort = (field: string) => {
                                         {{ transaction.customer_name }}
                                     </Link>
                                     <span
+                                        v-if="
+                                            transaction.customer?.contact_number
+                                        "
+                                        class="block text-[11px] font-normal text-muted-foreground"
+                                    >
+                                        {{
+                                            transaction.customer.contact_number
+                                        }}
+                                    </span>
+                                    <span
                                         v-if="transaction.user"
-                                        class="block text-xs font-normal text-muted-foreground"
+                                        class="block text-[11px] font-normal text-muted-foreground"
                                     >
                                         by {{ transaction.user.name }}
                                     </span>
@@ -505,16 +586,58 @@ const toggleSort = (field: string) => {
                                 {{ getTransactionServiceDetail(transaction) }}
                             </td>
                             <td class="px-5 py-4 whitespace-nowrap">
-                                <Badge
-                                    variant="outline"
-                                    class="text-xs uppercase"
-                                >
-                                    {{
-                                        formatPaymentMethod(
-                                            transaction.payment_method,
-                                        )
-                                    }}
-                                </Badge>
+                                <div class="flex flex-col gap-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <Badge
+                                            variant="outline"
+                                            class="text-xs uppercase"
+                                        >
+                                            {{
+                                                formatPaymentMethod(
+                                                    transaction.payment_method,
+                                                )
+                                            }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="
+                                                transaction.payment_status ===
+                                                    'paid' ||
+                                                Number(transaction.balance) <= 0
+                                            "
+                                            class="border-emerald-200 bg-emerald-50 text-[11px] font-normal text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                        >
+                                            Paid
+                                        </Badge>
+                                        <Badge
+                                            v-else-if="
+                                                transaction.payment_status ===
+                                                'partial'
+                                            "
+                                            class="border-amber-200 bg-amber-50 text-[11px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                                        >
+                                            Bal:
+                                            {{ formatPhp(transaction.balance) }}
+                                        </Badge>
+                                        <Badge
+                                            v-else
+                                            class="border-rose-200 bg-rose-50 text-[11px] font-medium text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+                                        >
+                                            Unpaid:
+                                            {{ formatPhp(transaction.balance) }}
+                                        </Badge>
+                                    </div>
+                                    <span
+                                        v-if="
+                                            Number(transaction.balance) > 0 &&
+                                            Number(transaction.amount_paid) > 0
+                                        "
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        Paid
+                                        {{ formatPhp(transaction.amount_paid) }}
+                                        of {{ formatPhp(transaction.amount) }}
+                                    </span>
+                                </div>
                             </td>
                             <td
                                 class="px-5 py-4 text-right font-medium whitespace-nowrap"
@@ -569,8 +692,19 @@ const toggleSort = (field: string) => {
                                 </div>
                                 <div
                                     v-else
-                                    class="flex items-center justify-end"
+                                    class="flex items-center justify-end gap-1.5"
                                 >
+                                    <Button
+                                        v-if="Number(transaction.balance) > 0"
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1 border-emerald-300 text-xs text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                        @click="openCollectModal(transaction)"
+                                    >
+                                        <Banknote class="size-3.5" />
+                                        <span>Collect</span>
+                                    </Button>
+
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -615,6 +749,7 @@ const toggleSort = (field: string) => {
                                 search = '';
                                 type = 'all';
                                 paymentMethod = 'all';
+                                paymentStatus = 'all';
                                 date = 'all';
                                 applyFilters();
                             }
@@ -630,5 +765,10 @@ const toggleSort = (field: string) => {
                 </div>
             </div>
         </section>
+
+        <CollectBalanceModal
+            v-model:open="isCollectModalOpen"
+            :transaction="selectedTransaction"
+        />
     </main>
 </template>

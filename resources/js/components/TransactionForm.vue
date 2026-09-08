@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Link } from '@inertiajs/vue3';
-import { Calculator, Info } from '@lucide/vue';
+import { AlertCircle, Calculator, CheckCircle, Clock, Info } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -18,10 +18,12 @@ import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
     BaggageOption,
+    Customer,
     DdnSplitConfig,
     FlightType,
     OnlineAssistanceType,
     PaymentMethod,
+    PaymentStatus,
     PsaDocumentType,
     Transaction,
     TransactionType,
@@ -39,6 +41,8 @@ const props = withDefaults(
         psaDocumentTypes?: PsaDocumentType[];
         ddnSplitConfig?: DdnSplitConfig;
         portalBalance?: number;
+        recurringCustomers?: Customer[];
+        initialCustomers?: Customer[];
     }>(),
     {
         baggageOptions: () => [],
@@ -46,6 +50,8 @@ const props = withDefaults(
         airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
         ddnSplitConfig: () => ({ ddn: 0.6, employee: 0.4 }),
+        recurringCustomers: () => [],
+        initialCustomers: () => [],
     },
 );
 
@@ -53,10 +59,23 @@ const formType = ref<TransactionType>(props.transaction?.type ?? 'airline');
 const paymentMethod = ref<PaymentMethod>(
     props.transaction?.payment_method ?? 'cash',
 );
+const paymentStatus = ref<PaymentStatus>(
+    props.transaction?.payment_status ?? 'paid',
+);
 const transactionDate = ref<string>(
     props.transaction?.transaction_date ?? getTodayDateString(),
 );
+const customerId = ref<number | null>(props.transaction?.customer_id ?? null);
 const customerName = ref<string>(props.transaction?.customer_name ?? '');
+const customerContact = ref<string>(
+    props.transaction?.customer?.contact_number ?? '',
+);
+const amountPaid = ref<number | string>(
+    props.transaction?.amount_paid !== undefined &&
+        props.transaction?.amount_paid !== null
+        ? props.transaction.amount_paid
+        : '',
+);
 const pax = ref<number | string>(props.transaction?.pax ?? 1);
 const provider = ref<string>(props.transaction?.provider ?? '');
 const flightType = ref<FlightType | ''>(
@@ -115,22 +134,51 @@ watch(
     },
 );
 
+// Computed Remaining Balance
+const computedRemainingBalance = computed(() => {
+    const total = Number(amount.value) || 0;
+
+    if (paymentStatus.value === 'paid') {
+        return 0;
+    }
+
+    if (paymentStatus.value === 'unpaid') {
+        return total;
+    }
+
+    const paid = Number(amountPaid.value) || 0;
+
+    return Math.max(0, Math.round((total - paid) * 100) / 100);
+});
+
+const getPayableToday = () => {
+    if (paymentStatus.value === 'paid') {
+        return Number(amount.value) || 0;
+    }
+
+    if (paymentStatus.value === 'partial') {
+        return Number(amountPaid.value) || 0;
+    }
+
+    return 0;
+};
+
 // Split payment logic
 const handleCashChange = () => {
-    const total = Number(amount.value) || 0;
+    const total = getPayableToday();
     const cash = Number(cashAmount.value) || 0;
 
     if (total > 0 && cash <= total) {
-        gcashAmount.value = total - cash;
+        gcashAmount.value = Math.max(0, Math.round((total - cash) * 100) / 100);
     }
 };
 
 const handleGcashChange = () => {
-    const total = Number(amount.value) || 0;
+    const total = getPayableToday();
     const gcash = Number(gcashAmount.value) || 0;
 
     if (total > 0 && gcash <= total) {
-        cashAmount.value = total - gcash;
+        cashAmount.value = Math.max(0, Math.round((total - gcash) * 100) / 100);
     }
 };
 
@@ -209,6 +257,25 @@ const computedOnlineEmployeeShare = computed(() => {
     return numAmount.value * empRate;
 });
 
+function onCustomerInput() {
+    const list =
+        props.recurringCustomers && props.recurringCustomers.length
+            ? props.recurringCustomers
+            : (props.initialCustomers ?? []);
+    const trimmed = customerName.value.trim().toLowerCase();
+    const match = list.find((c) => c.name.toLowerCase() === trimmed);
+
+    if (match) {
+        customerId.value = match.id;
+
+        if (!customerContact.value && match.contact_number) {
+            customerContact.value = match.contact_number;
+        }
+    } else {
+        customerId.value = null;
+    }
+}
+
 const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
     BC: 'BC — Birth Certificate',
     MC: 'MC — Marriage Certificate',
@@ -227,6 +294,24 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
         <!-- Hidden inputs for custom select values and calculated fields -->
         <input type="hidden" name="type" :value="formType" />
         <input type="hidden" name="payment_method" :value="paymentMethod" />
+        <input
+            v-if="customerId"
+            type="hidden"
+            name="customer_id"
+            :value="customerId"
+        />
+        <input type="hidden" name="payment_status" :value="paymentStatus" />
+        <input
+            type="hidden"
+            name="amount_paid"
+            :value="
+                paymentStatus === 'paid'
+                    ? amount || 0
+                    : paymentStatus === 'unpaid'
+                      ? 0
+                      : amountPaid || 0
+            "
+        />
         <input
             v-if="formType === 'airline'"
             type="hidden"
@@ -254,7 +339,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
         <div class="grid gap-6 md:grid-cols-2">
             <!-- 1. Transaction Type Selector -->
-            <div class="grid gap-2 md:col-span-2">
+            <div class="grid gap-2">
                 <Label for="type-select">Transaction / Service Type</Label>
                 <Select v-model="formType">
                     <SelectTrigger id="type-select" class="w-full">
@@ -290,19 +375,148 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 <InputError :message="errors.transaction_date" />
             </div>
 
-            <!-- 3. Customer / Person -->
+            <!-- 3. Customer / Person with Native Recurring Datalist Autocomplete -->
             <div class="grid gap-2">
                 <Label for="customer_name">Customer / Person</Label>
                 <Input
                     id="customer_name"
                     name="customer_name"
                     v-model="customerName"
+                    list="recurring-customers-list"
                     required
-                    autocomplete="name"
-                    placeholder="e.g. Person 1"
+                    placeholder="e.g. Juan Dela Cruz"
+                    autocomplete="off"
+                    @input="onCustomerInput"
+                    @change="onCustomerInput"
                 />
+                <datalist id="recurring-customers-list">
+                    <option
+                        v-for="c in recurringCustomers &&
+                        recurringCustomers.length
+                            ? recurringCustomers
+                            : initialCustomers"
+                        :key="c.id"
+                        :value="c.name"
+                    >
+                        {{
+                            c.contact_number
+                                ? `${c.name} (${c.contact_number})`
+                                : c.name
+                        }}
+                    </option>
+                </datalist>
                 <InputError :message="errors.customer_name" />
             </div>
+
+            <!-- 4. Contact Number (Autofilled for recurring customer or entered manually) -->
+            <div class="grid gap-2">
+                <Label
+                    for="customer_contact"
+                    class="flex items-center justify-between"
+                >
+                    <span>Contact Number</span>
+                    <span class="text-xs font-normal text-muted-foreground"
+                        >Optional</span
+                    >
+                </Label>
+                <Input
+                    id="customer_contact"
+                    name="customer_contact"
+                    v-model="customerContact"
+                    placeholder="e.g. 0917 123 4567"
+                    autocomplete="tel"
+                />
+                <InputError :message="errors.customer_contact" />
+            </div>
+
+            <!-- 4. Payment Status (Paid / Downpayment / Unpaid) -->
+            <div class="grid gap-2 md:col-span-2">
+                <Label>Payment Status</Label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button
+                        type="button"
+                        @click="paymentStatus = 'paid'"
+                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                        :class="
+                            paymentStatus === 'paid'
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : 'border-input text-muted-foreground hover:bg-muted'
+                        "
+                    >
+                        <CheckCircle class="size-3.5" />
+                        <span>Fully Paid</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="paymentStatus = 'partial'"
+                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                        :class="
+                            paymentStatus === 'partial'
+                                ? 'border-amber-600 bg-amber-50 text-amber-700 ring-1 ring-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'border-input text-muted-foreground hover:bg-muted'
+                        "
+                    >
+                        <Clock class="size-3.5" />
+                        <span>Downpayment / Partial</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="paymentStatus = 'unpaid'"
+                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                        :class="
+                            paymentStatus === 'unpaid'
+                                ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                                : 'border-input text-muted-foreground hover:bg-muted'
+                        "
+                    >
+                        <AlertCircle class="size-3.5" />
+                        <span>Unpaid (On Pickup)</span>
+                    </button>
+                </div>
+                <InputError :message="errors.payment_status" />
+            </div>
+
+            <!-- Downpayment Amount & Remaining Balance (if Partial) -->
+            <template v-if="paymentStatus === 'partial'">
+                <div class="grid gap-2">
+                    <Label for="amount_paid"
+                        >Downpayment Paid Today (PHP)</Label
+                    >
+                    <Input
+                        id="amount_paid"
+                        type="number"
+                        min="0.01"
+                        :max="amount ? Number(amount) : undefined"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="amountPaid"
+                        required
+                        placeholder="0.00"
+                    />
+                    <InputError :message="errors.amount_paid" />
+                </div>
+
+                <div
+                    class="rounded-lg border bg-amber-50/50 p-3 text-xs dark:bg-amber-950/20"
+                >
+                    <span
+                        class="font-medium text-amber-800 dark:text-amber-300"
+                    >
+                        Remaining Balance Due on Pickup:
+                    </span>
+                    <p
+                        class="mt-1 text-lg font-bold text-amber-600 dark:text-amber-400"
+                    >
+                        {{ formatPhp(computedRemainingBalance) }}
+                    </p>
+                    <p class="text-[11px] text-muted-foreground">
+                        Staff can collect this balance later via the "Collect
+                        Balance" action.
+                    </p>
+                </div>
+            </template>
 
             <!-- 4. Payment Method -->
             <div class="grid gap-2 md:col-span-2">

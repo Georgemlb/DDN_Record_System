@@ -3,9 +3,40 @@ export type TransactionType =
 
 export type PaymentMethod = 'cash' | 'gcash' | 'split';
 
+export type PaymentStatus = 'paid' | 'partial' | 'unpaid';
+
 export type FlightType = 'local' | 'international';
 
 export type PsaDocumentType = 'BC' | 'MC' | 'DC' | 'Cenomar';
+
+export type Customer = {
+    id: number;
+    name: string;
+    contact_number?: string | null;
+    email?: string | null;
+    notes?: string | null;
+    transactions_count?: number;
+    total_spent?: number | string | null;
+    outstanding_balance?: number | string | null;
+    created_at?: string;
+};
+
+export type TransactionPayment = {
+    id: number;
+    transaction_id: number;
+    user_id?: number | null;
+    amount: string | number;
+    payment_method: PaymentMethod;
+    cash_amount?: string | number | null;
+    gcash_amount?: string | number | null;
+    payment_date: string;
+    notes?: string | null;
+    created_at?: string;
+    user?: {
+        id: number;
+        name: string;
+    } | null;
+};
 
 export type BaggageOption = {
     id: number;
@@ -40,9 +71,12 @@ export type DdnSplitConfig = {
 export type Transaction = {
     id: number;
     user_id?: number | null;
+    customer_id?: number | null;
+    customer?: Customer | null;
     reference_number?: string | null;
     type: TransactionType;
     payment_method: PaymentMethod;
+    payment_status: PaymentStatus;
     transaction_date: string;
     customer_name: string;
     pax: number | null;
@@ -55,6 +89,8 @@ export type Transaction = {
     online_assistance_type_id: number | null;
     online_assistance_type?: OnlineAssistanceType | null;
     amount: string | number;
+    amount_paid: string | number;
+    balance: string | number;
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
     third_party_payment: string | number | null;
@@ -69,12 +105,14 @@ export type Transaction = {
         name: string;
         email: string;
     } | null;
+    payments?: TransactionPayment[];
 };
 
 export type TransactionFilters = {
     search?: string;
     type?: string;
     payment_method?: string;
+    payment_status?: string;
     date?: string;
     date_from?: string;
     date_to?: string;
@@ -88,9 +126,11 @@ export type TransactionSummary = {
     total_ddn: number;
     total_cash: number;
     total_gcash: number;
+    total_balance?: number;
 };
 
 export type TransactionCounts = {
     active: number;
     trash: number;
+    unpaid_or_partial?: number;
 };

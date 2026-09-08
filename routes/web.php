@@ -18,6 +18,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('transactions/{transaction}/restore', [TransactionController::class, 'restore'])->name('transactions.restore')->withTrashed();
     Route::delete('transactions/{transaction}/force-delete', [TransactionController::class, 'forceDelete'])->name('transactions.forceDelete')->withTrashed();
+    Route::post('transactions/{transaction}/payments', [TransactionController::class, 'storePayment'])->name('transactions.payments.store');
     Route::resource('transactions', TransactionController::class);
 
     Route::post('expenses/{expense}/restore', [ExpenseController::class, 'restore'])->name('expenses.restore')->withTrashed();
