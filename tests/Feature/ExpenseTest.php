@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\User;
@@ -311,4 +312,126 @@ test('soft-deleted expenses can be viewed in trash and restored', function () {
         ->assertRedirect();
 
     expect($expense->fresh()->trashed())->toBeFalse();
+});
+
+test('can record a personal expense to be reimbursed', function () {
+    $user = User::factory()->create();
+    $cat = ExpenseCategory::query()->first();
+
+    $response = $this->actingAs($user)->post(route('expenses.store'), expenseData([
+        'title' => 'Shopee Gel Personal Item',
+        'amount' => '750.00',
+        'payment_method' => Expense::PAYMENT_METHOD_GCASH,
+        'payee' => 'Gel',
+        'is_personal' => true,
+    ]));
+
+    $expense = Expense::query()->latest('id')->first();
+    $response->assertRedirect(route('expenses.show', $expense));
+
+    expect($expense->is_personal)->toBeTrue()
+        ->and($expense->reimbursement_status)->toBe(Expense::REIMBURSEMENT_STATUS_PENDING)
+        ->and($expense->reimbursed_at)->toBeNull();
+});
+
+test('can reimburse a pending personal expense and update daily settlement metrics', function () {
+    $user = User::factory()->create(['role' => 'admin']);
+    $cat = ExpenseCategory::query()->first();
+
+    $expenseDate = now()->subDays(2)->toDateString();
+    $reimbursementDate = now()->toDateString();
+
+    // Create personal expense disbursed 2 days ago via GCash
+    $expense = Expense::query()->create(expenseData([
+        'title' => 'Shopee Gel Order',
+        'amount' => '500.00',
+        'expense_date' => $expenseDate,
+        'payment_method' => Expense::PAYMENT_METHOD_GCASH,
+        'payee' => 'Gel',
+        'is_personal' => true,
+        'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_PENDING,
+    ]));
+
+    // Reimbursed today with Cash
+    $this->actingAs($user)
+        ->post(route('expenses.reimburse', $expense), [
+            'reimbursement_method' => Expense::PAYMENT_METHOD_CASH,
+            'reimbursed_at' => $reimbursementDate,
+            'reimbursement_notes' => 'Repaid in cash by Gel to drawer',
+        ])
+        ->assertRedirect();
+
+    $expense->refresh();
+    expect($expense->reimbursement_status)->toBe(Expense::REIMBURSEMENT_STATUS_REIMBURSED)
+        ->and($expense->reimbursed_at->toDateString())->toBe($reimbursementDate)
+        ->and($expense->reimbursement_method)->toBe(Expense::PAYMENT_METHOD_CASH)
+        ->and($expense->reimbursement_notes)->toBe('Repaid in cash by Gel to drawer');
+
+    // Check DailySettlement calculateMetricsForDate for reimbursementDate
+    $metrics = DailySettlement::calculateMetricsForDate($reimbursementDate);
+    // Cash in must include the 500 cash repayment
+    expect($metrics['cash_in'])->toBe(500.0)
+        // And sales/earnings must NOT be inflated
+        ->and($metrics['total_sales'])->toBe(0.0)
+        ->and($metrics['total_ddn_earnings'])->toBe(0.0);
+});
+
+test('expense index filters by personal pending and reimbursed tabs', function () {
+    $user = User::factory()->create();
+    $cat = ExpenseCategory::query()->first();
+
+    // 1 regular business expense
+    Expense::query()->create(expenseData([
+        'title' => 'Bond Paper',
+        'is_personal' => false,
+    ]));
+
+    // 1 pending personal expense
+    Expense::query()->create(expenseData([
+        'title' => 'Shopee Gel Pending',
+        'is_personal' => true,
+        'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_PENDING,
+    ]));
+
+    // 1 reimbursed personal expense
+    Expense::query()->create(expenseData([
+        'title' => 'Shopee Gel Repaid',
+        'is_personal' => true,
+        'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_REIMBURSED,
+        'reimbursed_at' => now()->toDateString(),
+        'reimbursement_method' => Expense::PAYMENT_METHOD_CASH,
+    ]));
+
+    // Filter personal_pending
+    $this->actingAs($user)
+        ->get(route('expenses.index', ['status' => 'personal_pending']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('expenses/Index')
+            ->has('expenses.data', 1)
+            ->where('expenses.data.0.title', 'Shopee Gel Pending')
+            ->where('counts.personal_pending', 1)
+            ->where('counts.personal_reimbursed', 1)
+            ->where('counts.business', 1)
+        );
+
+    // Filter personal_reimbursed
+    $this->actingAs($user)
+        ->get(route('expenses.index', ['status' => 'personal_reimbursed']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('expenses/Index')
+            ->has('expenses.data', 1)
+            ->where('expenses.data.0.title', 'Shopee Gel Repaid')
+        );
+
+    // Filter business
+    $this->actingAs($user)
+        ->get(route('expenses.index', ['status' => 'business']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('expenses/Index')
+            ->has('expenses.data', 1)
+            ->where('expenses.data.0.title', 'Bond Paper')
+        );
 });

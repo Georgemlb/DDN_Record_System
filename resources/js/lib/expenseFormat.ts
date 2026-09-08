@@ -1,6 +1,6 @@
 import type { ExpensePaymentMethod, RecurringFrequency } from '@/types/expense';
 
-export const formatExpenseDate = (date: string): string => {
+export const formatExpenseDate = (date?: string | null): string => {
     if (!date) {
         return '—';
     }

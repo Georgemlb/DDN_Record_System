@@ -6,6 +6,7 @@ import {
     ArrowUpRight,
     Banknote,
     BanknoteArrowUp,
+    HandCoins,
     Plus,
     Receipt,
     ReceiptText,
@@ -92,6 +93,7 @@ const props = defineProps<{
     expensesByCategory?: { category: string; total: number }[];
     recentTransactions: Transaction[];
     recentExpenses: Expense[];
+    pendingReimbursements?: { count: number; total: number };
 }>();
 
 defineOptions({
@@ -259,6 +261,52 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
     <Head title="Dashboard" />
 
     <main class="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+        <!-- Pending Personal Reimbursements Alert Banner -->
+        <section
+            v-if="
+                props.pendingReimbursements &&
+                props.pendingReimbursements.count > 0
+            "
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50/80 p-3.5 text-sm dark:border-amber-800/60 dark:bg-amber-950/30"
+        >
+            <div class="flex items-center gap-2.5">
+                <span
+                    class="flex size-7 items-center justify-center rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                >
+                    <HandCoins class="size-4" />
+                </span>
+                <div>
+                    <span
+                        class="font-medium text-amber-900 dark:text-amber-200"
+                    >
+                        {{ props.pendingReimbursements.count }} Personal
+                        Expense(s) Awaiting Reimbursement:
+                    </span>
+                    <span
+                        class="ml-1 font-bold text-amber-800 dark:text-amber-100"
+                    >
+                        {{ formatPhp(props.pendingReimbursements.total) }}
+                    </span>
+                    <span
+                        class="ml-1.5 text-xs text-amber-700/80 dark:text-amber-300/80"
+                    >
+                        (Repayments return directly to cash drawer / GCash
+                        without duplicating sales revenue)
+                    </span>
+                </div>
+            </div>
+            <Button
+                size="sm"
+                variant="outline"
+                as-child
+                class="h-7 border-amber-400 bg-white text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/70"
+            >
+                <Link href="/expenses?status=personal_pending">
+                    View Pending Items
+                </Link>
+            </Button>
+        </section>
+
         <!-- ======================================================== -->
         <!-- STAFF VIEW: Counter Register & Operational Overview     -->
         <!-- ======================================================== -->

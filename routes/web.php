@@ -32,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('expenses/{expense}/restore', [ExpenseController::class, 'restore'])->name('expenses.restore')->withTrashed();
     Route::delete('expenses/{expense}/force-delete', [ExpenseController::class, 'forceDelete'])->name('expenses.forceDelete')->withTrashed();
+    Route::post('expenses/{expense}/reimburse', [ExpenseController::class, 'reimburse'])->name('expenses.reimburse');
     Route::resource('expenses', ExpenseController::class);
     Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
 

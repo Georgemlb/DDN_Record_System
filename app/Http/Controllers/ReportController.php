@@ -239,12 +239,20 @@ class ReportController extends Controller
         $expenses = Expense::query()
             ->whereDate('expense_date', $date)
             ->with('category:id,name')
-            ->get(['id', 'title', 'expense_category_id', 'payment_method', 'amount']);
+            ->get(['id', 'title', 'expense_category_id', 'payment_method', 'amount', 'is_personal', 'reimbursement_status']);
+
+        $reimbursements = Expense::query()
+            ->where('is_personal', true)
+            ->where('reimbursement_status', Expense::REIMBURSEMENT_STATUS_REIMBURSED)
+            ->whereDate('reimbursed_at', $date)
+            ->with('category:id,name')
+            ->get(['id', 'title', 'expense_category_id', 'amount', 'reimbursement_method', 'reimbursed_at', 'payee']);
 
         return [
             'settlement' => $settlement,
             'transactions' => $transactions,
             'expenses' => $expenses,
+            'reimbursements' => $reimbursements,
         ];
     }
 

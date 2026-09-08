@@ -322,6 +322,14 @@ interface SlipData {
         amount: number | string;
         category?: { id: number; name: string } | null;
     }>;
+    reimbursements?: Array<{
+        id: number;
+        title: string;
+        amount: number | string;
+        reimbursement_method: string;
+        reimbursed_at?: string | null;
+        payee?: string | null;
+    }>;
 }
 
 const isSlipModalOpen = ref(false);
@@ -2172,6 +2180,35 @@ const calculateExpenseSharePct = (amount: number): string => {
                                         ).label
                                     }}
                                 </Badge>
+                            </div>
+                        </div>
+
+                        <!-- Personal Reimbursements Breakdown (if any) -->
+                        <div
+                            v-if="
+                                slipData.reimbursements &&
+                                slipData.reimbursements.length
+                            "
+                            class="space-y-1.5 border-t pt-2 text-xs"
+                        >
+                            <p
+                                class="text-[11px] font-semibold tracking-wider text-amber-700 uppercase dark:text-amber-400"
+                            >
+                                Personal Reimbursements Collected
+                            </p>
+                            <div
+                                v-for="r in slipData.reimbursements"
+                                :key="r.id"
+                                class="flex justify-between text-[11px]"
+                            >
+                                <span class="text-muted-foreground">
+                                    {{ r.title }} ({{ r.reimbursement_method }})
+                                </span>
+                                <span
+                                    class="font-mono font-medium text-foreground"
+                                >
+                                    {{ formatPhp(r.amount) }}
+                                </span>
                             </div>
                         </div>
 

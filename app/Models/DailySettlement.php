@@ -208,6 +208,24 @@ class DailySettlement extends Model
             }
         }
 
+        // Personal expense reimbursements received on this date
+        $reimbursements = Expense::query()
+            ->where('is_personal', true)
+            ->where('reimbursement_status', Expense::REIMBURSEMENT_STATUS_REIMBURSED)
+            ->whereDate('reimbursed_at', $dateString)
+            ->get(['amount', 'reimbursement_method']);
+
+        foreach ($reimbursements as $reimb) {
+            $amount = (float) $reimb->amount;
+            if ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_CASH) {
+                $cashIn += $amount;
+            } elseif ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_GCASH) {
+                $totalGcash += $amount;
+            } elseif ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_BANK_TRANSFER) {
+                $totalBankTransfer += $amount;
+            }
+        }
+
         return [
             'cash_in' => round($cashIn, 2),
             'total_gcash' => round($totalGcash, 2),
