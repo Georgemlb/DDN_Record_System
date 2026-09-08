@@ -22,18 +22,56 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
+ * @property string $role
+ * @property string|null $username
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'role', 'username'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    public const ROLE_TECH_ADMIN = 'tech_admin';
+
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_STAFF = 'staff';
+
+    public const ROLES = [
+        self::ROLE_TECH_ADMIN,
+        self::ROLE_ADMIN,
+        self::ROLE_STAFF,
+    ];
+
+    /**
+     * Determine if the user is a tech administrator (super-admin).
+     */
+    public function isTechAdmin(): bool
+    {
+        return $this->role === self::ROLE_TECH_ADMIN;
+    }
+
+    /**
+     * Determine if the user has administrative privileges (admin or tech_admin).
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, [self::ROLE_TECH_ADMIN, self::ROLE_ADMIN], true);
+    }
+
+    /**
+     * Determine if the user is a staff member.
+     */
+    public function isStaff(): bool
+    {
+        return $this->role === self::ROLE_STAFF;
+    }
 
     /**
      * Get the attributes that should be cast.

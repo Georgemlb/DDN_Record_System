@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\FlightPortalDeposit;
 use App\Models\Transaction;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,8 +15,12 @@ class DashboardController extends Controller
     /**
      * Display the dashboard with real-time KPIs, chart data, and recent transactions.
      */
-    public function index(): Response
+    public function index(): Response|RedirectResponse
     {
+        if (auth()->user()?->isStaff()) {
+            return to_route('transactions.index');
+        }
+
         $period = request('period', 'this_month');
         [$startDate, $endDate] = $this->resolveDateRange($period);
 

@@ -1,28 +1,24 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
-import PasskeyVerify from '@/components/PasskeyVerify.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
-import { request } from '@/routes/password';
 
 defineOptions({
     layout: {
         title: 'Log in to your account',
-        description: 'Enter your email and password below to log in',
+        description: 'Enter your username and password below to log in',
     },
 });
 
 defineProps<{
     status?: string;
-    canResetPassword: boolean;
+    canResetPassword?: boolean;
 }>();
 </script>
 
@@ -36,8 +32,6 @@ defineProps<{
         {{ status }}
     </div>
 
-    <PasskeyVerify />
-
     <Form
         v-bind="store.form()"
         :reset-on-success="['password']"
@@ -46,32 +40,22 @@ defineProps<{
     >
         <div class="grid gap-6">
             <div class="grid gap-2">
-                <Label for="email">Email address</Label>
+                <Label for="username">Username</Label>
                 <Input
-                    id="email"
-                    type="email"
-                    name="email"
+                    id="username"
+                    type="text"
+                    name="username"
                     required
                     autofocus
                     :tabindex="1"
-                    autocomplete="email"
-                    placeholder="email@example.com"
+                    autocomplete="username"
+                    placeholder="Enter your username"
                 />
-                <InputError :message="errors.email" />
+                <InputError :message="errors.username ?? errors.email" />
             </div>
 
             <div class="grid gap-2">
-                <div class="flex items-center justify-between">
-                    <Label for="password">Password</Label>
-                    <TextLink
-                        v-if="canResetPassword"
-                        :href="request()"
-                        class="text-sm"
-                        :tabindex="5"
-                    >
-                        Forgot your password?
-                    </TextLink>
-                </div>
+                <Label for="password">Password</Label>
                 <PasswordInput
                     id="password"
                     name="password"
@@ -100,11 +84,6 @@ defineProps<{
                 <Spinner v-if="processing" />
                 Log in
             </Button>
-        </div>
-
-        <div class="text-center text-sm text-muted-foreground">
-            Don't have an account?
-            <TextLink :href="register()" :tabindex="5">Sign up</TextLink>
         </div>
     </Form>
 </template>

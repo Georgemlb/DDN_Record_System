@@ -1,7 +1,11 @@
+export type UserRole = 'tech_admin' | 'admin' | 'staff';
+
 export type User = {
     id: number;
     name: string;
-    email: string;
+    username?: string | null;
+    email: string | null;
+    role: UserRole;
     avatar?: string;
     email_verified_at: string | null;
     two_factor_enabled?: boolean;
