@@ -29,10 +29,18 @@ class TransactionRequest extends FormRequest
             'type' => ['required', 'string', Rule::in(Transaction::TYPES)],
             'payment_method' => ['required', 'string', Rule::in(Transaction::PAYMENT_METHODS)],
             'transaction_date' => ['required', 'date'],
+            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_name' => ['required', 'string', 'max:255'],
+            'customer_contact' => ['nullable', 'string', 'max:50'],
+            'payment_status' => ['nullable', 'string', Rule::in(Transaction::PAYMENT_STATUSES)],
             'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+            'amount_paid' => ['nullable', 'numeric', 'min:0', 'lte:amount'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
+
+        if ($this->input('payment_status') === Transaction::PAYMENT_STATUS_PARTIAL) {
+            $rules['amount_paid'] = ['required', 'numeric', 'gt:0', 'lt:amount'];
+        }
 
         if ($this->input('payment_method') === Transaction::PAYMENT_METHOD_SPLIT) {
             $rules['cash_amount'] = ['required', 'numeric', 'decimal:0,2', 'min:0'];

@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Requests\TransactionRequest;
 use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
+use App\Models\Customer;
 use App\Models\FlightPortalDeposit;
 use App\Models\OnlineAssistanceType;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +22,7 @@ class TransactionController extends Controller
      */
     public function index(): Response
     {
-        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType', 'user']);
+        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType', 'user', 'customer']);
 
         // Status / Trash filtering
         $status = request('status', 'active');
@@ -33,7 +36,11 @@ class TransactionController extends Controller
                 $q->where('customer_name', 'like', "%{$search}%")
                     ->orWhere('reference_number', 'like', "%{$search}%")
                     ->orWhere('service_details', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%");
+                    ->orWhere('notes', 'like', "%{$search}%")
+                    ->orWhereHas('customer', function ($cq) use ($search) {
+                        $cq->where('name', 'like', "%{$search}%")
+                            ->orWhere('contact_number', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -46,6 +53,12 @@ class TransactionController extends Controller
         if ($paymentMethod = request('payment_method')) {
             if ($paymentMethod !== 'all') {
                 $query->where('payment_method', $paymentMethod);
+            }
+        }
+
+        if ($paymentStatus = request('payment_status')) {
+            if ($paymentStatus !== 'all') {
+                $query->where('payment_status', $paymentStatus);
             }
         }
 
@@ -72,6 +85,7 @@ class TransactionController extends Controller
         $summaryQuery = clone $query;
         $totalPayments = (float) $summaryQuery->sum('amount');
         $totalDdn = (float) $summaryQuery->sum('ddn_amount');
+        $totalBalance = (float) $summaryQuery->sum('balance');
 
         $totalCashFromCash = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount');
         $totalCashFromSplit = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('cash_amount');
@@ -86,13 +100,14 @@ class TransactionController extends Controller
             'total_ddn' => $totalDdn,
             'total_cash' => $totalCash,
             'total_gcash' => $totalGcash,
+            'total_balance' => $totalBalance,
         ];
 
         // Sorting
         $sort = request('sort', 'transaction_date');
         $direction = request('direction', 'desc');
 
-        $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name', 'reference_number'];
+        $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name', 'reference_number', 'balance'];
         if (in_array($sort, $allowedSorts)) {
             $query->orderBy($sort, $direction);
         }
@@ -106,11 +121,12 @@ class TransactionController extends Controller
 
         return Inertia::render('transactions/Index', [
             'transactions' => $transactions,
-            'filters' => request()->only(['search', 'type', 'payment_method', 'date', 'date_from', 'date_to', 'sort', 'direction', 'status']),
+            'filters' => request()->only(['search', 'type', 'payment_method', 'payment_status', 'date', 'date_from', 'date_to', 'sort', 'direction', 'status']),
             'summary' => $summary,
             'counts' => [
                 'active' => Transaction::count(),
                 'trash' => Transaction::onlyTrashed()->count(),
+                'unpaid_or_partial' => Transaction::whereIn('payment_status', [Transaction::PAYMENT_STATUS_PARTIAL, Transaction::PAYMENT_STATUS_UNPAID])->count(),
             ],
         ]);
     }
@@ -121,6 +137,8 @@ class TransactionController extends Controller
     public function create(): Response
     {
         return Inertia::render('transactions/Create', [
+            'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
+            'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
             'baggageOptions' => BaggageOption::query()->active()->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
@@ -135,12 +153,41 @@ class TransactionController extends Controller
      */
     public function store(TransactionRequest $request): RedirectResponse
     {
-        $payload = $this->prepareTransactionData($request->validated());
+        $validated = $request->validated();
+
+        // Auto-link or create Customer
+        if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
+            $customer = Customer::firstOrCreate(
+                ['name' => trim($validated['customer_name'])],
+                ['contact_number' => $request->input('customer_contact')]
+            );
+            $validated['customer_id'] = $customer->id;
+        } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
+            $customer = Customer::find($validated['customer_id']);
+            if ($customer && empty($customer->contact_number)) {
+                $customer->update(['contact_number' => $request->input('customer_contact')]);
+            }
+        }
+
+        $payload = $this->prepareTransactionData($validated);
         if (empty($payload['user_id']) && auth()->check()) {
             $payload['user_id'] = auth()->id();
         }
 
         $transaction = Transaction::query()->create($payload);
+
+        // Record initial payment if amount_paid > 0 and not already recorded
+        if ($payload['amount_paid'] > 0 && $transaction->payments()->doesntExist()) {
+            $transaction->payments()->create([
+                'user_id' => auth()->id(),
+                'amount' => $payload['amount_paid'],
+                'payment_method' => $payload['payment_method'],
+                'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                'payment_date' => $payload['transaction_date'],
+                'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
+            ]);
+        }
 
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
 
@@ -154,7 +201,7 @@ class TransactionController extends Controller
      */
     public function show(Transaction $transaction): Response
     {
-        $transaction->load(['baggageOption', 'onlineAssistanceType', 'user']);
+        $transaction->load(['baggageOption', 'onlineAssistanceType', 'user', 'customer', 'payments.user']);
 
         return Inertia::render('transactions/Show', [
             'transaction' => $transaction,
@@ -166,7 +213,7 @@ class TransactionController extends Controller
      */
     public function edit(Transaction $transaction): Response
     {
-        $transaction->load(['baggageOption', 'onlineAssistanceType']);
+        $transaction->load(['baggageOption', 'onlineAssistanceType', 'customer']);
 
         $baggageOptions = BaggageOption::query()->active()->get();
         if ($transaction->baggageOption && ! $transaction->baggageOption->is_active) {
@@ -184,6 +231,8 @@ class TransactionController extends Controller
 
         return Inertia::render('transactions/Edit', [
             'transaction' => $transaction,
+            'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
+            'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
             'baggageOptions' => $baggageOptions,
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
@@ -198,15 +247,76 @@ class TransactionController extends Controller
      */
     public function update(TransactionRequest $request, Transaction $transaction): RedirectResponse
     {
-        $payload = $this->prepareTransactionData($request->validated());
+        $validated = $request->validated();
+
+        if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
+            $customer = Customer::firstOrCreate(
+                ['name' => trim($validated['customer_name'])],
+                ['contact_number' => $request->input('customer_contact')]
+            );
+            $validated['customer_id'] = $customer->id;
+        } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
+            $customer = Customer::find($validated['customer_id']);
+            if ($customer && empty($customer->contact_number)) {
+                $customer->update(['contact_number' => $request->input('customer_contact')]);
+            }
+        }
+
+        $payload = $this->prepareTransactionData($validated);
 
         $transaction->update($payload);
+
+        $transaction->recalculateBalance();
 
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction updated.']);
 
         return to_route('transactions.show', $transaction);
+    }
+
+    /**
+     * Record a balance collection payment for a transaction.
+     */
+    public function storePayment(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'lte:'.max(0.01, (float) $transaction->balance)],
+            'payment_method' => ['required', 'string', Rule::in(Transaction::PAYMENT_METHODS)],
+            'payment_date' => ['required', 'date'],
+            'cash_amount' => ['nullable', 'numeric', 'min:0'],
+            'gcash_amount' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $amount = (float) $validated['amount'];
+
+        if ($validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT) {
+            $cash = (float) ($validated['cash_amount'] ?? 0);
+            $gcash = (float) ($validated['gcash_amount'] ?? 0);
+            if (round($cash + $gcash, 2) !== round($amount, 2)) {
+                return back()->withErrors(['amount' => 'Cash + GCash amounts must equal total payment amount.']);
+            }
+        }
+
+        $transaction->payments()->create([
+            'user_id' => auth()->id(),
+            'amount' => $amount,
+            'payment_method' => $validated['payment_method'],
+            'cash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['cash_amount'] ?? 0) : null,
+            'gcash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['gcash_amount'] ?? 0) : null,
+            'payment_date' => $validated['payment_date'],
+            'notes' => $validated['notes'] ?? 'Balance collection on pickup',
+        ]);
+
+        $transaction->recalculateBalance();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Payment of ₱'.number_format($amount, 2).' recorded.',
+        ]);
+
+        return back();
     }
 
     /**
@@ -261,14 +371,33 @@ class TransactionController extends Controller
     {
         $type = $data['type'];
         $amount = (float) $data['amount'];
+        $status = $data['payment_status'] ?? Transaction::PAYMENT_STATUS_PAID;
+
+        if ($status === Transaction::PAYMENT_STATUS_PAID) {
+            $amountPaid = $amount;
+            $balance = 0.00;
+        } elseif ($status === Transaction::PAYMENT_STATUS_UNPAID) {
+            $amountPaid = 0.00;
+            $balance = $amount;
+        } else {
+            $amountPaid = (float) ($data['amount_paid'] ?? 0);
+            $balance = max(0, round($amount - $amountPaid, 2));
+            if ($balance <= 0) {
+                $status = Transaction::PAYMENT_STATUS_PAID;
+            }
+        }
 
         // Reset type-specific fields
         $prepared = [
             'type' => $type,
+            'customer_id' => ! empty($data['customer_id']) ? (int) $data['customer_id'] : null,
             'payment_method' => $data['payment_method'],
+            'payment_status' => $status,
             'transaction_date' => $data['transaction_date'],
             'customer_name' => $data['customer_name'],
             'amount' => $amount,
+            'amount_paid' => $amountPaid,
+            'balance' => $balance,
             'cash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['cash_amount'] ?? 0) : null,
             'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
             'notes' => $data['notes'] ?? null,

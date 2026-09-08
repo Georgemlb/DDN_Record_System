@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property int $id
+ * @property int $transaction_id
+ * @property int|null $user_id
+ * @property string $amount
+ * @property string $payment_method
+ * @property string|null $cash_amount
+ * @property string|null $gcash_amount
+ * @property Carbon $payment_date
+ * @property string|null $notes
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property Transaction $transaction
+ * @property User|null $user
+ */
+#[Fillable([
+    'transaction_id',
+    'user_id',
+    'amount',
+    'payment_method',
+    'cash_amount',
+    'gcash_amount',
+    'payment_date',
+    'notes',
+])]
+class TransactionPayment extends Model
+{
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'payment_date' => 'date:Y-m-d',
+            'amount' => 'decimal:2',
+            'cash_amount' => 'decimal:2',
+            'gcash_amount' => 'decimal:2',
+        ];
+    }
+
+    /**
+     * @return BelongsTo<Transaction, $this>
+     */
+    public function transaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+}

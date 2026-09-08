@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -30,12 +32,19 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
+ * @property int|null $customer_id
+ * @property string $amount_paid
+ * @property string $balance
+ * @property string $payment_status
  * @property BaggageOption|null $baggageOption
  * @property OnlineAssistanceType|null $onlineAssistanceType
  * @property User|null $user
+ * @property Customer|null $customer
+ * @property Collection<int, TransactionPayment> $payments
  */
 #[Fillable([
     'user_id',
+    'customer_id',
     'reference_number',
     'type',
     'payment_method',
@@ -48,6 +57,9 @@ use Illuminate\Support\Carbon;
     'psa_document_type',
     'online_assistance_type_id',
     'amount',
+    'amount_paid',
+    'balance',
+    'payment_status',
     'cash_amount',
     'gcash_amount',
     'third_party_payment',
@@ -90,6 +102,18 @@ class Transaction extends Model
         self::PAYMENT_METHOD_SPLIT,
     ];
 
+    public const PAYMENT_STATUS_PAID = 'paid';
+
+    public const PAYMENT_STATUS_PARTIAL = 'partial';
+
+    public const PAYMENT_STATUS_UNPAID = 'unpaid';
+
+    public const PAYMENT_STATUSES = [
+        self::PAYMENT_STATUS_PAID,
+        self::PAYMENT_STATUS_PARTIAL,
+        self::PAYMENT_STATUS_UNPAID,
+    ];
+
     public const PSA_DOC_BC = 'BC';
 
     public const PSA_DOC_MC = 'MC';
@@ -106,19 +130,47 @@ class Transaction extends Model
     ];
 
     /**
-     * Boot model events to assign default reference numbers and user tracking.
+     * Boot model events for reference number, user tracking, and initial payments.
      */
     protected static function booted(): void
     {
         static::creating(function (Transaction $transaction) {
             if (empty($transaction->reference_number)) {
-                $transaction->reference_number = static::generateReferenceNumber(
-                    $transaction->transaction_date ? (string) $transaction->transaction_date : null
-                );
+                $transaction->reference_number = static::generateReferenceNumber($transaction->transaction_date ? $transaction->transaction_date->format('Y-m-d') : null);
             }
 
             if (empty($transaction->user_id) && auth()->check()) {
                 $transaction->user_id = auth()->id();
+            }
+
+            if (empty($transaction->payment_status)) {
+                $transaction->payment_status = static::PAYMENT_STATUS_PAID;
+            }
+
+            if ($transaction->amount_paid === null) {
+                if ($transaction->payment_status === static::PAYMENT_STATUS_PAID) {
+                    $transaction->amount_paid = $transaction->amount;
+                    $transaction->balance = 0.00;
+                } else {
+                    $transaction->amount_paid = 0.00;
+                    $transaction->balance = $transaction->amount;
+                }
+            } elseif ($transaction->balance === null) {
+                $transaction->balance = max(0, round((float) $transaction->amount - (float) $transaction->amount_paid, 2));
+            }
+        });
+
+        static::created(function (Transaction $transaction) {
+            if ($transaction->payments()->doesntExist() && (float) $transaction->amount_paid > 0) {
+                $transaction->payments()->create([
+                    'user_id' => $transaction->user_id ?? auth()->id(),
+                    'amount' => $transaction->amount_paid,
+                    'payment_method' => $transaction->payment_method,
+                    'cash_amount' => $transaction->payment_method === static::PAYMENT_METHOD_SPLIT ? $transaction->cash_amount : null,
+                    'gcash_amount' => $transaction->payment_method === static::PAYMENT_METHOD_SPLIT ? $transaction->gcash_amount : null,
+                    'payment_date' => $transaction->transaction_date ? $transaction->transaction_date->format('Y-m-d') : now()->toDateString(),
+                    'notes' => $transaction->payment_status === static::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
+                ]);
             }
         });
     }
@@ -146,6 +198,29 @@ class Transaction extends Model
     }
 
     /**
+     * Recalculate transaction balance and payment status from payments.
+     */
+    public function recalculateBalance(): void
+    {
+        $totalPaid = (float) $this->payments()->sum('amount');
+        $totalAmount = (float) $this->amount;
+        $balance = max(0, round($totalAmount - $totalPaid, 2));
+
+        $status = self::PAYMENT_STATUS_PARTIAL;
+        if ($totalPaid <= 0) {
+            $status = self::PAYMENT_STATUS_UNPAID;
+        } elseif ($balance <= 0) {
+            $status = self::PAYMENT_STATUS_PAID;
+        }
+
+        $this->update([
+            'amount_paid' => round($totalPaid, 2),
+            'balance' => $balance,
+            'payment_status' => $status,
+        ]);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -156,12 +231,30 @@ class Transaction extends Model
             'transaction_date' => 'date:Y-m-d',
             'pax' => 'integer',
             'amount' => 'decimal:2',
+            'amount_paid' => 'decimal:2',
+            'balance' => 'decimal:2',
             'cash_amount' => 'decimal:2',
             'gcash_amount' => 'decimal:2',
             'third_party_payment' => 'decimal:2',
             'ddn_amount' => 'decimal:2',
             'employee_share' => 'decimal:2',
         ];
+    }
+
+    /**
+     * @return BelongsTo<Customer, $this>
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * @return HasMany<TransactionPayment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(TransactionPayment::class);
     }
 
     /**

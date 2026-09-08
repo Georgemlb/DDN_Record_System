@@ -5,6 +5,7 @@ import TransactionForm from '@/components/TransactionForm.vue';
 import { index } from '@/routes/transactions';
 import type {
     BaggageOption,
+    Customer,
     DdnSplitConfig,
     OnlineAssistanceType,
     PsaDocumentType,
@@ -18,6 +19,8 @@ const props = defineProps<{
     psaDocumentTypes?: PsaDocumentType[];
     ddnSplitConfig?: DdnSplitConfig;
     portalBalance?: number;
+    recurringCustomers?: Customer[];
+    initialCustomers?: Customer[];
 }>();
 
 defineOptions({
@@ -59,6 +62,7 @@ defineOptions({
                 :psa-document-types="psaDocumentTypes"
                 :ddn-split-config="ddnSplitConfig"
                 :portal-balance="portalBalance"
+                :recurring-customers="recurringCustomers || initialCustomers"
             />
         </section>
     </main>
