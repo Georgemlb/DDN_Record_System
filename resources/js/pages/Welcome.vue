@@ -11,7 +11,7 @@ import AppLogo from '@/components/AppLogo.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { dashboard, login, register } from '@/routes';
+import { dashboard, login } from '@/routes';
 </script>
 
 <template>
@@ -41,11 +41,8 @@ import { dashboard, login, register } from '@/routes';
                         </Button>
                     </template>
                     <template v-else>
-                        <Button variant="ghost" as-child>
-                            <Link :href="login()">Log in</Link>
-                        </Button>
                         <Button as-child>
-                            <Link :href="register()">Register</Link>
+                            <Link :href="login()">Log in</Link>
                         </Button>
                     </template>
                 </nav>
@@ -95,9 +92,6 @@ import { dashboard, login, register } from '@/routes';
                                     Sign In to System
                                     <ArrowRight class="size-4" />
                                 </Link>
-                            </Button>
-                            <Button size="lg" variant="outline" as-child>
-                                <Link :href="register()">Create Account</Link>
                             </Button>
                         </template>
                     </div>

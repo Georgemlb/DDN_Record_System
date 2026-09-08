@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Form, Head, Link } from '@inertiajs/vue3';
+import { Form, Head, Link, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, Copy, Pencil, Trash2 } from '@lucide/vue';
+import { computed } from 'vue';
 import ExpenseController from '@/actions/App/Http/Controllers/ExpenseController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,30 @@ import type { Expense } from '@/types/expense';
 const props = defineProps<{
     expense: Expense;
 }>();
+
+const page = usePage();
+const currentUser = computed(() => page.props.auth?.user);
+
+const canModify = computed(() => {
+    if (!currentUser.value) {
+        return false;
+    }
+
+    if (
+        currentUser.value.role === 'admin' ||
+        currentUser.value.role === 'tech_admin'
+    ) {
+        return true;
+    }
+
+    const isOwner = props.expense.user_id === currentUser.value.id;
+    const createdDate = props.expense.created_at
+        ? new Date(props.expense.created_at).toDateString()
+        : '';
+    const todayDate = new Date().toDateString();
+
+    return isOwner && createdDate === todayDate;
+});
 
 defineOptions({
     layout: {
@@ -93,7 +118,7 @@ defineOptions({
                 </Button>
 
                 <!-- Edit Button -->
-                <Button variant="outline" as-child>
+                <Button v-if="canModify" variant="outline" as-child>
                     <Link :href="expenseEdit(props.expense)">
                         <Pencil class="size-4" />
                         <span>Edit</span>
@@ -101,7 +126,7 @@ defineOptions({
                 </Button>
 
                 <!-- Delete Modal -->
-                <Dialog>
+                <Dialog v-if="canModify">
                     <DialogTrigger as-child>
                         <Button variant="destructive">
                             <Trash2 class="size-4" />

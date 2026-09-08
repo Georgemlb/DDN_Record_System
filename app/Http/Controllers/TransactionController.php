@@ -11,6 +11,7 @@ use App\Models\OnlineAssistanceType;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -213,6 +214,8 @@ class TransactionController extends Controller
      */
     public function edit(Transaction $transaction): Response
     {
+        Gate::authorize('update', $transaction);
+
         $transaction->load(['baggageOption', 'onlineAssistanceType', 'customer']);
 
         $baggageOptions = BaggageOption::query()->active()->get();
@@ -247,6 +250,8 @@ class TransactionController extends Controller
      */
     public function update(TransactionRequest $request, Transaction $transaction): RedirectResponse
     {
+        Gate::authorize('update', $transaction);
+
         $validated = $request->validated();
 
         if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
@@ -324,6 +329,8 @@ class TransactionController extends Controller
      */
     public function destroy(Transaction $transaction): RedirectResponse
     {
+        Gate::authorize('delete', $transaction);
+
         $transaction->delete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
@@ -338,6 +345,8 @@ class TransactionController extends Controller
      */
     public function restore(Transaction $transaction): RedirectResponse
     {
+        Gate::authorize('restore', $transaction);
+
         $transaction->restore();
 
         FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
@@ -352,6 +361,8 @@ class TransactionController extends Controller
      */
     public function forceDelete(Transaction $transaction): RedirectResponse
     {
+        Gate::authorize('forceDelete', $transaction);
+
         $transaction->forceDelete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);

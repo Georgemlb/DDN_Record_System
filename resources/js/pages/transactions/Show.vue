@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Form, Head, Link } from '@inertiajs/vue3';
+import { Form, Head, Link, usePage } from '@inertiajs/vue3';
 import { Banknote, Clock, Pencil, Phone, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import TransactionController from '@/actions/App/Http/Controllers/TransactionController';
 import CollectBalanceModal from '@/components/CollectBalanceModal.vue';
 import { Badge } from '@/components/ui/badge';
@@ -25,11 +25,35 @@ import {
 import { edit, index } from '@/routes/transactions';
 import type { Transaction } from '@/types/transaction';
 
-defineProps<{
+const props = defineProps<{
     transaction: Transaction;
 }>();
 
 const isCollectModalOpen = ref(false);
+
+const page = usePage();
+const currentUser = computed(() => page.props.auth?.user);
+
+const canModify = computed(() => {
+    if (!currentUser.value) {
+        return false;
+    }
+
+    if (
+        currentUser.value.role === 'admin' ||
+        currentUser.value.role === 'tech_admin'
+    ) {
+        return true;
+    }
+
+    const isOwner = props.transaction.user_id === currentUser.value.id;
+    const createdDate = props.transaction.created_at
+        ? new Date(props.transaction.created_at).toDateString()
+        : '';
+    const todayDate = new Date().toDateString();
+
+    return isOwner && createdDate === todayDate;
+});
 
 defineOptions({
     layout: {
@@ -112,10 +136,10 @@ defineOptions({
                     <Banknote class="size-4" />
                     <span>Collect Balance</span>
                 </Button>
-                <Button variant="outline" as-child>
+                <Button v-if="canModify" variant="outline" as-child>
                     <Link :href="edit(transaction)"><Pencil /> Edit</Link>
                 </Button>
-                <Dialog>
+                <Dialog v-if="canModify">
                     <DialogTrigger as-child>
                         <Button variant="destructive"><Trash2 /> Delete</Button>
                     </DialogTrigger>

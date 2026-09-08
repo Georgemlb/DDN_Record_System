@@ -7,7 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
-import { email } from '@/routes/password';
+
+const email = {
+    form: () => ({ action: '/forgot-password', method: 'post' as const }),
+};
 
 defineOptions({
     layout: {

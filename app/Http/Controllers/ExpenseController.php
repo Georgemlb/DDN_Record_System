@@ -6,6 +6,7 @@ use App\Http\Requests\ExpenseRequest;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -170,6 +171,8 @@ class ExpenseController extends Controller
      */
     public function edit(Expense $expense): Response
     {
+        Gate::authorize('update', $expense);
+
         $expense->load('category');
 
         $categories = ExpenseCategory::query()->active()->get();
@@ -192,6 +195,8 @@ class ExpenseController extends Controller
      */
     public function update(ExpenseRequest $request, Expense $expense): RedirectResponse
     {
+        Gate::authorize('update', $expense);
+
         $expense->update($request->validated());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense updated.']);
@@ -204,6 +209,8 @@ class ExpenseController extends Controller
      */
     public function destroy(Expense $expense): RedirectResponse
     {
+        Gate::authorize('delete', $expense);
+
         $expense->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense moved to trash.']);
@@ -216,6 +223,8 @@ class ExpenseController extends Controller
      */
     public function restore(Expense $expense): RedirectResponse
     {
+        Gate::authorize('restore', $expense);
+
         $expense->restore();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense restored.']);
@@ -228,6 +237,8 @@ class ExpenseController extends Controller
      */
     public function forceDelete(Expense $expense): RedirectResponse
     {
+        Gate::authorize('forceDelete', $expense);
+
         $expense->forceDelete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense permanently deleted.']);
