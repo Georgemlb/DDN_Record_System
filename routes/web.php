@@ -16,9 +16,7 @@ use Inertia\Inertia;
 
 Route::get('/', function () {
     if (auth()->check()) {
-        return auth()->user()->isStaff()
-            ? redirect()->route('transactions.index')
-            : redirect()->route('dashboard');
+        return redirect()->route('dashboard');
     }
 
     return Inertia::render('Welcome');
@@ -63,6 +61,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::resource('expense-categories', App\Http\Controllers\Configuration\ExpenseCategoryController::class)->only(['store', 'update', 'destroy']);
         });
     });
-});
 
-require __DIR__.'/settings.php';
+    Route::redirect('settings/baggage-options', '/configurations?tab=baggage');
+    Route::redirect('settings/online-assistance-types', '/configurations?tab=online-assistance');
+    Route::redirect('settings/expense-categories', '/configurations?tab=expense-categories');
+});

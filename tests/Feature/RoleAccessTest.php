@@ -3,6 +3,7 @@
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -16,12 +17,20 @@ test('admin can access dashboard, reports, portal deposits, and configurations',
     $this->actingAs($admin)->get(route('configurations.index'))->assertOk();
 });
 
-test('staff visiting dashboard is redirected to transactions index', function () {
+test('staff can access dashboard with counter register view', function () {
     $staff = User::factory()->staff()->create();
 
     $this->actingAs($staff)
         ->get(route('dashboard'))
-        ->assertRedirect(route('transactions.index'));
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Dashboard')
+            ->where('isStaff', true)
+            ->has('register')
+            ->has('recentTransactions')
+            ->has('recentExpenses')
+            ->missing('kpis')
+        );
 });
 
 test('staff is forbidden from accessing reports, portal deposits, and configurations', function () {

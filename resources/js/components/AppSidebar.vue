@@ -5,7 +5,6 @@ import {
     FileText,
     LayoutDashboard,
     ReceiptText,
-    Settings,
     SlidersHorizontal,
     Users,
     Wallet,
@@ -27,7 +26,6 @@ import { dashboard } from '@/routes';
 import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
 import { index as portalDeposits } from '@/routes/portal-deposits';
-import { edit as editProfile } from '@/routes/profile';
 import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
 import type { NavItem } from '@/types';
@@ -40,6 +38,11 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (isStaff.value) {
         return [
             {
+                title: 'Dashboard',
+                href: dashboard(),
+                icon: LayoutDashboard,
+            },
+            {
                 title: 'Transactions',
                 href: transactions(),
                 icon: ReceiptText,
@@ -48,11 +51,6 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Expenses',
                 href: expenses(),
                 icon: FileText,
-            },
-            {
-                title: 'Settings',
-                href: editProfile(),
-                icon: Settings,
             },
         ];
     }
@@ -93,11 +91,6 @@ const mainNavItems = computed<NavItem[]>(() => {
             href: '/users',
             icon: Users,
         },
-        {
-            title: 'Settings',
-            href: editProfile(),
-            icon: Settings,
-        },
     ];
 });
 </script>
@@ -108,7 +101,7 @@ const mainNavItems = computed<NavItem[]>(() => {
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="isStaff ? transactions() : dashboard()">
+                        <Link :href="dashboard()">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>

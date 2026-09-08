@@ -247,3 +247,22 @@ test('it returns recent transactions ordered desc by date and id up to 5 items',
             ->where('recentTransactions.4.customer_name', 'Customer 3')
         );
 });
+
+test('staff user sees counter register dashboard with live cash in box and exact gcash', function () {
+    $staff = User::factory()->staff()->create();
+
+    $this->actingAs($staff)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Dashboard')
+            ->where('isStaff', true)
+            ->where('period', 'today')
+            ->has('register')
+            ->has('register.cash_in_box')
+            ->has('register.exact_net_gcash')
+            ->has('recentTransactions')
+            ->has('recentExpenses')
+            ->missing('kpis')
+        );
+});

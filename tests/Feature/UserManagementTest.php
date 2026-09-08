@@ -111,5 +111,5 @@ test('user can log in using their username', function () {
     ]);
 
     $this->assertAuthenticatedAs($user);
-    $response->assertRedirect(route('transactions.index'));
+    $response->assertRedirect(route('dashboard'));
 });
