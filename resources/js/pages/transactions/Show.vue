@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
-import {
-    Banknote,
-    Clock,
-    Pencil,
-    Phone,
-    Trash2,
-} from '@lucide/vue';
+import { Banknote, Clock, Pencil, Phone, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import TransactionController from '@/actions/App/Http/Controllers/TransactionController';
 import CollectBalanceModal from '@/components/CollectBalanceModal.vue';
@@ -180,7 +174,7 @@ defineOptions({
                     <Clock class="size-5" />
                 </div>
                 <div>
-                    <h3 class="font-semibold text-sm">
+                    <h3 class="text-sm font-semibold">
                         Outstanding Balance:
                         {{ formatPhp(transaction.balance) }}
                     </h3>
@@ -432,11 +426,16 @@ defineOptions({
 
             <!-- 4. Payment & Collection History Card -->
             <article class="rounded-lg border bg-card p-5 sm:p-6 md:col-span-2">
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
+                >
                     <div>
-                        <h2 class="text-base font-semibold">Payment & Settlement History</h2>
+                        <h2 class="text-base font-semibold">
+                            Payment & Settlement History
+                        </h2>
                         <p class="text-xs text-muted-foreground">
-                            Record of downpayments and pickup balance collections.
+                            Record of downpayments and pickup balance
+                            collections.
                         </p>
                     </div>
                     <Button
@@ -453,34 +452,51 @@ defineOptions({
                 <!-- Balance Summary Bar -->
                 <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div class="rounded-md border bg-muted/30 p-3">
-                        <span class="text-xs text-muted-foreground">Total Service Cost</span>
-                        <p class="mt-0.5 text-lg font-bold">{{ formatPhp(transaction.amount) }}</p>
+                        <span class="text-xs text-muted-foreground"
+                            >Total Service Cost</span
+                        >
+                        <p class="mt-0.5 text-lg font-bold">
+                            {{ formatPhp(transaction.amount) }}
+                        </p>
                     </div>
-                    <div class="rounded-md border bg-emerald-50/50 p-3 dark:bg-emerald-950/20">
-                        <span class="text-xs text-emerald-700 dark:text-emerald-300">Total Amount Collected</span>
-                        <p class="mt-0.5 text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    <div
+                        class="rounded-md border bg-emerald-50/50 p-3 dark:bg-emerald-950/20"
+                    >
+                        <span
+                            class="text-xs text-emerald-700 dark:text-emerald-300"
+                            >Total Amount Collected</span
+                        >
+                        <p
+                            class="mt-0.5 text-lg font-bold text-emerald-600 dark:text-emerald-400"
+                        >
                             {{ formatPhp(transaction.amount_paid) }}
                         </p>
                     </div>
                     <div
                         class="rounded-md border p-3"
-                        :class="Number(transaction.balance) > 0
-                            ? 'bg-amber-50/60 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/50'
-                            : 'bg-muted/30'"
+                        :class="
+                            Number(transaction.balance) > 0
+                                ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20'
+                                : 'bg-muted/30'
+                        "
                     >
                         <span
                             class="text-xs"
-                            :class="Number(transaction.balance) > 0
-                                ? 'text-amber-700 dark:text-amber-300'
-                                : 'text-muted-foreground'"
+                            :class="
+                                Number(transaction.balance) > 0
+                                    ? 'text-amber-700 dark:text-amber-300'
+                                    : 'text-muted-foreground'
+                            "
                         >
                             Outstanding Balance
                         </span>
                         <p
                             class="mt-0.5 text-lg font-bold"
-                            :class="Number(transaction.balance) > 0
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-emerald-600 dark:text-emerald-400'"
+                            :class="
+                                Number(transaction.balance) > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                            "
                         >
                             {{ formatPhp(transaction.balance) }}
                         </p>
@@ -488,34 +504,74 @@ defineOptions({
                 </div>
 
                 <!-- Payments Table -->
-                <div v-if="transaction.payments && transaction.payments.length > 0" class="mt-4 overflow-x-auto">
+                <div
+                    v-if="
+                        transaction.payments && transaction.payments.length > 0
+                    "
+                    class="mt-4 overflow-x-auto"
+                >
                     <table class="w-full text-left text-xs">
-                        <thead class="border-b bg-muted/40 text-muted-foreground">
+                        <thead
+                            class="border-b bg-muted/40 text-muted-foreground"
+                        >
                             <tr>
                                 <th class="px-3 py-2 font-medium">Date</th>
                                 <th class="px-3 py-2 font-medium">Amount</th>
                                 <th class="px-3 py-2 font-medium">Method</th>
-                                <th class="px-3 py-2 font-medium">Received By</th>
+                                <th class="px-3 py-2 font-medium">
+                                    Received By
+                                </th>
                                 <th class="px-3 py-2 font-medium">Notes</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            <tr v-for="payment in transaction.payments" :key="payment.id">
-                                <td class="px-3 py-2.5 whitespace-nowrap text-muted-foreground">
-                                    {{ formatTransactionDate(payment.payment_date) }}
+                            <tr
+                                v-for="payment in transaction.payments"
+                                :key="payment.id"
+                            >
+                                <td
+                                    class="px-3 py-2.5 whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{
+                                        formatTransactionDate(
+                                            payment.payment_date,
+                                        )
+                                    }}
                                 </td>
-                                <td class="px-3 py-2.5 whitespace-nowrap font-semibold text-emerald-600 dark:text-emerald-400">
+                                <td
+                                    class="px-3 py-2.5 font-semibold whitespace-nowrap text-emerald-600 dark:text-emerald-400"
+                                >
                                     {{ formatPhp(payment.amount) }}
                                 </td>
                                 <td class="px-3 py-2.5 whitespace-nowrap">
-                                    <Badge variant="outline" class="text-[10px] uppercase">
-                                        {{ formatPaymentMethod(payment.payment_method) }}
-                                        <template v-if="payment.payment_method === 'split' && payment.cash_amount">
-                                            (Cash: {{ formatPhp(payment.cash_amount) }} / GCash: {{ formatPhp(payment.gcash_amount) }})
+                                    <Badge
+                                        variant="outline"
+                                        class="text-[10px] uppercase"
+                                    >
+                                        {{
+                                            formatPaymentMethod(
+                                                payment.payment_method,
+                                            )
+                                        }}
+                                        <template
+                                            v-if="
+                                                payment.payment_method ===
+                                                    'split' &&
+                                                payment.cash_amount
+                                            "
+                                        >
+                                            (Cash:
+                                            {{ formatPhp(payment.cash_amount) }}
+                                            / GCash:
+                                            {{
+                                                formatPhp(payment.gcash_amount)
+                                            }})
                                         </template>
                                     </Badge>
                                 </td>
-                                <td class="px-3 py-2.5 whitespace-nowrap text-muted-foreground">
+                                <td
+                                    class="px-3 py-2.5 whitespace-nowrap text-muted-foreground"
+                                >
                                     {{ payment.user?.name || 'System' }}
                                 </td>
                                 <td class="px-3 py-2.5 text-muted-foreground">
@@ -526,7 +582,10 @@ defineOptions({
                     </table>
                 </div>
 
-                <div v-else class="mt-4 rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                <div
+                    v-else
+                    class="mt-4 rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground"
+                >
                     No payment history entries recorded.
                 </div>
             </article>

@@ -139,12 +139,12 @@ const computedRemainingBalance = computed(() => {
     const total = Number(amount.value) || 0;
 
     if (paymentStatus.value === 'paid') {
-return 0;
-}
+        return 0;
+    }
 
     if (paymentStatus.value === 'unpaid') {
-return total;
-}
+        return total;
+    }
 
     const paid = Number(amountPaid.value) || 0;
 
@@ -153,12 +153,12 @@ return total;
 
 const getPayableToday = () => {
     if (paymentStatus.value === 'paid') {
-return Number(amount.value) || 0;
-}
+        return Number(amount.value) || 0;
+    }
 
     if (paymentStatus.value === 'partial') {
-return Number(amountPaid.value) || 0;
-}
+        return Number(amountPaid.value) || 0;
+    }
 
     return 0;
 };
@@ -294,17 +294,22 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
         <!-- Hidden inputs for custom select values and calculated fields -->
         <input type="hidden" name="type" :value="formType" />
         <input type="hidden" name="payment_method" :value="paymentMethod" />
-        <input v-if="customerId" type="hidden" name="customer_id" :value="customerId" />
+        <input
+            v-if="customerId"
+            type="hidden"
+            name="customer_id"
+            :value="customerId"
+        />
         <input type="hidden" name="payment_status" :value="paymentStatus" />
         <input
             type="hidden"
             name="amount_paid"
             :value="
                 paymentStatus === 'paid'
-                    ? (amount || 0)
+                    ? amount || 0
                     : paymentStatus === 'unpaid'
                       ? 0
-                      : (amountPaid || 0)
+                      : amountPaid || 0
             "
         />
         <input
@@ -386,11 +391,18 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 />
                 <datalist id="recurring-customers-list">
                     <option
-                        v-for="c in (recurringCustomers && recurringCustomers.length ? recurringCustomers : initialCustomers)"
+                        v-for="c in recurringCustomers &&
+                        recurringCustomers.length
+                            ? recurringCustomers
+                            : initialCustomers"
                         :key="c.id"
                         :value="c.name"
                     >
-                        {{ c.contact_number ? `${c.name} (${c.contact_number})` : c.name }}
+                        {{
+                            c.contact_number
+                                ? `${c.name} (${c.contact_number})`
+                                : c.name
+                        }}
                     </option>
                 </datalist>
                 <InputError :message="errors.customer_name" />
@@ -398,9 +410,14 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
             <!-- 4. Contact Number (Autofilled for recurring customer or entered manually) -->
             <div class="grid gap-2">
-                <Label for="customer_contact" class="flex items-center justify-between">
+                <Label
+                    for="customer_contact"
+                    class="flex items-center justify-between"
+                >
                     <span>Contact Number</span>
-                    <span class="text-xs font-normal text-muted-foreground">Optional</span>
+                    <span class="text-xs font-normal text-muted-foreground"
+                        >Optional</span
+                    >
                 </Label>
                 <Input
                     id="customer_contact"
@@ -464,7 +481,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <!-- Downpayment Amount & Remaining Balance (if Partial) -->
             <template v-if="paymentStatus === 'partial'">
                 <div class="grid gap-2">
-                    <Label for="amount_paid">Downpayment Paid Today (PHP)</Label>
+                    <Label for="amount_paid"
+                        >Downpayment Paid Today (PHP)</Label
+                    >
                     <Input
                         id="amount_paid"
                         type="number"
@@ -482,7 +501,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 <div
                     class="rounded-lg border bg-amber-50/50 p-3 text-xs dark:bg-amber-950/20"
                 >
-                    <span class="font-medium text-amber-800 dark:text-amber-300">
+                    <span
+                        class="font-medium text-amber-800 dark:text-amber-300"
+                    >
                         Remaining Balance Due on Pickup:
                     </span>
                     <p

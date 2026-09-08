@@ -35,8 +35,8 @@ const emit = defineEmits<{
 
 const remainingBalance = computed(() => {
     if (!props.transaction) {
-return 0;
-}
+        return 0;
+    }
 
     return Number(props.transaction.balance) || 0;
 });
@@ -80,8 +80,8 @@ const handleGcashChange = () => {
 
 const submitPayment = () => {
     if (!props.transaction) {
-return;
-}
+        return;
+    }
 
     form.post(`/transactions/${props.transaction.id}/payments`, {
         preserveScroll: true,
@@ -97,11 +97,14 @@ return;
         <DialogContent class="sm:max-w-md">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">
-                    <Banknote class="size-5 text-emerald-600 dark:text-emerald-400" />
+                    <Banknote
+                        class="size-5 text-emerald-600 dark:text-emerald-400"
+                    />
                     <span>Collect Remaining Balance</span>
                 </DialogTitle>
                 <DialogDescription>
-                    Record payment received from the customer upon pickup or settlement.
+                    Record payment received from the customer upon pickup or
+                    settlement.
                 </DialogDescription>
             </DialogHeader>
 
@@ -110,26 +113,44 @@ return;
                 <div class="rounded-lg border bg-muted/40 p-3 text-xs">
                     <div class="flex justify-between font-medium">
                         <span class="text-muted-foreground">Reference:</span>
-                        <span>{{ transaction.reference_number || `#${transaction.id}` }}</span>
+                        <span>{{
+                            transaction.reference_number || `#${transaction.id}`
+                        }}</span>
                     </div>
                     <div class="mt-1 flex justify-between">
                         <span class="text-muted-foreground">Customer:</span>
-                        <span class="font-semibold">{{ transaction.customer_name }}</span>
+                        <span class="font-semibold">{{
+                            transaction.customer_name
+                        }}</span>
                     </div>
-                    <div class="mt-2 grid grid-cols-3 gap-2 border-t pt-2 text-center">
+                    <div
+                        class="mt-2 grid grid-cols-3 gap-2 border-t pt-2 text-center"
+                    >
                         <div>
-                            <span class="text-[11px] text-muted-foreground">Total Price</span>
-                            <p class="font-semibold">{{ formatPhp(transaction.amount) }}</p>
+                            <span class="text-[11px] text-muted-foreground"
+                                >Total Price</span
+                            >
+                            <p class="font-semibold">
+                                {{ formatPhp(transaction.amount) }}
+                            </p>
                         </div>
                         <div>
-                            <span class="text-[11px] text-muted-foreground">Already Paid</span>
-                            <p class="font-semibold text-emerald-600 dark:text-emerald-400">
+                            <span class="text-[11px] text-muted-foreground"
+                                >Already Paid</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
                                 {{ formatPhp(transaction.amount_paid) }}
                             </p>
                         </div>
                         <div>
-                            <span class="text-[11px] text-muted-foreground">Balance Due</span>
-                            <p class="font-bold text-rose-600 dark:text-rose-400">
+                            <span class="text-[11px] text-muted-foreground"
+                                >Balance Due</span
+                            >
+                            <p
+                                class="font-bold text-rose-600 dark:text-rose-400"
+                            >
                                 {{ formatPhp(transaction.balance) }}
                             </p>
                         </div>
@@ -139,7 +160,9 @@ return;
                 <form @submit.prevent="submitPayment" class="grid gap-3">
                     <!-- Amount to Pay -->
                     <div class="grid gap-1.5">
-                        <Label for="collection_amount">Amount Collected (PHP)</Label>
+                        <Label for="collection_amount"
+                            >Amount Collected (PHP)</Label
+                        >
                         <Input
                             id="collection_amount"
                             type="number"
@@ -156,13 +179,18 @@ return;
                     <div class="grid gap-1.5">
                         <Label for="collection_method">Payment Method</Label>
                         <Select v-model="form.payment_method">
-                            <SelectTrigger id="collection_method" class="w-full">
+                            <SelectTrigger
+                                id="collection_method"
+                                class="w-full"
+                            >
                                 <SelectValue placeholder="Select method" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="cash">Cash</SelectItem>
                                 <SelectItem value="gcash">GCash</SelectItem>
-                                <SelectItem value="split">Split (Cash & GCash)</SelectItem>
+                                <SelectItem value="split"
+                                    >Split (Cash & GCash)</SelectItem
+                                >
                             </SelectContent>
                         </Select>
                         <InputError :message="form.errors.payment_method" />
@@ -172,7 +200,9 @@ return;
                     <template v-if="form.payment_method === 'split'">
                         <div class="grid grid-cols-2 gap-2">
                             <div class="grid gap-1">
-                                <Label for="col_cash" class="text-xs">Cash (PHP)</Label>
+                                <Label for="col_cash" class="text-xs"
+                                    >Cash (PHP)</Label
+                                >
                                 <Input
                                     id="col_cash"
                                     type="number"
@@ -184,7 +214,9 @@ return;
                                 />
                             </div>
                             <div class="grid gap-1">
-                                <Label for="col_gcash" class="text-xs">GCash (PHP)</Label>
+                                <Label for="col_gcash" class="text-xs"
+                                    >GCash (PHP)</Label
+                                >
                                 <Input
                                     id="col_gcash"
                                     type="number"
@@ -232,7 +264,7 @@ return;
                         </Button>
                         <Button
                             type="submit"
-                            class="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            class="bg-emerald-600 text-white hover:bg-emerald-700"
                             :disabled="form.processing"
                         >
                             <CheckCircle class="mr-1.5 size-4" />

@@ -118,7 +118,16 @@ const applyFilters = () => {
 };
 
 watch(
-    [search, type, paymentMethod, paymentStatus, date, dateFrom, dateTo, status],
+    [
+        search,
+        type,
+        paymentMethod,
+        paymentStatus,
+        date,
+        dateFrom,
+        dateTo,
+        status,
+    ],
     applyFilters,
 );
 
@@ -349,12 +358,16 @@ const toggleSort = (field: string) => {
                         <SelectValue placeholder="All payment statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Payment Statuses</SelectItem>
+                        <SelectItem value="all"
+                            >All Payment Statuses</SelectItem
+                        >
                         <SelectItem value="paid">Fully Paid</SelectItem>
                         <SelectItem value="partial"
                             >Downpayment / Partial</SelectItem
                         >
-                        <SelectItem value="unpaid">Unpaid (On Pickup)</SelectItem>
+                        <SelectItem value="unpaid"
+                            >Unpaid (On Pickup)</SelectItem
+                        >
                     </SelectContent>
                 </Select>
 
@@ -543,10 +556,14 @@ const toggleSort = (field: string) => {
                                         {{ transaction.customer_name }}
                                     </Link>
                                     <span
-                                        v-if="transaction.customer?.contact_number"
+                                        v-if="
+                                            transaction.customer?.contact_number
+                                        "
                                         class="block text-[11px] font-normal text-muted-foreground"
                                     >
-                                        {{ transaction.customer.contact_number }}
+                                        {{
+                                            transaction.customer.contact_number
+                                        }}
                                     </span>
                                     <span
                                         v-if="transaction.user"
