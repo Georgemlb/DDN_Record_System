@@ -139,7 +139,8 @@ const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
 );
 
 const remittanceFee = ref<number | string>(
-    props.transaction?.ddn_amount !== null && props.transaction?.ddn_amount !== undefined
+    props.transaction?.ddn_amount !== null &&
+        props.transaction?.ddn_amount !== undefined
         ? props.transaction.ddn_amount
         : (props.transaction?.third_party_payment ?? '0.00'),
 );
@@ -660,7 +661,11 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             :value="onlineAssistanceTypeId"
         />
         <input
-            v-if="formType === 'online_assistance' || formType === 'translation' || formType === 'psa'"
+            v-if="
+                formType === 'online_assistance' ||
+                formType === 'translation' ||
+                formType === 'psa'
+            "
             type="hidden"
             name="disbursement_source"
             :value="disbursementSource"
@@ -785,21 +790,34 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <!-- 4. Payment Status (Paid / Downpayment / Unpaid) -->
             <div
                 v-if="formType === 'remittance'"
-                class="rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 flex items-center justify-between dark:bg-blue-950/20"
+                class="flex items-center justify-between rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 dark:bg-blue-950/20"
             >
                 <div class="flex items-center gap-2">
-                    <Smartphone class="size-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <Smartphone
+                        class="size-4 shrink-0 text-blue-600 dark:text-blue-400"
+                    />
                     <span>
-                        <strong class="font-semibold text-foreground">Remittance Flow:</strong>
-                        {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)' : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)' }}
+                        <strong class="font-semibold text-foreground"
+                            >Remittance Flow:</strong
+                        >
+                        {{
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)'
+                                : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)'
+                        }}
                     </span>
                 </div>
-                <span class="rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 font-medium text-[11px] shrink-0">
+                <span
+                    class="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                >
                     Settles Immediately (Paid)
                 </span>
             </div>
 
-            <div v-if="formType !== 'remittance'" class="grid gap-2 md:col-span-2">
+            <div
+                v-if="formType !== 'remittance'"
+                class="grid gap-2 md:col-span-2"
+            >
                 <Label>Payment Status</Label>
                 <div class="grid grid-cols-3 gap-2">
                     <button
@@ -888,7 +906,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </template>
 
             <!-- 4. Payment Method -->
-            <div v-if="formType !== 'remittance'" class="grid gap-2 md:col-span-2">
+            <div
+                v-if="formType !== 'remittance'"
+                class="grid gap-2 md:col-span-2"
+            >
                 <Label for="payment_method_select">Payment method</Label>
                 <Select v-model="paymentMethod">
                     <SelectTrigger id="payment_method_select" class="w-full">
@@ -1610,9 +1631,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="amount"
-                        >Customer Payment (PHP)</Label
-                    >
+                    <Label for="amount">Customer Payment (PHP)</Label>
                     <Input
                         id="amount"
                         name="amount"
@@ -1664,8 +1683,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                     : 'border-input text-muted-foreground hover:bg-muted'
                             "
                         >
-                            <Smartphone class="size-3.5 text-blue-600 dark:text-blue-400" />
-                            <span>GCash Wallet (Auto-deducted from Ledger)</span>
+                            <Smartphone
+                                class="size-3.5 text-blue-600 dark:text-blue-400"
+                            />
+                            <span
+                                >GCash Wallet (Auto-deducted from Ledger)</span
+                            >
                         </button>
                         <button
                             type="button"
@@ -1677,12 +1700,20 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                     : 'border-input text-muted-foreground hover:bg-muted'
                             "
                         >
-                            <Wallet class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <Wallet
+                                class="size-3.5 text-emerald-600 dark:text-emerald-400"
+                            />
                             <span>Cash Drawer (Drawer Cash Outflow)</span>
                         </button>
                     </div>
-                    <p v-if="numThirdParty > 0 && disbursementSource === 'gcash'" class="text-[11px] text-blue-600 dark:text-blue-400">
-                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically deducted from your live GCash Ledger wallet balance.
+                    <p
+                        v-if="
+                            numThirdParty > 0 && disbursementSource === 'gcash'
+                        "
+                        class="text-[11px] text-blue-600 dark:text-blue-400"
+                    >
+                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically
+                        deducted from your live GCash Ledger wallet balance.
                     </p>
                 </div>
 
@@ -1693,29 +1724,43 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     >
                         <div class="flex items-center gap-2">
                             <Calculator class="size-4" />
-                            <span>Net Service Margin & 60/40 Revenue Split</span>
+                            <span
+                                >Net Service Margin & 60/40 Revenue Split</span
+                            >
                         </div>
                         <span class="text-xs font-normal text-muted-foreground">
                             Office 60% / Employee 40%
                         </span>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                    <div
+                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
+                    >
                         <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground">Customer Paid</span>
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
                             <p class="font-bold text-foreground">
                                 {{ formatPhp(numAmount) }}
                             </p>
                         </div>
                         <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground">Gov / Portal Fee</span>
-                            <p class="font-semibold text-blue-600 dark:text-blue-400">
+                            <span class="text-muted-foreground"
+                                >Gov / Portal Fee</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
                                 -{{ formatPhp(numThirdParty) }}
                             </p>
                         </div>
                         <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground">Net Margin</span>
-                            <p class="font-semibold text-emerald-600 dark:text-emerald-400">
+                            <span class="text-muted-foreground"
+                                >Net Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
                                 {{ formatPhp(computedOnlineNetMargin) }}
                             </p>
                         </div>
@@ -1734,7 +1779,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <p class="text-xs text-muted-foreground">
                                 Employee Cut (40%)
                             </p>
-                            <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                            <p
+                                class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400"
+                            >
                                 {{ formatPhp(computedOnlineEmployeeShare) }}
                             </p>
                         </div>
@@ -1743,7 +1790,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                     >
                         <Info class="size-3.5 shrink-0" />
-                        Shares are computed from the net margin (Customer Payment minus Government Fee).
+                        Shares are computed from the net margin (Customer
+                        Payment minus Government Fee).
                     </p>
                 </div>
             </template>
@@ -1753,7 +1801,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 <!-- Direction selector -->
                 <div class="grid gap-2 md:col-span-2">
                     <Label>Remittance Direction</Label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <button
                             type="button"
                             @click="remittanceDirection = 'GCASH_CASH_OUT'"
@@ -1761,15 +1809,20 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             :class="
                                 remittanceDirection === 'GCASH_CASH_OUT'
                                     ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-200'
-                                    : 'border-input hover:bg-muted text-muted-foreground'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
                             "
                         >
-                            <div class="flex items-center gap-2 font-semibold text-foreground">
-                                <ArrowDownLeft class="size-4 text-blue-600 dark:text-blue-400" />
+                            <div
+                                class="flex items-center gap-2 font-semibold text-foreground"
+                            >
+                                <ArrowDownLeft
+                                    class="size-4 text-blue-600 dark:text-blue-400"
+                                />
                                 <span>GCash Cash-Out</span>
                             </div>
                             <p class="text-xs text-muted-foreground">
-                                Customer sends GCash (+GCash) → Staff dispenses physical cash (-Drawer Cash)
+                                Customer sends GCash (+GCash) → Staff dispenses
+                                physical cash (-Drawer Cash)
                             </p>
                         </button>
 
@@ -1780,15 +1833,20 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             :class="
                                 remittanceDirection === 'GCASH_CASH_IN'
                                     ? 'border-emerald-600 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200'
-                                    : 'border-input hover:bg-muted text-muted-foreground'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
                             "
                         >
-                            <div class="flex items-center gap-2 font-semibold text-foreground">
-                                <ArrowUpRight class="size-4 text-emerald-600 dark:text-emerald-400" />
+                            <div
+                                class="flex items-center gap-2 font-semibold text-foreground"
+                            >
+                                <ArrowUpRight
+                                    class="size-4 text-emerald-600 dark:text-emerald-400"
+                                />
                                 <span>GCash Cash-In</span>
                             </div>
                             <p class="text-xs text-muted-foreground">
-                                Customer gives physical cash (+Drawer Cash) → Staff sends from GCash wallet (-GCash)
+                                Customer gives physical cash (+Drawer Cash) →
+                                Staff sends from GCash wallet (-GCash)
                             </p>
                         </button>
                     </div>
@@ -1796,7 +1854,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
                 <!-- Principal Amount & Fee -->
                 <div class="grid gap-2">
-                    <Label for="remittance_amount">Remittance Principal Amount (PHP)</Label>
+                    <Label for="remittance_amount"
+                        >Remittance Principal Amount (PHP)</Label
+                    >
                     <Input
                         id="remittance_amount"
                         name="amount"
@@ -1832,49 +1892,89 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <!-- Dual Cash Drawer & GCash Wallet Flow Preview Card -->
-                <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2 space-y-3">
-                    <div class="flex items-center gap-2 text-sm font-semibold text-primary">
+                <div
+                    class="space-y-3 rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div
+                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                    >
                         <Calculator class="size-4" />
                         <span>Simultaneous Dual Movement Preview</span>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        <div class="rounded-md border bg-card p-3 space-y-1">
-                            <div class="flex items-center gap-1.5 font-medium text-muted-foreground">
+                    <div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                        <div class="space-y-1 rounded-md border bg-card p-3">
+                            <div
+                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                            >
                                 <Wallet class="size-3.5" />
                                 <span>Physical Cash Drawer</span>
                             </div>
                             <p
                                 class="text-base font-bold"
-                                :class="remittanceDirection === 'GCASH_CASH_OUT' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
+                                :class="
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'text-rose-600 dark:text-rose-400'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                "
                             >
-                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? '-' : '+' }}{{ formatPhp(numAmount) }}
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? '-'
+                                        : '+'
+                                }}{{ formatPhp(numAmount) }}
                             </p>
                             <p class="text-[11px] text-muted-foreground">
-                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Outflow: Dispensed out to customer' : 'Inflow: Cash collected into drawer' }}
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'Outflow: Dispensed out to customer'
+                                        : 'Inflow: Cash collected into drawer'
+                                }}
                             </p>
                         </div>
 
-                        <div class="rounded-md border bg-card p-3 space-y-1">
-                            <div class="flex items-center gap-1.5 font-medium text-muted-foreground">
+                        <div class="space-y-1 rounded-md border bg-card p-3">
+                            <div
+                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                            >
                                 <Smartphone class="size-3.5 text-blue-500" />
                                 <span>GCash Ledger Wallet</span>
                             </div>
                             <p
                                 class="text-base font-bold"
-                                :class="remittanceDirection === 'GCASH_CASH_OUT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                                :class="
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-rose-600 dark:text-rose-400'
+                                "
                             >
-                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? '+' : '-' }}{{ formatPhp(numAmount) }}
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? '+'
+                                        : '-'
+                                }}{{ formatPhp(numAmount) }}
                             </p>
                             <p class="text-[11px] text-muted-foreground">
-                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Inflow: Received in GCash account' : 'Outflow: Transferred from GCash wallet' }}
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'Inflow: Received in GCash account'
+                                        : 'Outflow: Transferred from GCash wallet'
+                                }}
                             </p>
                         </div>
                     </div>
 
-                    <div v-if="Number(remittanceFee) > 0" class="flex items-center justify-between border-t pt-2 text-xs">
-                        <span class="text-muted-foreground font-medium">DDN Agency Service Fee Earning:</span>
-                        <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ formatPhp(Number(remittanceFee)) }}</span>
+                    <div
+                        v-if="Number(remittanceFee) > 0"
+                        class="flex items-center justify-between border-t pt-2 text-xs"
+                    >
+                        <span class="font-medium text-muted-foreground"
+                            >DDN Agency Service Fee Earning:</span
+                        >
+                        <span
+                            class="font-bold text-emerald-600 dark:text-emerald-400"
+                            >{{ formatPhp(Number(remittanceFee)) }}</span
+                        >
                     </div>
                 </div>
             </template>
