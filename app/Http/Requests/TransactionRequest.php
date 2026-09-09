@@ -61,6 +61,7 @@ class TransactionRequest extends FormRequest
             'payment_status' => ['nullable', 'string', Rule::in(Transaction::PAYMENT_STATUSES)],
             'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
             'amount_paid' => ['nullable', 'numeric', 'min:0', 'lte:amount'],
+            'disbursement_source' => ['nullable', 'string', Rule::in(Transaction::DISBURSEMENT_SOURCES)],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
 
@@ -95,6 +96,10 @@ class TransactionRequest extends FormRequest
             $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_ONLINE_ASSISTANCE) {
             $rules['online_assistance_type_id'] = ['required', 'integer', 'exists:online_assistance_types,id'];
+            $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
+        } elseif ($type === Transaction::TYPE_REMITTANCE) {
+            $rules['service_details'] = ['required', 'string', 'max:255'];
+            $rules['third_party_payment'] = ['nullable', 'numeric', 'min:0'];
         }
 
         return $rules;

@@ -4,6 +4,7 @@ export type TransactionType =
     | 'translation'
     | 'psa'
     | 'online_assistance'
+    | 'remittance'
     | 'printing';
 
 export type PaymentMethod = 'cash' | 'gcash' | 'split';
@@ -122,6 +123,7 @@ export type Transaction = {
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
     third_party_payment: string | number | null;
+    disbursement_source?: 'cash' | 'gcash' | null;
     ddn_amount: string | number | null;
     employee_share: string | number | null;
     notes: string | null;

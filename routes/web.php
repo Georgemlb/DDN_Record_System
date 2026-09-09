@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\FlightPortalDepositController;
+use App\Http\Controllers\GcashLedgerController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
@@ -45,6 +46,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('portal-deposits/{deposit}', [FlightPortalDepositController::class, 'update'])->name('portal-deposits.update');
         Route::post('portal-deposits/{deposit}/move', [FlightPortalDepositController::class, 'move'])->name('portal-deposits.move');
         Route::delete('portal-deposits/{deposit}', [FlightPortalDepositController::class, 'destroy'])->name('portal-deposits.destroy');
+
+        // GCash Ledger
+        Route::get('gcash-ledger', [GcashLedgerController::class, 'index'])->name('gcash-ledger.index');
+        Route::post('gcash-ledger/adjustment', [GcashLedgerController::class, 'storeAdjustment'])->name('gcash-ledger.adjustment');
+        Route::put('gcash-ledger/{entry}', [GcashLedgerController::class, 'update'])->name('gcash-ledger.update');
+        Route::post('gcash-ledger/{entry}/reorder', [GcashLedgerController::class, 'reorder'])->name('gcash-ledger.reorder');
+        Route::post('gcash-ledger/{entry}/move', [GcashLedgerController::class, 'move'])->name('gcash-ledger.move');
+        Route::delete('gcash-ledger/{entry}', [GcashLedgerController::class, 'destroy'])->name('gcash-ledger.destroy');
     });
 
     Route::middleware('can:view-reports')->group(function () {

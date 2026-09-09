@@ -40,6 +40,12 @@ class ReportController extends Controller
             ->orderByDesc('settlement_date')
             ->value('actual_cash') ?? 0);
 
+        $suggestedOpeningGcash = (float) (DailySettlement::query()
+            ->where('status', DailySettlement::STATUS_CLOSED)
+            ->whereNotNull('actual_gcash')
+            ->orderByDesc('settlement_date')
+            ->value('actual_gcash') ?? 0);
+
         $settlementHistory = DailySettlement::query()
             ->with(['user', 'closedByUser'])
             ->orderByDesc('settlement_date')
@@ -58,6 +64,7 @@ class ReportController extends Controller
                 'todaySettlement' => $todaySettlement,
                 'todayDraftMetrics' => $todayDraftMetrics,
                 'suggestedOpeningFloat' => $suggestedOpeningFloat,
+                'suggestedOpeningGcash' => $suggestedOpeningGcash,
                 'history' => $settlementHistory,
                 'todayDate' => $todayDate,
             ],
@@ -79,6 +86,7 @@ class ReportController extends Controller
     {
         $validated = $request->validate([
             'opening_cash' => ['required', 'numeric', 'min:0'],
+            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
             'settlement_date' => ['nullable', 'date'],
         ]);
 
@@ -92,6 +100,7 @@ class ReportController extends Controller
         }
 
         $openingCash = (float) $validated['opening_cash'];
+        $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
         $metrics = DailySettlement::calculateMetricsForDate($date);
 
         $settlement = DailySettlement::query()->create([
@@ -102,6 +111,10 @@ class ReportController extends Controller
             'cash_in' => $metrics['cash_in'],
             'cash_out' => $metrics['cash_out'],
             'expected_cash' => round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2),
+            'opening_gcash' => $openingGcash,
+            'gcash_in' => $metrics['gcash_in'],
+            'gcash_out' => $metrics['gcash_out'],
+            'expected_gcash' => round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2),
             'total_gcash' => $metrics['total_gcash'],
             'total_bank_transfer' => $metrics['total_bank_transfer'],
             'total_sales' => $metrics['total_sales'],
@@ -124,13 +137,18 @@ class ReportController extends Controller
     {
         $validated = $request->validate([
             'opening_cash' => ['required', 'numeric', 'min:0'],
+            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
             'actual_cash' => ['nullable', 'numeric', 'min:0'],
+            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
             'status' => ['required', 'string', 'in:'.DailySettlement::STATUS_OPEN.','.DailySettlement::STATUS_CLOSED],
             'notes' => ['nullable', 'string', 'max:1000'],
             'sync_metrics' => ['nullable', 'boolean'],
         ]);
 
         $settlement->opening_cash = (float) $validated['opening_cash'];
+        if (array_key_exists('opening_gcash', $validated)) {
+            $settlement->opening_gcash = (float) ($validated['opening_gcash'] ?? 0);
+        }
         $settlement->notes = $validated['notes'] ?? null;
         $newStatus = $validated['status'];
 
@@ -138,6 +156,7 @@ class ReportController extends Controller
             $settlement->syncMetricsWithRecords();
         } else {
             $settlement->expected_cash = round((float) $settlement->opening_cash + (float) $settlement->cash_in - (float) $settlement->cash_out, 2);
+            $settlement->expected_gcash = round((float) ($settlement->opening_gcash ?? 0) + (float) ($settlement->gcash_in ?? 0) - (float) ($settlement->gcash_out ?? 0), 2);
         }
 
         if ($newStatus === DailySettlement::STATUS_CLOSED) {
@@ -147,6 +166,13 @@ class ReportController extends Controller
 
             $settlement->actual_cash = $actualCash;
             $settlement->discrepancy = round($actualCash - (float) $settlement->expected_cash, 2);
+
+            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                $actualGcash = (float) $validated['actual_gcash'];
+                $settlement->actual_gcash = $actualGcash;
+                $settlement->gcash_discrepancy = round($actualGcash - (float) $settlement->expected_gcash, 2);
+            }
+
             $settlement->status = DailySettlement::STATUS_CLOSED;
             if (! $settlement->closed_at) {
                 $settlement->closed_at = now();
@@ -159,6 +185,10 @@ class ReportController extends Controller
             if ($validated['actual_cash'] !== null) {
                 $settlement->actual_cash = (float) $validated['actual_cash'];
                 $settlement->discrepancy = round((float) $settlement->actual_cash - (float) $settlement->expected_cash, 2);
+            }
+            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                $settlement->actual_gcash = (float) $validated['actual_gcash'];
+                $settlement->gcash_discrepancy = round((float) $settlement->actual_gcash - (float) $settlement->expected_gcash, 2);
             }
         }
 
@@ -179,11 +209,15 @@ class ReportController extends Controller
     {
         $validated = $request->validate([
             'actual_cash' => ['required', 'numeric', 'min:0'],
+            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $actualCash = (float) $validated['actual_cash'];
         $settlement->actual_cash = $actualCash;
+        if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+            $settlement->actual_gcash = (float) $validated['actual_gcash'];
+        }
         $settlement->syncMetricsWithRecords();
 
         $settlement->status = DailySettlement::STATUS_CLOSED;

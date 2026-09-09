@@ -2,11 +2,16 @@
 import { Form, Link } from '@inertiajs/vue3';
 import {
     AlertCircle,
+    ArrowDownLeft,
+    ArrowUpRight,
+    Building2,
     Calculator,
     CheckCircle,
     Clock,
     Info,
     Ship,
+    Smartphone,
+    Wallet,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
@@ -123,6 +128,36 @@ const thirdPartyPayment = ref<number | string>(
     props.transaction?.third_party_payment ?? '0.00',
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
+
+const disbursementSource = ref<'gcash' | 'cash'>(
+    props.transaction?.disbursement_source === 'cash' ? 'cash' : 'gcash',
+);
+
+const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
+    props.transaction?.service_details === 'GCASH_CASH_IN'
+        ? 'GCASH_CASH_IN'
+        : 'GCASH_CASH_OUT',
+);
+
+const remittanceFee = ref<number | string>(
+    props.transaction?.ddn_amount !== null && props.transaction?.ddn_amount !== undefined
+        ? props.transaction.ddn_amount
+        : (props.transaction?.third_party_payment ?? '0.00'),
+);
+
+watch(
+    [formType, remittanceDirection],
+    () => {
+        if (formType.value === 'remittance') {
+            paymentStatus.value = 'paid';
+            paymentMethod.value =
+                remittanceDirection.value === 'GCASH_CASH_OUT'
+                    ? 'gcash'
+                    : 'cash';
+        }
+    },
+    { immediate: true },
+);
 
 // Auto-calculation for Airline & Ferry Markups
 const calculatePortalCost = () => {
@@ -286,6 +321,12 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 
     if (selected) {
         amount.value = selected.price;
+        const nameLower = selected.name.toLowerCase();
+        if (nameLower.includes('police')) {
+            thirdPartyPayment.value = 180;
+        } else if (nameLower.includes('nbi')) {
+            thirdPartyPayment.value = 160;
+        }
     }
 };
 
@@ -499,16 +540,20 @@ const computedTranslationOrPsaDdnAmount = computed(() => {
     return Math.max(0, numAmount.value - numThirdParty.value);
 });
 
+const computedOnlineNetMargin = computed(() => {
+    return Math.max(0, numAmount.value - numThirdParty.value);
+});
+
 const computedOnlineDdnShare = computed(() => {
     const ddnRate = props.ddnSplitConfig?.ddn ?? 0.6;
 
-    return numAmount.value * ddnRate;
+    return computedOnlineNetMargin.value * ddnRate;
 });
 
 const computedOnlineEmployeeShare = computed(() => {
     const empRate = props.ddnSplitConfig?.employee ?? 0.4;
 
-    return numAmount.value * empRate;
+    return computedOnlineNetMargin.value * empRate;
 });
 
 function onCustomerInput() {
@@ -614,6 +659,30 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             name="online_assistance_type_id"
             :value="onlineAssistanceTypeId"
         />
+        <input
+            v-if="formType === 'online_assistance' || formType === 'translation' || formType === 'psa'"
+            type="hidden"
+            name="disbursement_source"
+            :value="disbursementSource"
+        />
+        <input
+            v-if="formType === 'online_assistance'"
+            type="hidden"
+            name="third_party_payment"
+            :value="thirdPartyPayment"
+        />
+        <input
+            v-if="formType === 'remittance'"
+            type="hidden"
+            name="service_details"
+            :value="remittanceDirection"
+        />
+        <input
+            v-if="formType === 'remittance'"
+            type="hidden"
+            name="third_party_payment"
+            :value="remittanceFee"
+        />
 
         <div class="grid gap-6 md:grid-cols-2">
             <!-- 1. Transaction Type Selector -->
@@ -636,6 +705,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         <SelectItem value="psa"> PSA Assistance </SelectItem>
                         <SelectItem value="online_assistance">
                             Online Assistance
+                        </SelectItem>
+                        <SelectItem value="remittance">
+                            GCash Remittance / Cash Exchange
                         </SelectItem>
                         <SelectItem value="printing"> Printing </SelectItem>
                     </SelectContent>
@@ -711,7 +783,23 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </div>
 
             <!-- 4. Payment Status (Paid / Downpayment / Unpaid) -->
-            <div class="grid gap-2 md:col-span-2">
+            <div
+                v-if="formType === 'remittance'"
+                class="rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 flex items-center justify-between dark:bg-blue-950/20"
+            >
+                <div class="flex items-center gap-2">
+                    <Smartphone class="size-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>
+                        <strong class="font-semibold text-foreground">Remittance Flow:</strong>
+                        {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)' : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)' }}
+                    </span>
+                </div>
+                <span class="rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 font-medium text-[11px] shrink-0">
+                    Settles Immediately (Paid)
+                </span>
+            </div>
+
+            <div v-if="formType !== 'remittance'" class="grid gap-2 md:col-span-2">
                 <Label>Payment Status</Label>
                 <div class="grid grid-cols-3 gap-2">
                     <button
@@ -800,7 +888,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </template>
 
             <!-- 4. Payment Method -->
-            <div class="grid gap-2 md:col-span-2">
+            <div v-if="formType !== 'remittance'" class="grid gap-2 md:col-span-2">
                 <Label for="payment_method_select">Payment method</Label>
                 <Select v-model="paymentMethod">
                     <SelectTrigger id="payment_method_select" class="w-full">
@@ -1521,9 +1609,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.online_assistance_type_id" />
                 </div>
 
-                <div class="grid gap-2 md:col-span-2">
+                <div class="grid gap-2">
                     <Label for="amount"
-                        >Total Price / Customer Payment (PHP)</Label
+                        >Customer Payment (PHP)</Label
                     >
                     <Input
                         id="amount"
@@ -1536,21 +1624,107 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         required
                         placeholder="0.00"
                     />
+                    <p class="text-xs text-muted-foreground">
+                        Total fee collected from the customer.
+                    </p>
                     <InputError :message="errors.amount" />
                 </div>
 
-                <!-- 60/40 Split Calculation Preview -->
+                <div class="grid gap-2">
+                    <Label for="third_party_payment"
+                        >Government / Third-Party Fee (PHP)</Label
+                    >
+                    <Input
+                        id="third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (e.g. 180.00 for Police Clearance)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Official fee paid to agency (Police, NBI, DFA, etc.).
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Disbursement Source Selector (GCash vs Cash) -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label>Government Fee Disbursed From</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="disbursementSource = 'gcash'"
+                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                            :class="
+                                disbursementSource === 'gcash'
+                                    ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <Smartphone class="size-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>GCash Wallet (Auto-deducted from Ledger)</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="disbursementSource = 'cash'"
+                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                            :class="
+                                disbursementSource === 'cash'
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <Wallet class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>Cash Drawer (Drawer Cash Outflow)</span>
+                        </button>
+                    </div>
+                    <p v-if="numThirdParty > 0 && disbursementSource === 'gcash'" class="text-[11px] text-blue-600 dark:text-blue-400">
+                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically deducted from your live GCash Ledger wallet balance.
+                    </p>
+                </div>
+
+                <!-- Net Margin & 60/40 Split Calculation Preview -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
                     >
-                        <Calculator class="size-4" />
-                        <span>Automatic 60/40 Revenue Split</span>
+                        <div class="flex items-center gap-2">
+                            <Calculator class="size-4" />
+                            <span>Net Service Margin & 60/40 Revenue Split</span>
+                        </div>
+                        <span class="text-xs font-normal text-muted-foreground">
+                            Office 60% / Employee 40%
+                        </span>
                     </div>
+
+                    <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground">Customer Paid</span>
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground">Gov / Portal Fee</span>
+                            <p class="font-semibold text-blue-600 dark:text-blue-400">
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground">Net Margin</span>
+                            <p class="font-semibold text-emerald-600 dark:text-emerald-400">
+                                {{ formatPhp(computedOnlineNetMargin) }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2">
                         <div class="rounded-md border bg-card p-3">
                             <p class="text-xs text-muted-foreground">
-                                DDN Share (60%)
+                                DDN Office Share (60%)
                             </p>
                             <p class="mt-1 text-lg font-bold text-primary">
                                 {{ formatPhp(computedOnlineDdnShare) }}
@@ -1558,20 +1732,150 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         </div>
                         <div class="rounded-md border bg-card p-3">
                             <p class="text-xs text-muted-foreground">
-                                Employee Share (40%)
+                                Employee Cut (40%)
                             </p>
-                            <p class="mt-1 text-lg font-bold">
+                            <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
                                 {{ formatPhp(computedOnlineEmployeeShare) }}
                             </p>
                         </div>
                     </div>
                     <p
-                        class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+                        class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                     >
                         <Info class="size-3.5 shrink-0" />
-                        Shares are automatically calculated from the total price
-                        upon saving.
+                        Shares are computed from the net margin (Customer Payment minus Government Fee).
                     </p>
+                </div>
+            </template>
+
+            <!-- REMITTANCE / CASH EXCHANGE -->
+            <template v-if="formType === 'remittance'">
+                <!-- Direction selector -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label>Remittance Direction</Label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            @click="remittanceDirection = 'GCASH_CASH_OUT'"
+                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-200'
+                                    : 'border-input hover:bg-muted text-muted-foreground'
+                            "
+                        >
+                            <div class="flex items-center gap-2 font-semibold text-foreground">
+                                <ArrowDownLeft class="size-4 text-blue-600 dark:text-blue-400" />
+                                <span>GCash Cash-Out</span>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Customer sends GCash (+GCash) → Staff dispenses physical cash (-Drawer Cash)
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="remittanceDirection = 'GCASH_CASH_IN'"
+                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_IN'
+                                    ? 'border-emerald-600 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200'
+                                    : 'border-input hover:bg-muted text-muted-foreground'
+                            "
+                        >
+                            <div class="flex items-center gap-2 font-semibold text-foreground">
+                                <ArrowUpRight class="size-4 text-emerald-600 dark:text-emerald-400" />
+                                <span>GCash Cash-In</span>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Customer gives physical cash (+Drawer Cash) → Staff sends from GCash wallet (-GCash)
+                            </p>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Principal Amount & Fee -->
+                <div class="grid gap-2">
+                    <Label for="remittance_amount">Remittance Principal Amount (PHP)</Label>
+                    <Input
+                        id="remittance_amount"
+                        name="amount"
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="amount"
+                        required
+                        placeholder="e.g. 350.00"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Principal amount being converted / transferred.
+                    </p>
+                    <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="remittance_fee">Agency Service Fee (PHP)</Label>
+                    <Input
+                        id="remittance_fee"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="remittanceFee"
+                        placeholder="0.00 (Optional service charge)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Office commission for remittance processing.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Dual Cash Drawer & GCash Wallet Flow Preview Card -->
+                <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2 space-y-3">
+                    <div class="flex items-center gap-2 text-sm font-semibold text-primary">
+                        <Calculator class="size-4" />
+                        <span>Simultaneous Dual Movement Preview</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div class="rounded-md border bg-card p-3 space-y-1">
+                            <div class="flex items-center gap-1.5 font-medium text-muted-foreground">
+                                <Wallet class="size-3.5" />
+                                <span>Physical Cash Drawer</span>
+                            </div>
+                            <p
+                                class="text-base font-bold"
+                                :class="remittanceDirection === 'GCASH_CASH_OUT' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
+                            >
+                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? '-' : '+' }}{{ formatPhp(numAmount) }}
+                            </p>
+                            <p class="text-[11px] text-muted-foreground">
+                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Outflow: Dispensed out to customer' : 'Inflow: Cash collected into drawer' }}
+                            </p>
+                        </div>
+
+                        <div class="rounded-md border bg-card p-3 space-y-1">
+                            <div class="flex items-center gap-1.5 font-medium text-muted-foreground">
+                                <Smartphone class="size-3.5 text-blue-500" />
+                                <span>GCash Ledger Wallet</span>
+                            </div>
+                            <p
+                                class="text-base font-bold"
+                                :class="remittanceDirection === 'GCASH_CASH_OUT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                            >
+                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? '+' : '-' }}{{ formatPhp(numAmount) }}
+                            </p>
+                            <p class="text-[11px] text-muted-foreground">
+                                {{ remittanceDirection === 'GCASH_CASH_OUT' ? 'Inflow: Received in GCash account' : 'Outflow: Transferred from GCash wallet' }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-if="Number(remittanceFee) > 0" class="flex items-center justify-between border-t pt-2 text-xs">
+                        <span class="text-muted-foreground font-medium">DDN Agency Service Fee Earning:</span>
+                        <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ formatPhp(Number(remittanceFee)) }}</span>
+                    </div>
                 </div>
             </template>
 

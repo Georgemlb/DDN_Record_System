@@ -63,6 +63,7 @@ use Illuminate\Support\Carbon;
     'cash_amount',
     'gcash_amount',
     'third_party_payment',
+    'disbursement_source',
     'ddn_amount',
     'employee_share',
     'notes',
@@ -86,6 +87,8 @@ class Transaction extends Model
 
     public const TYPE_PRINTING = 'printing';
 
+    public const TYPE_REMITTANCE = 'remittance';
+
     public const TYPES = [
         self::TYPE_AIRLINE,
         self::TYPE_FERRY,
@@ -93,6 +96,22 @@ class Transaction extends Model
         self::TYPE_PSA,
         self::TYPE_ONLINE_ASSISTANCE,
         self::TYPE_PRINTING,
+        self::TYPE_REMITTANCE,
+    ];
+
+    public const DISBURSEMENT_SOURCE_CASH = 'cash';
+
+    public const DISBURSEMENT_SOURCE_GCASH = 'gcash';
+
+    public const DISBURSEMENT_SOURCE_FLIGHT_PORTAL = 'flight_portal';
+
+    public const DISBURSEMENT_SOURCE_NONE = 'none';
+
+    public const DISBURSEMENT_SOURCES = [
+        self::DISBURSEMENT_SOURCE_CASH,
+        self::DISBURSEMENT_SOURCE_GCASH,
+        self::DISBURSEMENT_SOURCE_FLIGHT_PORTAL,
+        self::DISBURSEMENT_SOURCE_NONE,
     ];
 
     public const TRIP_TYPE_ONE_WAY = 'one_way';

@@ -15,6 +15,7 @@ import {
     Receipt,
     RefreshCw,
     RotateCcw,
+    Smartphone,
     TrendingDown,
     TrendingUp,
     Wallet,
@@ -131,11 +132,13 @@ const settlementToReopen = ref<DailySettlement | null>(null);
 // Start Day Form
 const startForm = useForm({
     opening_cash: props.dailySettlements.suggestedOpeningFloat || 0,
+    opening_gcash: props.dailySettlements.suggestedOpeningGcash || 0,
     settlement_date: props.dailySettlements.todayDate,
 });
 
 const openStartDayModal = () => {
     startForm.opening_cash = props.dailySettlements.suggestedOpeningFloat || 0;
+    startForm.opening_gcash = props.dailySettlements.suggestedOpeningGcash || 0;
     startForm.settlement_date = props.dailySettlements.todayDate;
     startForm.clearErrors();
     isStartModalOpen.value = true;
@@ -153,6 +156,7 @@ const submitStartDay = () => {
 // Close Day Form (Handles today or any historical open record)
 const closeForm = useForm({
     actual_cash: '',
+    actual_gcash: '',
     notes: '',
 });
 
@@ -160,6 +164,7 @@ const openCloseDayModal = (settlement?: DailySettlement | null) => {
     settlementToClose.value =
         settlement || props.dailySettlements.todaySettlement || null;
     closeForm.actual_cash = '';
+    closeForm.actual_gcash = '';
     closeForm.notes = '';
     closeForm.clearErrors();
     isCloseModalOpen.value = true;
@@ -185,6 +190,18 @@ const currentExpectedCash = computed(() => {
         : s.expected_cash;
 });
 
+const currentExpectedGcash = computed(() => {
+    const s = activeSettlementToClose.value;
+
+    if (!s) {
+        return 0;
+    }
+
+    return typeof s.expected_gcash === 'string'
+        ? parseFloat(s.expected_gcash)
+        : (s.expected_gcash ?? 0);
+});
+
 const liveClosingDiscrepancy = computed(() => {
     if (closeForm.actual_cash === '' || isNaN(Number(closeForm.actual_cash))) {
         return null;
@@ -193,6 +210,16 @@ const liveClosingDiscrepancy = computed(() => {
     const actual = parseFloat(closeForm.actual_cash);
 
     return actual - currentExpectedCash.value;
+});
+
+const liveClosingGcashDiscrepancy = computed(() => {
+    if (closeForm.actual_gcash === '' || closeForm.actual_gcash === null || isNaN(Number(closeForm.actual_gcash))) {
+        return null;
+    }
+
+    const actual = parseFloat(String(closeForm.actual_gcash));
+
+    return actual - currentExpectedGcash.value;
 });
 
 const submitCloseDay = () => {
@@ -215,6 +242,8 @@ const submitCloseDay = () => {
 const editForm = useForm({
     opening_cash: 0,
     actual_cash: '' as string | number,
+    opening_gcash: 0,
+    actual_gcash: '' as string | number,
     status: 'open' as 'open' | 'closed',
     notes: '',
     sync_metrics: true,
@@ -230,6 +259,14 @@ const openEditModal = (settlement: DailySettlement) => {
     editForm.actual_cash =
         settlement.actual_cash !== null && settlement.actual_cash !== undefined
             ? settlement.actual_cash
+            : '';
+    editForm.opening_gcash =
+        typeof settlement.opening_gcash === 'string'
+            ? parseFloat(settlement.opening_gcash)
+            : (settlement.opening_gcash ?? 0);
+    editForm.actual_gcash =
+        settlement.actual_gcash !== null && settlement.actual_gcash !== undefined
+            ? settlement.actual_gcash
             : '';
     editForm.status = settlement.status as 'open' | 'closed';
     editForm.notes = settlement.notes || '';
@@ -263,6 +300,34 @@ const computedEditDiscrepancy = computed(() => {
     const actual = Number(editForm.actual_cash);
 
     return Math.round((actual - computedEditExpectedCash.value) * 100) / 100;
+});
+
+const computedEditExpectedGcash = computed(() => {
+    if (!settlementToEdit.value) {
+        return 0;
+    }
+
+    const opening = Number(editForm.opening_gcash) || 0;
+    const gcashIn =
+        typeof settlementToEdit.value.gcash_in === 'string'
+            ? parseFloat(settlementToEdit.value.gcash_in)
+            : (settlementToEdit.value.gcash_in || 0);
+    const gcashOut =
+        typeof settlementToEdit.value.gcash_out === 'string'
+            ? parseFloat(settlementToEdit.value.gcash_out)
+            : (settlementToEdit.value.gcash_out || 0);
+
+    return Math.round((opening + (gcashIn || 0) - (gcashOut || 0)) * 100) / 100;
+});
+
+const computedEditGcashDiscrepancy = computed(() => {
+    if (editForm.actual_gcash === '' || isNaN(Number(editForm.actual_gcash))) {
+        return null;
+    }
+
+    const actual = Number(editForm.actual_gcash);
+
+    return Math.round((actual - computedEditExpectedGcash.value) * 100) / 100;
 });
 
 const submitEditSettlement = () => {
@@ -802,6 +867,38 @@ const calculateExpenseSharePct = (amount: number): string => {
                         </div>
                     </div>
 
+                    <!-- Live GCash Wallet Calculation Cards -->
+                    <div class="mt-4">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <Smartphone class="size-3.5 text-blue-500" />
+                                <span>GCash Wallet Live Reconciliation</span>
+                            </h4>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs font-medium text-muted-foreground">1. Opening GCash</p>
+                                <p class="mt-2 text-xl font-semibold tracking-tight">{{ formatPhp(dailySettlements.todaySettlement.opening_gcash ?? 0) }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Starting GCash balance</p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs font-medium text-muted-foreground">2. GCash In</p>
+                                <p class="mt-2 text-xl font-semibold tracking-tight text-emerald-600 dark:text-emerald-400">+{{ formatPhp(dailySettlements.todaySettlement.gcash_in ?? 0) }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Cash-outs & customer payments</p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs font-medium text-muted-foreground">3. GCash Out</p>
+                                <p class="mt-2 text-xl font-semibold tracking-tight text-rose-600 dark:text-rose-400">-{{ formatPhp(dailySettlements.todaySettlement.gcash_out ?? 0) }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Cash-ins & gov fees disbursed</p>
+                            </div>
+                            <div class="rounded-lg border-2 border-blue-500/40 bg-blue-500/5 p-4">
+                                <p class="text-xs font-medium text-blue-600 dark:text-blue-400">4. Expected GCash Balance</p>
+                                <p class="mt-2 text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">{{ formatPhp(dailySettlements.todaySettlement.expected_gcash ?? 0) }}</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Opening + In - Out</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Digital Collections Strip -->
                     <div
                         class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3 text-xs"
@@ -874,7 +971,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                                 </span>
                             </div>
                             <h2 class="text-xl font-semibold tracking-tight">
-                                Today's Cash Settlement Complete
+                                Today's Settlement Complete
                             </h2>
                         </div>
 
@@ -917,68 +1014,111 @@ const calculateExpenseSharePct = (amount: number): string => {
                         </div>
                     </div>
 
-                    <!-- Final Reconciliation Figures -->
-                    <div class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Opening Float
-                            </p>
-                            <p class="mt-1 text-lg font-semibold">
-                                {{
-                                    formatPhp(
-                                        dailySettlements.todaySettlement
-                                            .opening_cash,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Expected Cash
-                            </p>
-                            <p class="mt-1 text-lg font-semibold">
-                                {{
-                                    formatPhp(
-                                        dailySettlements.todaySettlement
-                                            .expected_cash,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Actual Cash Counted
-                            </p>
-                            <p class="mt-1 text-lg font-semibold text-primary">
-                                {{
-                                    formatPhp(
-                                        dailySettlements.todaySettlement
-                                            .actual_cash,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Discrepancy (Over/Short)
-                            </p>
-                            <div class="mt-1">
-                                <Badge
-                                    :variant="
-                                        formatDiscrepancy(
-                                            dailySettlements.todaySettlement
-                                                .discrepancy,
-                                        ).variant
-                                    "
-                                    class="text-xs"
-                                >
+                    <!-- Final Cash Reconciliation Figures -->
+                    <div class="mt-6">
+                        <h4 class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Wallet class="size-3.5 text-primary" />
+                            <span>Cash Drawer Reconciled</span>
+                        </h4>
+                        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Opening Float
+                                </p>
+                                <p class="mt-1 text-lg font-semibold">
                                     {{
-                                        formatDiscrepancy(
+                                        formatPhp(
                                             dailySettlements.todaySettlement
-                                                .discrepancy,
-                                        ).label
+                                                .opening_cash,
+                                        )
                                     }}
-                                </Badge>
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Expected Cash
+                                </p>
+                                <p class="mt-1 text-lg font-semibold">
+                                    {{
+                                        formatPhp(
+                                            dailySettlements.todaySettlement
+                                                .expected_cash,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Actual Cash Counted
+                                </p>
+                                <p class="mt-1 text-lg font-semibold text-primary">
+                                    {{
+                                        formatPhp(
+                                            dailySettlements.todaySettlement
+                                                .actual_cash,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Discrepancy (Over/Short)
+                                </p>
+                                <div class="mt-1">
+                                    <Badge
+                                        :variant="
+                                            formatDiscrepancy(
+                                                dailySettlements.todaySettlement
+                                                    .discrepancy,
+                                            ).variant
+                                        "
+                                        class="text-xs"
+                                    >
+                                        {{
+                                            formatDiscrepancy(
+                                                dailySettlements.todaySettlement
+                                                    .discrepancy,
+                                        ).label
+                                        }}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Final GCash Wallet Reconciliation Figures -->
+                    <div class="mt-4">
+                        <h4 class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Smartphone class="size-3.5 text-blue-500" />
+                            <span>GCash Wallet Reconciled</span>
+                        </h4>
+                        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">Opening GCash</p>
+                                <p class="mt-1 text-lg font-semibold">{{ formatPhp(dailySettlements.todaySettlement.opening_gcash ?? 0) }}</p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">Expected GCash</p>
+                                <p class="mt-1 text-lg font-semibold">{{ formatPhp(dailySettlements.todaySettlement.expected_gcash ?? 0) }}</p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">Actual GCash Counted</p>
+                                <p class="mt-1 text-lg font-semibold text-blue-600 dark:text-blue-400">
+                                    {{ dailySettlements.todaySettlement.actual_gcash !== null ? formatPhp(dailySettlements.todaySettlement.actual_gcash) : '—' }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-card p-4">
+                                <p class="text-xs text-muted-foreground">GCash Discrepancy</p>
+                                <div class="mt-1">
+                                    <Badge
+                                        v-if="dailySettlements.todaySettlement.gcash_discrepancy !== null"
+                                        :variant="formatDiscrepancy(dailySettlements.todaySettlement.gcash_discrepancy).variant"
+                                        class="text-xs"
+                                    >
+                                        {{ formatDiscrepancy(dailySettlements.todaySettlement.gcash_discrepancy).label }}
+                                    </Badge>
+                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1017,16 +1157,16 @@ const calculateExpenseSharePct = (amount: number): string => {
                                     <th class="p-4 font-medium">Date</th>
                                     <th class="p-4 font-medium">Status</th>
                                     <th class="p-4 text-right font-medium">
-                                        Opening Float
-                                    </th>
-                                    <th class="p-4 text-right font-medium">
-                                        Expected Cash
-                                    </th>
-                                    <th class="p-4 text-right font-medium">
-                                        Actual Counted
+                                        Drawer (Exp / Act)
                                     </th>
                                     <th class="p-4 text-center font-medium">
-                                        Discrepancy
+                                        Cash Diff
+                                    </th>
+                                    <th class="p-4 text-right font-medium">
+                                        GCash (Exp / Act)
+                                    </th>
+                                    <th class="p-4 text-center font-medium">
+                                        GCash Diff
                                     </th>
                                     <th class="p-4 font-medium">
                                         Cashier / Closed By
@@ -1056,14 +1196,14 @@ const calculateExpenseSharePct = (amount: number): string => {
                                     :key="item.id"
                                     class="transition-colors hover:bg-muted/30"
                                 >
-                                    <td class="p-4 font-medium">
+                                    <td class="p-4 font-medium whitespace-nowrap">
                                         {{
                                             formatTransactionDate(
                                                 item.settlement_date,
                                             )
                                         }}
                                     </td>
-                                    <td class="p-4">
+                                    <td class="p-4 whitespace-nowrap">
                                         <Badge
                                             :variant="
                                                 item.status === 'open'
@@ -1075,22 +1215,17 @@ const calculateExpenseSharePct = (amount: number): string => {
                                             {{ item.status }}
                                         </Badge>
                                     </td>
-                                    <td class="p-4 text-right font-mono">
-                                        {{ formatPhp(item.opening_cash) }}
+                                    <!-- Cash Drawer (Expected / Actual) -->
+                                    <td class="p-4 text-right font-mono whitespace-nowrap">
+                                        <div class="font-medium text-foreground">
+                                            {{ item.actual_cash !== null ? formatPhp(item.actual_cash) : '—' }}
+                                        </div>
+                                        <div class="text-[11px] text-muted-foreground">
+                                            Exp: {{ formatPhp(item.expected_cash) }}
+                                        </div>
                                     </td>
-                                    <td class="p-4 text-right font-mono">
-                                        {{ formatPhp(item.expected_cash) }}
-                                    </td>
-                                    <td
-                                        class="p-4 text-right font-mono font-medium"
-                                    >
-                                        {{
-                                            item.actual_cash !== null
-                                                ? formatPhp(item.actual_cash)
-                                                : '—'
-                                        }}
-                                    </td>
-                                    <td class="p-4 text-center">
+                                    <!-- Cash Discrepancy -->
+                                    <td class="p-4 text-center whitespace-nowrap">
                                         <Badge
                                             v-if="item.status === 'closed'"
                                             :variant="
@@ -1106,6 +1241,43 @@ const calculateExpenseSharePct = (amount: number): string => {
                                                 ).label
                                             }}
                                         </Badge>
+                                        <span
+                                            v-else
+                                            class="text-xs text-muted-foreground"
+                                            >In Progress</span
+                                        >
+                                    </td>
+                                    <!-- GCash (Expected / Actual) -->
+                                    <td class="p-4 text-right font-mono whitespace-nowrap">
+                                        <div class="font-medium text-foreground">
+                                            {{ item.actual_gcash !== null && item.actual_gcash !== undefined ? formatPhp(item.actual_gcash) : '—' }}
+                                        </div>
+                                        <div class="text-[11px] text-muted-foreground">
+                                            Exp: {{ formatPhp(item.expected_gcash ?? 0) }}
+                                        </div>
+                                    </td>
+                                    <!-- GCash Discrepancy -->
+                                    <td class="p-4 text-center whitespace-nowrap">
+                                        <Badge
+                                            v-if="item.status === 'closed' && item.gcash_discrepancy !== null && item.gcash_discrepancy !== undefined"
+                                            :variant="
+                                                formatDiscrepancy(
+                                                    item.gcash_discrepancy,
+                                                ).variant
+                                            "
+                                            class="text-xs"
+                                        >
+                                            {{
+                                                formatDiscrepancy(
+                                                    item.gcash_discrepancy,
+                                                ).label
+                                            }}
+                                        </Badge>
+                                        <span
+                                            v-else-if="item.status === 'closed'"
+                                            class="text-xs text-muted-foreground"
+                                            >—</span
+                                        >
                                         <span
                                             v-else
                                             class="text-xs text-muted-foreground"
@@ -1621,34 +1793,64 @@ const calculateExpenseSharePct = (amount: number): string => {
                 </DialogHeader>
 
                 <form @submit.prevent="submitStartDay" class="space-y-4">
-                    <div class="space-y-2">
-                        <Label for="opening_cash">
-                            Opening Cash Float (₱)
-                        </Label>
-                        <Input
-                            id="opening_cash"
-                            v-model="startForm.opening_cash"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            required
-                            autofocus
-                        />
-                        <p class="text-xs text-muted-foreground">
-                            Suggested based on previous day's closing cash:
-                            <span class="font-medium text-foreground">{{
-                                formatPhp(
-                                    dailySettlements.suggestedOpeningFloat,
-                                )
-                            }}</span>
-                        </p>
-                        <p
-                            v-if="startForm.errors.opening_cash"
-                            class="text-xs text-destructive"
-                        >
-                            {{ startForm.errors.opening_cash }}
-                        </p>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-2">
+                            <Label for="opening_cash">
+                                Opening Cash Float (₱)
+                            </Label>
+                            <Input
+                                id="opening_cash"
+                                v-model="startForm.opening_cash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                required
+                                autofocus
+                            />
+                            <p class="text-xs text-muted-foreground">
+                                Suggested drawer cash:
+                                <span class="font-medium text-foreground">{{
+                                    formatPhp(
+                                        dailySettlements.suggestedOpeningFloat,
+                                    )
+                                }}</span>
+                            </p>
+                            <p
+                                v-if="startForm.errors.opening_cash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ startForm.errors.opening_cash }}
+                            </p>
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="opening_gcash">
+                                Opening GCash Balance (₱)
+                            </Label>
+                            <Input
+                                id="opening_gcash"
+                                v-model="startForm.opening_gcash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                            />
+                            <p class="text-xs text-muted-foreground">
+                                Suggested GCash balance:
+                                <span class="font-medium text-foreground">{{
+                                    formatPhp(
+                                        dailySettlements.suggestedOpeningGcash ?? 0,
+                                    )
+                                }}</span>
+                            </p>
+                            <p
+                                v-if="startForm.errors.opening_gcash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ startForm.errors.opening_gcash }}
+                            </p>
+                        </div>
                     </div>
 
                     <DialogFooter class="mt-6">
@@ -1683,8 +1885,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                         }})
                     </DialogTitle>
                     <DialogDescription>
-                        Perform physical cash count and reconcile the cash
-                        drawer for
+                        Count drawer cash and check GCash app balance to reconcile
                         {{
                             activeSettlementToClose
                                 ? formatTransactionDate(
@@ -1696,92 +1897,106 @@ const calculateExpenseSharePct = (amount: number): string => {
                 </DialogHeader>
 
                 <form @submit.prevent="submitCloseDay" class="space-y-4">
-                    <!-- Expected Cash Display Box -->
-                    <div
-                        class="space-y-2 rounded-lg border bg-muted/40 p-4 text-xs"
-                    >
-                        <div class="flex justify-between">
-                            <span class="text-muted-foreground"
-                                >Opening Float:</span
-                            >
-                            <span class="font-mono">{{
-                                formatPhp(activeSettlementToClose?.opening_cash)
-                            }}</span>
+                    <!-- Cash Drawer Breakdown & Count -->
+                    <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+                        <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
+                            <Wallet class="size-4" />
+                            <span>1. Cash Drawer Count & Reconciliation</span>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-muted-foreground"
-                                >Cash In (Sales):</span
-                            >
-                            <span
-                                class="font-mono text-emerald-600 dark:text-emerald-400"
-                                >+{{
-                                    formatPhp(activeSettlementToClose?.cash_in)
-                                }}</span
-                            >
+                        <div class="space-y-1.5 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">Opening Float:</span>
+                                <span class="font-mono">{{ formatPhp(activeSettlementToClose?.opening_cash) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">Cash In (Sales):</span>
+                                <span class="font-mono text-emerald-600 dark:text-emerald-400">+{{ formatPhp(activeSettlementToClose?.cash_in) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">Cash Out (Expenses):</span>
+                                <span class="font-mono text-rose-600 dark:text-rose-400">-{{ formatPhp(activeSettlementToClose?.cash_out) }}</span>
+                            </div>
+                            <div class="flex justify-between border-t pt-1.5 font-semibold">
+                                <span>Expected Drawer Cash:</span>
+                                <span class="font-mono text-primary">{{ formatPhp(currentExpectedCash) }}</span>
+                            </div>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-muted-foreground"
-                                >Cash Out (Expenses):</span
-                            >
-                            <span
-                                class="font-mono text-rose-600 dark:text-rose-400"
-                                >-{{
-                                    formatPhp(activeSettlementToClose?.cash_out)
-                                }}</span
-                            >
+
+                        <div class="space-y-1.5 pt-1">
+                            <Label for="actual_cash" class="text-xs font-medium">
+                                Physical Cash Counted (₱) <span class="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="actual_cash"
+                                v-model="closeForm.actual_cash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Count bills & coins in drawer"
+                                required
+                                autofocus
+                            />
+                            <p v-if="closeForm.errors.actual_cash" class="text-xs text-destructive">
+                                {{ closeForm.errors.actual_cash }}
+                            </p>
                         </div>
-                        <div
-                            class="flex justify-between border-t pt-2 text-sm font-semibold"
-                        >
-                            <span>Expected Cash in Drawer:</span>
-                            <span class="font-mono text-primary">{{
-                                formatPhp(currentExpectedCash)
-                            }}</span>
+
+                        <div v-if="liveClosingDiscrepancy !== null" class="flex items-center justify-between rounded border bg-card p-2 text-xs">
+                            <span class="text-muted-foreground">Cash Discrepancy:</span>
+                            <Badge :variant="formatDiscrepancy(liveClosingDiscrepancy).variant" class="text-xs">
+                                {{ formatDiscrepancy(liveClosingDiscrepancy).label }}
+                            </Badge>
                         </div>
                     </div>
 
-                    <!-- Actual Cash Count Input -->
-                    <div class="space-y-2">
-                        <Label for="actual_cash">
-                            Physical Cash Counted (₱)
-                        </Label>
-                        <Input
-                            id="actual_cash"
-                            v-model="closeForm.actual_cash"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Count bills & coins in drawer"
-                            required
-                            autofocus
-                        />
-                        <p
-                            v-if="closeForm.errors.actual_cash"
-                            class="text-xs text-destructive"
-                        >
-                            {{ closeForm.errors.actual_cash }}
-                        </p>
-                    </div>
+                    <!-- GCash Wallet Breakdown & Count -->
+                    <div class="space-y-3 rounded-lg border bg-blue-500/5 p-4 border-blue-500/20">
+                        <div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                            <Smartphone class="size-4" />
+                            <span>2. GCash Wallet Count & Reconciliation</span>
+                        </div>
+                        <div class="space-y-1.5 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">Opening GCash:</span>
+                                <span class="font-mono">{{ formatPhp(activeSettlementToClose?.opening_gcash ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">GCash In:</span>
+                                <span class="font-mono text-emerald-600 dark:text-emerald-400">+{{ formatPhp(activeSettlementToClose?.gcash_in ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">GCash Out:</span>
+                                <span class="font-mono text-rose-600 dark:text-rose-400">-{{ formatPhp(activeSettlementToClose?.gcash_out ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between border-t pt-1.5 font-semibold">
+                                <span>Expected GCash Balance:</span>
+                                <span class="font-mono text-blue-600 dark:text-blue-400">{{ formatPhp(currentExpectedGcash) }}</span>
+                            </div>
+                        </div>
 
-                    <!-- Live Discrepancy Indicator -->
-                    <div
-                        v-if="liveClosingDiscrepancy !== null"
-                        class="flex items-center justify-between rounded-md border p-3"
-                    >
-                        <span class="text-xs text-muted-foreground"
-                            >Discrepancy Status:</span
-                        >
-                        <Badge
-                            :variant="
-                                formatDiscrepancy(liveClosingDiscrepancy)
-                                    .variant
-                            "
-                            class="text-xs"
-                        >
-                            {{
-                                formatDiscrepancy(liveClosingDiscrepancy).label
-                            }}
-                        </Badge>
+                        <div class="space-y-1.5 pt-1">
+                            <Label for="actual_gcash" class="text-xs font-medium">
+                                Actual GCash Balance Counted (₱)
+                            </Label>
+                            <Input
+                                id="actual_gcash"
+                                v-model="closeForm.actual_gcash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Check GCash app balance"
+                            />
+                            <p v-if="closeForm.errors.actual_gcash" class="text-xs text-destructive">
+                                {{ closeForm.errors.actual_gcash }}
+                            </p>
+                        </div>
+
+                        <div v-if="liveClosingGcashDiscrepancy !== null" class="flex items-center justify-between rounded border bg-card p-2 text-xs">
+                            <span class="text-muted-foreground">GCash Discrepancy:</span>
+                            <Badge :variant="formatDiscrepancy(liveClosingGcashDiscrepancy).variant" class="text-xs">
+                                {{ formatDiscrepancy(liveClosingGcashDiscrepancy).label }}
+                            </Badge>
+                        </div>
                     </div>
 
                     <!-- Notes -->
@@ -1790,7 +2005,7 @@ const calculateExpenseSharePct = (amount: number): string => {
                         <textarea
                             id="notes"
                             v-model="closeForm.notes"
-                            rows="3"
+                            rows="2"
                             class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                             placeholder="Explain shortages, overages, or cashier handoff remarks..."
                         />
@@ -1853,55 +2068,76 @@ const calculateExpenseSharePct = (amount: number): string => {
                                     : '—'
                             }}</span>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-muted-foreground"
-                                >Cash In (Sales):</span
-                            >
-                            <span
-                                class="font-mono text-emerald-600 dark:text-emerald-400"
-                                >+{{
-                                    formatPhp(settlementToEdit?.cash_in)
-                                }}</span
-                            >
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-muted-foreground"
-                                >Cash Out (Expenses):</span
-                            >
-                            <span
-                                class="font-mono text-rose-600 dark:text-rose-400"
-                                >-{{
-                                    formatPhp(settlementToEdit?.cash_out)
-                                }}</span
-                            >
-                        </div>
-                        <div
-                            class="flex justify-between border-t pt-2 font-semibold"
-                        >
-                            <span>Computed Expected Cash:</span>
-                            <span class="font-mono text-primary">{{
-                                formatPhp(computedEditExpectedCash)
-                            }}</span>
+                        <div class="grid grid-cols-2 gap-4 border-t pt-2">
+                            <div>
+                                <p class="font-semibold text-primary">Cash Drawer</p>
+                                <div class="mt-1 flex justify-between text-[11px]">
+                                    <span class="text-muted-foreground">Cash In:</span>
+                                    <span class="font-mono text-emerald-600 dark:text-emerald-400">+{{ formatPhp(settlementToEdit?.cash_in) }}</span>
+                                </div>
+                                <div class="flex justify-between text-[11px]">
+                                    <span class="text-muted-foreground">Cash Out:</span>
+                                    <span class="font-mono text-rose-600 dark:text-rose-400">-{{ formatPhp(settlementToEdit?.cash_out) }}</span>
+                                </div>
+                                <div class="mt-1 flex justify-between border-t pt-1 font-semibold text-[11px]">
+                                    <span>Expected Cash:</span>
+                                    <span class="font-mono text-primary">{{ formatPhp(computedEditExpectedCash) }}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-blue-600 dark:text-blue-400">GCash Wallet</p>
+                                <div class="mt-1 flex justify-between text-[11px]">
+                                    <span class="text-muted-foreground">GCash In:</span>
+                                    <span class="font-mono text-emerald-600 dark:text-emerald-400">+{{ formatPhp(settlementToEdit?.gcash_in ?? 0) }}</span>
+                                </div>
+                                <div class="flex justify-between text-[11px]">
+                                    <span class="text-muted-foreground">GCash Out:</span>
+                                    <span class="font-mono text-rose-600 dark:text-rose-400">-{{ formatPhp(settlementToEdit?.gcash_out ?? 0) }}</span>
+                                </div>
+                                <div class="mt-1 flex justify-between border-t pt-1 font-semibold text-[11px]">
+                                    <span>Expected GCash:</span>
+                                    <span class="font-mono text-blue-600 dark:text-blue-400">{{ formatPhp(computedEditExpectedGcash) }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Opening Cash -->
-                    <div class="space-y-2">
-                        <Label for="edit_opening_cash">Opening Float (₱)</Label>
-                        <Input
-                            id="edit_opening_cash"
-                            v-model="editForm.opening_cash"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            required
-                        />
-                        <p
-                            v-if="editForm.errors.opening_cash"
-                            class="text-xs text-destructive"
-                        >
-                            {{ editForm.errors.opening_cash }}
-                        </p>
+                    <!-- Opening Balances Grid -->
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <Label for="edit_opening_cash">Opening Float (₱)</Label>
+                            <Input
+                                id="edit_opening_cash"
+                                v-model="editForm.opening_cash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                required
+                            />
+                            <p
+                                v-if="editForm.errors.opening_cash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.opening_cash }}
+                            </p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="edit_opening_gcash">Opening GCash (₱)</Label>
+                            <Input
+                                id="edit_opening_gcash"
+                                v-model="editForm.opening_gcash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                            />
+                            <p
+                                v-if="editForm.errors.opening_gcash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.opening_gcash }}
+                            </p>
+                        </div>
                     </div>
 
                     <!-- Status Selection -->
@@ -1924,52 +2160,82 @@ const calculateExpenseSharePct = (amount: number): string => {
                         </p>
                     </div>
 
-                    <!-- Actual Cash Count -->
-                    <div class="space-y-2">
-                        <Label for="edit_actual_cash">
-                            Actual Cash Counted (₱)
-                            <span
-                                v-if="editForm.status === 'open'"
-                                class="text-xs font-normal text-muted-foreground"
-                                >(Optional while Open)</span
+                    <!-- Actual Counts Grid -->
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <Label for="edit_actual_cash">
+                                Actual Cash Counted (₱)
+                                <span
+                                    v-if="editForm.status === 'open'"
+                                    class="text-xs font-normal text-muted-foreground"
+                                    >(Optional)</span
+                                >
+                            </Label>
+                            <Input
+                                id="edit_actual_cash"
+                                v-model="editForm.actual_cash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Physical cash"
+                                :required="editForm.status === 'closed'"
+                            />
+                            <div
+                                v-if="computedEditDiscrepancy !== null"
+                                class="flex items-center justify-between pt-1"
                             >
-                        </Label>
-                        <Input
-                            id="edit_actual_cash"
-                            v-model="editForm.actual_cash"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Physical cash counted"
-                            :required="editForm.status === 'closed'"
-                        />
-                        <p
-                            v-if="editForm.errors.actual_cash"
-                            class="text-xs text-destructive"
-                        >
-                            {{ editForm.errors.actual_cash }}
-                        </p>
-                    </div>
+                                <span class="text-[11px] text-muted-foreground">Cash Diff:</span>
+                                <Badge
+                                    :variant="formatDiscrepancy(computedEditDiscrepancy).variant"
+                                    class="text-[10px]"
+                                >
+                                    {{ formatDiscrepancy(computedEditDiscrepancy).label }}
+                                </Badge>
+                            </div>
+                            <p
+                                v-if="editForm.errors.actual_cash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.actual_cash }}
+                            </p>
+                        </div>
 
-                    <!-- Live Discrepancy Indicator -->
-                    <div
-                        v-if="computedEditDiscrepancy !== null"
-                        class="flex items-center justify-between rounded-md border p-3"
-                    >
-                        <span class="text-xs text-muted-foreground"
-                            >Discrepancy:</span
-                        >
-                        <Badge
-                            :variant="
-                                formatDiscrepancy(computedEditDiscrepancy)
-                                    .variant
-                            "
-                            class="text-xs"
-                        >
-                            {{
-                                formatDiscrepancy(computedEditDiscrepancy).label
-                            }}
-                        </Badge>
+                        <div class="space-y-1.5">
+                            <Label for="edit_actual_gcash">
+                                Actual GCash Counted (₱)
+                                <span
+                                    v-if="editForm.status === 'open'"
+                                    class="text-xs font-normal text-muted-foreground"
+                                    >(Optional)</span
+                                >
+                            </Label>
+                            <Input
+                                id="edit_actual_gcash"
+                                v-model="editForm.actual_gcash"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="GCash balance"
+                            />
+                            <div
+                                v-if="computedEditGcashDiscrepancy !== null"
+                                class="flex items-center justify-between pt-1"
+                            >
+                                <span class="text-[11px] text-muted-foreground">GCash Diff:</span>
+                                <Badge
+                                    :variant="formatDiscrepancy(computedEditGcashDiscrepancy).variant"
+                                    class="text-[10px]"
+                                >
+                                    {{ formatDiscrepancy(computedEditGcashDiscrepancy).label }}
+                                </Badge>
+                            </div>
+                            <p
+                                v-if="editForm.errors.actual_gcash"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.actual_gcash }}
+                            </p>
+                        </div>
                     </div>
 
                     <!-- Notes -->
@@ -2179,6 +2445,44 @@ const calculateExpenseSharePct = (amount: number): string => {
                                             slipData.settlement.discrepancy,
                                         ).label
                                     }}
+                                </Badge>
+                            </div>
+                        </div>
+
+                        <!-- GCash Wallet Reconciliation (if tracked) -->
+                        <div
+                            v-if="slipData.settlement.opening_gcash !== undefined"
+                            class="space-y-2 border-t pt-2 text-xs"
+                        >
+                            <p
+                                class="text-[11px] font-semibold tracking-wider text-blue-600 uppercase dark:text-blue-400"
+                            >
+                                GCash Wallet Reconciliation
+                            </p>
+                            <div class="flex justify-between">
+                                <span class="text-muted-foreground">Opening GCash:</span>
+                                <span class="font-mono font-medium">{{ formatPhp(slipData.settlement.opening_gcash ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                <span>+ Total GCash In:</span>
+                                <span class="font-mono font-medium">{{ formatPhp(slipData.settlement.gcash_in ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between text-rose-600 dark:text-rose-400">
+                                <span>- Total GCash Out:</span>
+                                <span class="font-mono font-medium">{{ formatPhp(slipData.settlement.gcash_out ?? 0) }}</span>
+                            </div>
+                            <div class="flex justify-between border-t pt-2 text-sm font-semibold">
+                                <span>Expected GCash Balance:</span>
+                                <span class="font-mono text-blue-600 dark:text-blue-400">{{ formatPhp(slipData.settlement.expected_gcash ?? 0) }}</span>
+                            </div>
+                            <div v-if="slipData.settlement.actual_gcash !== null" class="flex justify-between border-t pt-1 text-sm font-semibold">
+                                <span>Actual GCash Counted:</span>
+                                <span class="font-mono">{{ formatPhp(slipData.settlement.actual_gcash) }}</span>
+                            </div>
+                            <div v-if="slipData.settlement.gcash_discrepancy !== null" class="flex items-center justify-between border-t pt-2 font-semibold">
+                                <span>GCash Discrepancy:</span>
+                                <Badge :variant="formatDiscrepancy(slipData.settlement.gcash_discrepancy).variant" class="text-xs">
+                                    {{ formatDiscrepancy(slipData.settlement.gcash_discrepancy).label }}
                                 </Badge>
                             </div>
                         </div>

@@ -6,7 +6,9 @@ use App\Http\Requests\TransactionRequest;
 use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
 use App\Models\Customer;
+use App\Models\DailySettlement;
 use App\Models\FlightPortalDeposit;
+use App\Models\GcashLedgerEntry;
 use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
 use App\Models\Transaction;
@@ -193,6 +195,8 @@ class TransactionController extends Controller
         }
 
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
+        GcashLedgerEntry::syncForTransaction($transaction);
+        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction recorded.']);
 
@@ -271,12 +275,19 @@ class TransactionController extends Controller
         }
 
         $payload = $this->prepareTransactionData($validated);
+        $oldDate = $transaction->transaction_date?->toDateString();
 
         $transaction->update($payload);
 
         $transaction->recalculateBalance();
 
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
+        GcashLedgerEntry::syncForTransaction($transaction);
+
+        if ($oldDate && $oldDate !== $transaction->transaction_date?->toDateString()) {
+            DailySettlement::syncForDate($oldDate);
+        }
+        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction updated.']);
 
@@ -318,6 +329,8 @@ class TransactionController extends Controller
         ]);
 
         $transaction->recalculateBalance();
+        GcashLedgerEntry::syncForTransaction($transaction);
+        DailySettlement::syncForDate($validated['payment_date']);
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -337,6 +350,8 @@ class TransactionController extends Controller
         $transaction->delete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
+        GcashLedgerEntry::removeForTransaction($transaction->id);
+        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
@@ -353,6 +368,8 @@ class TransactionController extends Controller
         $transaction->restore();
 
         FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
+        GcashLedgerEntry::restoreForTransaction($transaction->id);
+        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
 
@@ -366,9 +383,12 @@ class TransactionController extends Controller
     {
         Gate::authorize('forceDelete', $transaction);
 
+        $transactionDate = $transaction->transaction_date->toDateString();
         $transaction->forceDelete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
+        GcashLedgerEntry::removeForTransaction($transaction->id);
+        DailySettlement::syncForDate($transactionDate);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
 
@@ -425,6 +445,7 @@ class TransactionController extends Controller
             'psa_document_type' => null,
             'online_assistance_type_id' => null,
             'third_party_payment' => null,
+            'disbursement_source' => $data['disbursement_source'] ?? null,
             'ddn_amount' => null,
             'employee_share' => null,
         ];
@@ -440,6 +461,7 @@ class TransactionController extends Controller
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
                 $prepared['service_details'] = $data['service_details'] ?? null;
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
+                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_FLIGHT_PORTAL;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
@@ -450,12 +472,14 @@ class TransactionController extends Controller
                 $prepared['provider'] = $data['provider'] ?? 'All Ferries';
                 $prepared['service_details'] = $data['service_details'] ?? null;
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
+                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_FLIGHT_PORTAL;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
             case Transaction::TYPE_TRANSLATION:
                 $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['third_party_payment'] = $thirdParty;
+                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_CASH;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
@@ -482,18 +506,32 @@ class TransactionController extends Controller
                 }
                 $prepared['psa_document_type'] = $data['psa_document_type'];
                 $prepared['third_party_payment'] = $thirdParty;
+                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_CASH;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
             case Transaction::TYPE_ONLINE_ASSISTANCE:
+                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                $margin = max(0, $amount - $thirdParty);
                 $split = config('ddn.online_assistance_split', ['ddn' => 0.60, 'employee' => 0.40]);
                 $prepared['online_assistance_type_id'] = (int) $data['online_assistance_type_id'];
-                $prepared['ddn_amount'] = round($amount * $split['ddn'], 2);
-                $prepared['employee_share'] = round($amount * $split['employee'], 2);
+                $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
+                $prepared['disbursement_source'] = $data['disbursement_source'] ?? ($thirdParty > 0 ? Transaction::DISBURSEMENT_SOURCE_GCASH : Transaction::DISBURSEMENT_SOURCE_NONE);
+                $prepared['ddn_amount'] = round($margin * $split['ddn'], 2);
+                $prepared['employee_share'] = round($margin * $split['employee'], 2);
                 break;
 
             case Transaction::TYPE_PRINTING:
+                $prepared['disbursement_source'] = Transaction::DISBURSEMENT_SOURCE_NONE;
                 $prepared['ddn_amount'] = $amount;
+                break;
+
+            case Transaction::TYPE_REMITTANCE:
+                $prepared['service_details'] = $data['service_details'] ?? 'GCASH_CASH_OUT';
+                $fee = (float) ($data['third_party_payment'] ?? 0);
+                $prepared['third_party_payment'] = null;
+                $prepared['disbursement_source'] = Transaction::DISBURSEMENT_SOURCE_NONE;
+                $prepared['ddn_amount'] = $fee;
                 break;
         }
 

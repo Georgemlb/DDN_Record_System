@@ -12,6 +12,12 @@ export type DailySettlement = {
     expected_cash: number | string;
     actual_cash: number | string | null;
     discrepancy: number | string | null;
+    opening_gcash?: number | string;
+    gcash_in?: number | string;
+    gcash_out?: number | string;
+    expected_gcash?: number | string;
+    actual_gcash?: number | string | null;
+    gcash_discrepancy?: number | string | null;
     total_gcash: number | string;
     total_bank_transfer: number | string;
     total_sales: number | string;
@@ -36,6 +42,8 @@ export type DailySettlement = {
 export type SettlementDraftMetrics = {
     cash_in: number;
     cash_out: number;
+    gcash_in?: number;
+    gcash_out?: number;
     total_gcash: number;
     total_bank_transfer: number;
     total_sales: number;
@@ -82,6 +90,7 @@ export type DailySettlementsPageData = {
     todaySettlement: DailySettlement | null;
     todayDraftMetrics: SettlementDraftMetrics | null;
     suggestedOpeningFloat: number;
+    suggestedOpeningGcash?: number;
     history: {
         data: DailySettlement[];
         links: Array<{

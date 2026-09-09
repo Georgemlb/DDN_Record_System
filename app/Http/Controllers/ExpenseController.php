@@ -6,6 +6,7 @@ use App\Http\Requests\ExpenseRequest;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -179,6 +180,8 @@ class ExpenseController extends Controller
 
         $expense = Expense::query()->create($payload);
 
+        GcashLedgerEntry::syncForExpense($expense);
+
         if ($expense->expense_date) {
             DailySettlement::syncForDate($expense->expense_date->toDateString());
         }
@@ -254,6 +257,8 @@ class ExpenseController extends Controller
 
         $expense->update($payload);
 
+        GcashLedgerEntry::syncForExpense($expense);
+
         if ($oldExpenseDate) {
             DailySettlement::syncForDate($oldExpenseDate);
         }
@@ -317,6 +322,9 @@ class ExpenseController extends Controller
 
         $expense->delete();
 
+        GcashLedgerEntry::where('expense_id', $expense->id)->delete();
+        GcashLedgerEntry::recalculateRunningBalances();
+
         if ($expenseDate) {
             DailySettlement::syncForDate($expenseDate);
         }
@@ -337,6 +345,9 @@ class ExpenseController extends Controller
         Gate::authorize('restore', $expense);
 
         $expense->restore();
+
+        GcashLedgerEntry::onlyTrashed()->where('expense_id', $expense->id)->restore();
+        GcashLedgerEntry::recalculateRunningBalances();
 
         if ($expense->expense_date) {
             DailySettlement::syncForDate($expense->expense_date->toDateString());
@@ -361,6 +372,9 @@ class ExpenseController extends Controller
         $reimbursedAt = $expense->reimbursed_at?->toDateString();
 
         $expense->forceDelete();
+
+        GcashLedgerEntry::where('expense_id', $expense->id)->forceDelete();
+        GcashLedgerEntry::recalculateRunningBalances();
 
         if ($expenseDate) {
             DailySettlement::syncForDate($expenseDate);
