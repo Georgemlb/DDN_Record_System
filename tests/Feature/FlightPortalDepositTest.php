@@ -677,4 +677,3 @@ test('moving entry beyond boundaries on same date safely does nothing', function
     $entry2->refresh();
     expect($entry1->sort_order)->toBeLessThan($entry2->sort_order);
 });
-

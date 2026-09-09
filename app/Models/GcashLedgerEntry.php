@@ -47,12 +47,16 @@ class GcashLedgerEntry extends Model
 
     // Inflows into GCash wallet
     public const TYPE_CUSTOMER_PAYMENT = 'customer_payment';
+
     public const TYPE_REMITTANCE_CASH_OUT = 'remittance_cash_out';
 
     // Outflows from GCash wallet
     public const TYPE_REMITTANCE_CASH_IN = 'remittance_cash_in';
+
     public const TYPE_GOVERNMENT_DISBURSEMENT = 'government_disbursement';
+
     public const TYPE_EXPENSE_PAYMENT = 'expense_payment';
+
     public const TYPE_PORTAL_RELOAD = 'portal_reload';
 
     // Manual balance adjustment / Anchor

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
@@ -7,6 +8,7 @@ use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\User;
+use Database\Seeders\AirlineMarkupSeeder;
 use Database\Seeders\BaggageOptionSeeder;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
@@ -23,7 +25,7 @@ beforeEach(function () {
         OnlineAssistanceTypeSeeder::class,
         ExpenseCategorySeeder::class,
         PsaRateSeeder::class,
-        \Database\Seeders\AirlineMarkupSeeder::class,
+        AirlineMarkupSeeder::class,
     ]);
 });
 
@@ -423,7 +425,7 @@ test('an authenticated user can create, update, and delete ticketing markups', f
         'markup_amount' => '250.00',
     ]);
 
-    $markup = \App\Models\AirlineMarkup::where('airline', 'Test Air')->first();
+    $markup = AirlineMarkup::where('airline', 'Test Air')->first();
 
     // Update to percent markup
     $updateResponse = $this->actingAs($user)->put("/configurations/airline-markups/{$markup->id}", [
