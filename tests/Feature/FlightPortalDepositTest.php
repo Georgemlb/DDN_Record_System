@@ -607,10 +607,11 @@ test('user can move same-day deposit entries up and down to adjust calculation s
     expect($topUp->running_balance)->toEqual('10000.00');
     expect($deduction->running_balance)->toEqual('7000.00');
 
-    // Move deduction up (before top-up)
+    // Move deduction up in asc mode (before top-up)
     $this->actingAs($user)
         ->post(route('portal-deposits.move', $deduction), [
             'direction' => 'up',
+            'table_direction' => 'asc',
         ])
         ->assertSessionHasNoErrors();
 
@@ -621,10 +622,11 @@ test('user can move same-day deposit entries up and down to adjust calculation s
     expect((float) $deduction->running_balance)->toEqual(-3000.00);
     expect((float) $topUp->running_balance)->toEqual(7000.00);
 
-    // Move deduction back down (after top-up)
+    // Move deduction back down in asc mode (after top-up)
     $this->actingAs($user)
         ->post(route('portal-deposits.move', $deduction), [
             'direction' => 'down',
+            'table_direction' => 'asc',
         ])
         ->assertSessionHasNoErrors();
 
@@ -657,18 +659,18 @@ test('moving entry beyond boundaries on same date safely does nothing', function
         'payment_source' => 'cash',
     ]);
 
-    // Entry 1 is already first, moving up does not change anything
+    // Entry 1 is already first in asc mode, moving up does not change anything
     $this->actingAs($user)
-        ->post(route('portal-deposits.move', $entry1), ['direction' => 'up'])
+        ->post(route('portal-deposits.move', $entry1), ['direction' => 'up', 'table_direction' => 'asc'])
         ->assertSessionHasNoErrors();
 
     $entry1->refresh();
     $entry2->refresh();
     expect($entry1->sort_order)->toBeLessThan($entry2->sort_order);
 
-    // Entry 2 is already last, moving down does not change anything
+    // Entry 2 is already last in asc mode, moving down does not change anything
     $this->actingAs($user)
-        ->post(route('portal-deposits.move', $entry2), ['direction' => 'down'])
+        ->post(route('portal-deposits.move', $entry2), ['direction' => 'down', 'table_direction' => 'asc'])
         ->assertSessionHasNoErrors();
 
     $entry1->refresh();

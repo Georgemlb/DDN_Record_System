@@ -355,6 +355,14 @@ const formatSource = (source: string | null) => {
     return source;
 };
 
+const formatEntryDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) {
+        return '';
+    }
+
+    return String(dateStr).split('T')[0];
+};
+
 // Reordering / Move Up & Down
 const movingId = ref<number | null>(null);
 
@@ -362,7 +370,10 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
     movingId.value = deposit.id;
     router.post(
         `/portal-deposits/${deposit.id}/move`,
-        { direction },
+        {
+            direction,
+            table_direction: props.filters.direction || 'desc',
+        },
         {
             preserveScroll: true,
             onFinish: () => {
@@ -693,7 +704,9 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
                                     class="px-4 py-3 font-medium whitespace-nowrap"
                                 >
                                     <div class="flex items-center gap-1.5">
-                                        <span>{{ entry.entry_date }}</span>
+                                        <span>{{
+                                            formatEntryDate(entry.entry_date)
+                                        }}</span>
                                         <span
                                             v-if="
                                                 entry.can_move_up ||
@@ -877,7 +890,7 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
                                                     movingId === entry.id
                                                 "
                                                 @click="moveEntry(entry, 'up')"
-                                                title="Move earlier in day sequence"
+                                                title="Move up in day sequence"
                                             >
                                                 <ChevronUp class="size-3.5" />
                                             </Button>
@@ -892,12 +905,11 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
                                                 @click="
                                                     moveEntry(entry, 'down')
                                                 "
-                                                title="Move later in day sequence"
+                                                title="Move down in day sequence"
                                             >
                                                 <ChevronDown class="size-3.5" />
                                             </Button>
                                         </div>
-
                                         <template
                                             v-if="
                                                 entry.type !==

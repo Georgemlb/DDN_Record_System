@@ -80,12 +80,24 @@ class FlightPortalDeposit extends Model
     protected function casts(): array
     {
         return [
-            'entry_date' => 'date',
+            'entry_date' => 'date:Y-m-d',
             'amount' => 'decimal:2',
             'running_balance' => 'decimal:2',
             'is_balance_anchor' => 'boolean',
             'sort_order' => 'integer',
         ];
+    }
+
+    /**
+     * Bootstrap the model and its traits.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $deposit) {
+            if ($deposit->entry_date) {
+                $deposit->attributes['entry_date'] = \Carbon\Carbon::parse($deposit->entry_date)->toDateString();
+            }
+        });
     }
 
     /**
@@ -180,7 +192,7 @@ class FlightPortalDeposit extends Model
                 $entry->transaction_id = $transaction->id;
                 $entry->type = self::TYPE_TICKET_DEDUCTION;
 
-                $maxOrder = static::where('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
+                $maxOrder = static::whereDate('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
                 $entry->sort_order = $maxOrder + 1;
             } else {
                 if ($entry->trashed()) {
@@ -195,7 +207,7 @@ class FlightPortalDeposit extends Model
             $entry->notes = "Ticket booking deduction for {$transaction->customer_name}";
 
             if (! $entry->sort_order) {
-                $maxOrder = static::where('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
+                $maxOrder = static::whereDate('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
                 $entry->sort_order = $maxOrder + 1;
             }
 
