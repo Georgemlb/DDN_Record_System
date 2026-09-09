@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowDownLeft,
     ArrowUpRight,
     ChevronUp,
     ChevronDown,
-    ExternalLink,
     Loader2,
     Minus,
     Pencil,
@@ -16,7 +15,6 @@ import {
     SlidersHorizontal,
     Smartphone,
     Trash2,
-    Wallet,
     X,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
@@ -222,6 +220,7 @@ const submitEdit = () => {
     }
 
     const rawAmount = parseFloat(editForm.amount as string);
+
     if (isNaN(rawAmount) || rawAmount <= 0) {
         return;
     }
@@ -278,6 +277,7 @@ const formatEntryDate = (dateStr: string | null | undefined) => {
     if (!dateStr) {
         return '';
     }
+
     return String(dateStr).split('T')[0];
 };
 
@@ -328,6 +328,7 @@ const isInflow = (entry: GcashLedgerEntry) => {
     if (entry.type === 'adjustment') {
         return Number(entry.amount) > 0;
     }
+
     return ['remittance_cash_out', 'direct_payment', 'cash_transfer', 'bank_transfer'].includes(entry.type);
 };
 

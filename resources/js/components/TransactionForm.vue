@@ -4,7 +4,6 @@ import {
     AlertCircle,
     ArrowDownLeft,
     ArrowUpRight,
-    Building2,
     Calculator,
     CheckCircle,
     Clock,
@@ -322,6 +321,7 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
     if (selected) {
         amount.value = selected.price;
         const nameLower = selected.name.toLowerCase();
+
         if (nameLower.includes('police')) {
             thirdPartyPayment.value = 180;
         } else if (nameLower.includes('nbi')) {
