@@ -416,8 +416,10 @@ class TransactionController extends Controller
             'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
             'notes' => $data['notes'] ?? null,
             'pax' => null,
+            'trip_type' => null,
             'provider' => null,
             'flight_type' => null,
+            'carrier_category' => null,
             'service_details' => null,
             'baggage_option_id' => null,
             'psa_document_type' => null,
@@ -431,9 +433,21 @@ class TransactionController extends Controller
             case Transaction::TYPE_AIRLINE:
                 $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['pax'] = (int) $data['pax'];
+                $prepared['trip_type'] = $data['trip_type'] ?? Transaction::TRIP_TYPE_ONE_WAY;
                 $prepared['provider'] = $data['provider'] ?? null;
                 $prepared['flight_type'] = $data['flight_type'] ?? null;
+                $prepared['carrier_category'] = $data['carrier_category'] ?? null;
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
+                $prepared['service_details'] = $data['service_details'] ?? null;
+                $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
+                $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
+                break;
+
+            case Transaction::TYPE_FERRY:
+                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                $prepared['pax'] = (int) $data['pax'];
+                $prepared['trip_type'] = $data['trip_type'] ?? Transaction::TRIP_TYPE_ONE_WAY;
+                $prepared['provider'] = $data['provider'] ?? 'All Ferries';
                 $prepared['service_details'] = $data['service_details'] ?? null;
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);

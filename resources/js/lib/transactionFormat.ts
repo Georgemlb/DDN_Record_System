@@ -34,6 +34,7 @@ export const formatTransactionType = (
 ): string => {
     const labels: Record<string, string> = {
         airline: 'Airline Ticket',
+        ferry: 'Ferry Ticket',
         translation: 'Document Translation',
         psa: 'PSA Assistance',
         online_assistance: 'Online Assistance',
@@ -54,10 +55,20 @@ export const formatPaymentMethod = (method: PaymentMethod | string): string => {
 
 export const getTransactionServiceDetail = (tx: Transaction): string => {
     switch (tx.type) {
-        case 'airline':
+        case 'airline': {
+            const tripSuffix = tx.trip_type === 'round_trip' ? ', RT' : '';
+
             return tx.provider
-                ? `${tx.provider} (${tx.pax ?? 1} pax)`
-                : `${tx.pax ?? 1} pax`;
+                ? `${tx.provider} (${tx.pax ?? 1} pax${tripSuffix})`
+                : `${tx.pax ?? 1} pax${tripSuffix}`;
+        }
+        case 'ferry': {
+            const tripSuffix = tx.trip_type === 'round_trip' ? ', RT' : '';
+
+            return tx.provider
+                ? `${tx.provider} (${tx.pax ?? 1} pax${tripSuffix})`
+                : `${tx.pax ?? 1} pax${tripSuffix}`;
+        }
         case 'psa':
             return tx.psa_document_type
                 ? `Doc: ${tx.psa_document_type}`

@@ -295,11 +295,49 @@ defineOptions({
                             </dd>
                         </div>
                         <div>
+                            <dt class="text-muted-foreground">Trip Type</dt>
+                            <dd class="mt-1 font-medium">
+                                {{
+                                    transaction.trip_type === 'round_trip'
+                                        ? 'Round-trip (2 legs)'
+                                        : 'One-way (1 leg)'
+                                }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground">Flight Type</dt>
+                            <dd class="mt-1 font-medium capitalize">
+                                {{
+                                    transaction.flight_type ||
+                                    'Domestic (Local)'
+                                }}
+                                <span
+                                    v-if="transaction.carrier_category"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    ({{
+                                        transaction.carrier_category ===
+                                        'full_service'
+                                            ? 'Full Service'
+                                            : 'Budget'
+                                    }})
+                                </span>
+                            </dd>
+                        </div>
+                        <div>
                             <dt class="text-muted-foreground">
                                 Airline / Provider
                             </dt>
                             <dd class="mt-1 font-medium">
                                 {{ transaction.provider || '—' }}
+                            </dd>
+                        </div>
+                        <div v-if="transaction.service_details">
+                            <dt class="text-muted-foreground">
+                                Flight Route / Details
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                {{ transaction.service_details }}
                             </dd>
                         </div>
                         <div>
@@ -319,6 +357,44 @@ defineOptions({
                                     {{ transaction.baggage_option.label }}
                                 </span>
                                 <span v-else>None</span>
+                            </dd>
+                        </div>
+                    </template>
+
+                    <!-- Ferry Details -->
+                    <template v-if="transaction.type === 'ferry'">
+                        <div>
+                            <dt class="text-muted-foreground">
+                                Passengers (Pax)
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                {{ transaction.pax ?? 1 }} pax
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground">Trip Type</dt>
+                            <dd class="mt-1 font-medium">
+                                {{
+                                    transaction.trip_type === 'round_trip'
+                                        ? 'Round-trip (2 legs)'
+                                        : 'One-way (1 leg)'
+                                }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground">
+                                Ferry Provider / Line
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                {{ transaction.provider || 'All Ferries' }}
+                            </dd>
+                        </div>
+                        <div v-if="transaction.service_details">
+                            <dt class="text-muted-foreground">
+                                Route / Trip Details
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                {{ transaction.service_details }}
                             </dd>
                         </div>
                     </template>

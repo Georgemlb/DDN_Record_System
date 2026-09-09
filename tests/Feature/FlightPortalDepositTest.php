@@ -124,6 +124,47 @@ test('airline transaction with third_party_payment automatically creates ticket 
     expect(FlightPortalDeposit::getCurrentBalance())->toEqual(22800.00);
 });
 
+test('ferry transaction with third_party_payment automatically creates ticket deduction in portal ledger', function () {
+    $user = User::factory()->create();
+
+    FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TOP_UP,
+        'amount' => 10000.00,
+        'running_balance' => 10000.00,
+        'entry_date' => '2026-09-09',
+        'payment_source' => 'cash',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_FERRY,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Ferry Traveler',
+            'pax' => 2,
+            'trip_type' => 'round_trip',
+            'provider' => 'All Ferries',
+            'amount' => 2400.00,
+            'third_party_payment' => 1600.00,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $transaction = Transaction::where('customer_name', 'Ferry Traveler')->first();
+    expect($transaction)->not->toBeNull();
+    expect((float) $transaction->ddn_amount)->toEqual(800.00);
+
+    $this->assertDatabaseHas('flight_portal_deposits', [
+        'transaction_id' => $transaction->id,
+        'type' => FlightPortalDeposit::TYPE_TICKET_DEDUCTION,
+        'amount' => 1600.00,
+    ]);
+
+    // 10,000 - 1,600 = 8,400
+    expect(FlightPortalDeposit::getCurrentBalance())->toEqual(8400.00);
+});
+
 test('updating an airline transaction updates ticket deduction and recalculates balances', function () {
     $user = User::factory()->create();
 
@@ -535,3 +576,103 @@ test('admin can reset a running balance anchor back to auto-calculation', functi
     expect($row3->running_balance)->toEqual('17000.00');
     expect(FlightPortalDeposit::getCurrentBalance())->toEqual(17000.00);
 });
+
+test('user can move same-day deposit entries up and down to adjust calculation sequence', function () {
+    $user = User::factory()->create();
+
+    $topUp = FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TOP_UP,
+        'amount' => 10000.00,
+        'running_balance' => 10000.00,
+        'sort_order' => 1,
+        'entry_date' => '2026-09-01',
+        'payment_source' => 'cash',
+    ]);
+
+    $deduction = FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TICKET_DEDUCTION,
+        'amount' => 3000.00,
+        'running_balance' => 7000.00,
+        'sort_order' => 2,
+        'entry_date' => '2026-09-01',
+        'reference_number' => 'TICK-001',
+    ]);
+
+    FlightPortalDeposit::recalculateRunningBalances();
+    $topUp->refresh();
+    $deduction->refresh();
+
+    expect($topUp->running_balance)->toEqual('10000.00');
+    expect($deduction->running_balance)->toEqual('7000.00');
+
+    // Move deduction up (before top-up)
+    $this->actingAs($user)
+        ->post(route('portal-deposits.move', $deduction), [
+            'direction' => 'up',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $topUp->refresh();
+    $deduction->refresh();
+
+    expect($deduction->sort_order)->toBeLessThan($topUp->sort_order);
+    expect((float) $deduction->running_balance)->toEqual(-3000.00);
+    expect((float) $topUp->running_balance)->toEqual(7000.00);
+
+    // Move deduction back down (after top-up)
+    $this->actingAs($user)
+        ->post(route('portal-deposits.move', $deduction), [
+            'direction' => 'down',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $topUp->refresh();
+    $deduction->refresh();
+
+    expect($topUp->sort_order)->toBeLessThan($deduction->sort_order);
+    expect((float) $topUp->running_balance)->toEqual(10000.00);
+    expect((float) $deduction->running_balance)->toEqual(7000.00);
+});
+
+test('moving entry beyond boundaries on same date safely does nothing', function () {
+    $user = User::factory()->create();
+
+    $entry1 = FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TOP_UP,
+        'amount' => 5000.00,
+        'sort_order' => 1,
+        'entry_date' => '2026-09-05',
+        'payment_source' => 'cash',
+    ]);
+
+    $entry2 = FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TOP_UP,
+        'amount' => 2000.00,
+        'sort_order' => 2,
+        'entry_date' => '2026-09-05',
+        'payment_source' => 'cash',
+    ]);
+
+    // Entry 1 is already first, moving up does not change anything
+    $this->actingAs($user)
+        ->post(route('portal-deposits.move', $entry1), ['direction' => 'up'])
+        ->assertSessionHasNoErrors();
+
+    $entry1->refresh();
+    $entry2->refresh();
+    expect($entry1->sort_order)->toBeLessThan($entry2->sort_order);
+
+    // Entry 2 is already last, moving down does not change anything
+    $this->actingAs($user)
+        ->post(route('portal-deposits.move', $entry2), ['direction' => 'down'])
+        ->assertSessionHasNoErrors();
+
+    $entry1->refresh();
+    $entry2->refresh();
+    expect($entry1->sort_order)->toBeLessThan($entry2->sort_order);
+});
+

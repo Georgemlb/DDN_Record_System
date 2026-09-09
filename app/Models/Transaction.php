@@ -67,12 +67,16 @@ use Illuminate\Support\Carbon;
     'employee_share',
     'notes',
     'flight_type',
+    'trip_type',
+    'carrier_category',
 ])]
 class Transaction extends Model
 {
     use SoftDeletes;
 
     public const TYPE_AIRLINE = 'airline';
+
+    public const TYPE_FERRY = 'ferry';
 
     public const TYPE_TRANSLATION = 'translation';
 
@@ -84,10 +88,29 @@ class Transaction extends Model
 
     public const TYPES = [
         self::TYPE_AIRLINE,
+        self::TYPE_FERRY,
         self::TYPE_TRANSLATION,
         self::TYPE_PSA,
         self::TYPE_ONLINE_ASSISTANCE,
         self::TYPE_PRINTING,
+    ];
+
+    public const TRIP_TYPE_ONE_WAY = 'one_way';
+
+    public const TRIP_TYPE_ROUND_TRIP = 'round_trip';
+
+    public const TRIP_TYPES = [
+        self::TRIP_TYPE_ONE_WAY,
+        self::TRIP_TYPE_ROUND_TRIP,
+    ];
+
+    public const CARRIER_CATEGORY_BUDGET = 'budget';
+
+    public const CARRIER_CATEGORY_FULL_SERVICE = 'full_service';
+
+    public const CARRIER_CATEGORIES = [
+        self::CARRIER_CATEGORY_BUDGET,
+        self::CARRIER_CATEGORY_FULL_SERVICE,
     ];
 
     public const PAYMENT_METHOD_CASH = 'cash';

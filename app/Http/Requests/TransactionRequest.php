@@ -75,9 +75,17 @@ class TransactionRequest extends FormRequest
 
         if ($type === Transaction::TYPE_AIRLINE) {
             $rules['pax'] = ['required', 'integer', 'min:1'];
+            $rules['trip_type'] = ['nullable', 'string', Rule::in(Transaction::TRIP_TYPES)];
             $rules['provider'] = ['nullable', 'string', 'max:255'];
             $rules['flight_type'] = ['nullable', 'string', Rule::in(['local', 'international'])];
+            $rules['carrier_category'] = ['nullable', 'string', Rule::in(Transaction::CARRIER_CATEGORIES)];
             $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];
+            $rules['service_details'] = ['nullable', 'string', 'max:1000'];
+            $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
+        } elseif ($type === Transaction::TYPE_FERRY) {
+            $rules['pax'] = ['required', 'integer', 'min:1'];
+            $rules['trip_type'] = ['nullable', 'string', Rule::in(Transaction::TRIP_TYPES)];
+            $rules['provider'] = ['nullable', 'string', 'max:255'];
             $rules['service_details'] = ['nullable', 'string', 'max:1000'];
             $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_TRANSLATION) {

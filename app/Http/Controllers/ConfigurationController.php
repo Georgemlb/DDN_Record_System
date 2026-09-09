@@ -26,7 +26,7 @@ class ConfigurationController extends Controller
             'baggageOptions' => BaggageOption::orderBy('sort_order')->orderBy('weight_kg')->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::orderBy('sort_order')->orderBy('name')->get(),
             'expenseCategories' => ExpenseCategory::orderBy('sort_order')->orderBy('name')->get(),
-            'airlineMarkups' => AirlineMarkup::orderBy('airline')->orderBy('flight_type')->get(),
+            'airlineMarkups' => AirlineMarkup::orderBy('service_type')->orderBy('airline')->orderBy('flight_type')->get(),
             'psaRates' => PsaRate::orderBy('sort_order')->orderBy('name')->get(),
             'currentTab' => $tab,
         ]);

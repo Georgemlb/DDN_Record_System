@@ -3,6 +3,8 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowUpRight,
+    ChevronDown,
+    ChevronUp,
     ExternalLink,
     Loader2,
     Minus,
@@ -352,6 +354,23 @@ const formatSource = (source: string | null) => {
 
     return source;
 };
+
+// Reordering / Move Up & Down
+const movingId = ref<number | null>(null);
+
+const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
+    movingId.value = deposit.id;
+    router.post(
+        `/portal-deposits/${deposit.id}/move`,
+        { direction },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                movingId.value = null;
+            },
+        },
+    );
+};
 </script>
 
 <template>
@@ -673,7 +692,19 @@ const formatSource = (source: string | null) => {
                                 <td
                                     class="px-4 py-3 font-medium whitespace-nowrap"
                                 >
-                                    {{ entry.entry_date }}
+                                    <div class="flex items-center gap-1.5">
+                                        <span>{{ entry.entry_date }}</span>
+                                        <span
+                                            v-if="
+                                                entry.can_move_up ||
+                                                entry.can_move_down
+                                            "
+                                            class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground"
+                                            title="Same-day sequence order"
+                                        >
+                                            #{{ entry.sort_order }}
+                                        </span>
+                                    </div>
                                 </td>
 
                                 <!-- Type Badge -->
@@ -827,45 +858,88 @@ const formatSource = (source: string | null) => {
                                     class="px-4 py-3 text-right whitespace-nowrap"
                                 >
                                     <div
-                                        v-if="entry.type !== 'ticket_deduction'"
                                         class="flex items-center justify-end gap-1"
                                     >
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="size-7 text-muted-foreground hover:text-foreground"
-                                            @click="openEditModal(entry)"
-                                            title="Edit deposit entry"
+                                        <!-- Reorder buttons (active when multiple entries exist on this date) -->
+                                        <div
+                                            v-if="
+                                                entry.can_move_up ||
+                                                entry.can_move_down
+                                            "
+                                            class="mr-1 flex items-center rounded-md border border-border/60 bg-muted/40 p-0.5"
                                         >
-                                            <Pencil class="size-3.5" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="size-7 text-muted-foreground hover:text-destructive"
-                                            @click="confirmDelete(entry)"
-                                            title="Delete entry"
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-6 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                                :disabled="
+                                                    !entry.can_move_up ||
+                                                    movingId === entry.id
+                                                "
+                                                @click="moveEntry(entry, 'up')"
+                                                title="Move earlier in day sequence"
+                                            >
+                                                <ChevronUp class="size-3.5" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-6 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                                :disabled="
+                                                    !entry.can_move_down ||
+                                                    movingId === entry.id
+                                                "
+                                                @click="
+                                                    moveEntry(entry, 'down')
+                                                "
+                                                title="Move later in day sequence"
+                                            >
+                                                <ChevronDown class="size-3.5" />
+                                            </Button>
+                                        </div>
+
+                                        <template
+                                            v-if="
+                                                entry.type !==
+                                                'ticket_deduction'
+                                            "
                                         >
-                                            <Trash2 class="size-3.5" />
-                                        </Button>
-                                    </div>
-                                    <div
-                                        v-else
-                                        class="flex items-center justify-end gap-1.5"
-                                    >
-                                        <span
-                                            class="text-xs text-muted-foreground/60"
-                                        >
-                                            Auto
-                                        </span>
-                                        <Link
-                                            v-if="entry.transaction_id"
-                                            :href="`/transactions/${entry.transaction_id}/edit`"
-                                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                            title="Edit linked airline transaction"
-                                        >
-                                            <ExternalLink class="size-3.5" />
-                                        </Link>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-7 text-muted-foreground hover:text-foreground"
+                                                @click="openEditModal(entry)"
+                                                title="Edit deposit entry"
+                                            >
+                                                <Pencil class="size-3.5" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-7 text-muted-foreground hover:text-destructive"
+                                                @click="confirmDelete(entry)"
+                                                title="Delete entry"
+                                            >
+                                                <Trash2 class="size-3.5" />
+                                            </Button>
+                                        </template>
+                                        <template v-else>
+                                            <span
+                                                class="text-xs text-muted-foreground/60"
+                                            >
+                                                Auto
+                                            </span>
+                                            <Link
+                                                v-if="entry.transaction_id"
+                                                :href="`/transactions/${entry.transaction_id}/edit`"
+                                                class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                title="Edit linked airline transaction"
+                                            >
+                                                <ExternalLink
+                                                    class="size-3.5"
+                                                />
+                                            </Link>
+                                        </template>
                                     </div>
                                 </td>
                             </tr>

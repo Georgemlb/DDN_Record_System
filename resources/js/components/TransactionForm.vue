@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Form, Link } from '@inertiajs/vue3';
-import { AlertCircle, Calculator, CheckCircle, Clock, Info } from '@lucide/vue';
+import {
+    AlertCircle,
+    Calculator,
+    CheckCircle,
+    Clock,
+    Info,
+    Ship,
+} from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -18,6 +25,7 @@ import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
     BaggageOption,
+    CarrierCategory,
     Customer,
     DdnSplitConfig,
     FlightType,
@@ -28,6 +36,7 @@ import type {
     PsaRate,
     Transaction,
     TransactionType,
+    TripType,
 } from '@/types/transaction';
 
 const props = withDefaults(
@@ -80,10 +89,18 @@ const amountPaid = ref<number | string>(
         : '',
 );
 const pax = ref<number | string>(props.transaction?.pax ?? 1);
-const provider = ref<string>(props.transaction?.provider ?? '');
+const tripType = ref<TripType>(props.transaction?.trip_type ?? 'one_way');
+const carrierCategory = ref<CarrierCategory>(
+    props.transaction?.carrier_category ?? 'budget',
+);
+const provider = ref<string>(
+    props.transaction?.provider ??
+        (formType.value === 'ferry' ? 'All Ferries' : ''),
+);
 const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
+const serviceDetails = ref<string>(props.transaction?.service_details ?? '');
 const baggageOptionId = ref<string>(
     props.transaction?.baggage_option_id
         ? String(props.transaction.baggage_option_id)
@@ -107,35 +124,110 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
-// Auto-calculation for Airline Markups
+// Auto-calculation for Airline & Ferry Markups
+const calculatePortalCost = () => {
+    const numAmt = Number(amount.value) || 0;
+
+    if (numAmt <= 0) {
+        return;
+    }
+
+    const numPax = Math.max(1, Number(pax.value) || 1);
+    const legs = tripType.value === 'round_trip' ? 2 : 1;
+
+    if (formType.value === 'airline') {
+        let rule: AirlineMarkup | undefined;
+
+        if (flightType.value === 'local') {
+            rule = props.airlineMarkups.find(
+                (m) =>
+                    (m.service_type ?? 'flight') === 'flight' &&
+                    m.flight_type === 'local' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            );
+        } else if (flightType.value === 'international') {
+            const categoryName =
+                carrierCategory.value === 'full_service'
+                    ? 'Full Service Carriers'
+                    : 'Budget Carriers';
+            rule =
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() === categoryName.toLowerCase(),
+                ) ||
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() ===
+                            provider.value.trim().toLowerCase(),
+                );
+        }
+
+        if (rule) {
+            let markupTotal = 0;
+
+            if (rule.markup_type === 'percent') {
+                markupTotal =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+            } else {
+                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
+            }
+
+            const portalCost = Math.max(0, numAmt - markupTotal);
+            thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
+        }
+    } else if (formType.value === 'ferry') {
+        const rule =
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            ) ||
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() === 'all ferries',
+            ) ||
+            props.airlineMarkups.find((m) => m.service_type === 'ferry');
+
+        if (rule) {
+            let markupTotal = 0;
+
+            if (rule.markup_type === 'percent') {
+                markupTotal =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+            } else {
+                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
+            }
+
+            const portalCost = Math.max(0, numAmt - markupTotal);
+            thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
+        }
+    }
+};
 
 watch(
-    [provider, flightType, amount],
-    ([newProvider, newFlightType, newAmount]) => {
-        if (formType.value !== 'airline') {
-            return;
-        }
-
-        const numAmt = Number(newAmount) || 0;
-
-        if (!newProvider || !newFlightType || numAmt <= 0) {
-            return;
-        }
-
-        const markup = props.airlineMarkups.find(
-            (m) =>
-                m.airline.toLowerCase() === newProvider.toLowerCase() &&
-                m.flight_type === newFlightType,
-        );
-
-        if (markup) {
-            const markupAmt = Number(markup.markup_amount) || 0;
-            const calculatedCost = Math.max(0, numAmt - markupAmt);
-
-            thirdPartyPayment.value = calculatedCost;
-        }
+    [formType, provider, flightType, tripType, carrierCategory, pax, amount],
+    () => {
+        calculatePortalCost();
     },
 );
+
+watch(formType, (newType) => {
+    if (
+        newType === 'ferry' &&
+        (!provider.value || provider.value === 'Cebu Pacific')
+    ) {
+        provider.value = 'All Ferries';
+    } else if (newType === 'airline' && provider.value === 'All Ferries') {
+        provider.value = 'Cebu Pacific';
+    }
+});
 
 // Computed Remaining Balance
 const computedRemainingBalance = computed(() => {
@@ -276,12 +368,127 @@ const filteredBaggageOptions = computed(() => {
 });
 
 const airlineSuggestions = computed(() => {
-    const defaultAirlines = ['Cebu Pacific', 'Philippine Airlines', 'AirAsia'];
-    const configuredAirlines = props.baggageOptions
+    const configuredAirlines = props.airlineMarkups
+        .filter(
+            (m) =>
+                (m.service_type ?? 'flight') === 'flight' &&
+                m.flight_type === 'local',
+        )
+        .map((m) => m.airline.trim());
+    const baggageAirlines = props.baggageOptions
         .map((opt) => opt.airline?.trim())
         .filter((airline): airline is string => Boolean(airline));
+    const defaultAirlines = [
+        'Cebu Pacific',
+        'Philippine Airlines',
+        'Philippines AirAsia',
+        'Air Swift',
+        'Sunlight Air',
+    ];
 
-    return Array.from(new Set([...defaultAirlines, ...configuredAirlines]));
+    return Array.from(
+        new Set([
+            ...defaultAirlines,
+            ...configuredAirlines,
+            ...baggageAirlines,
+        ]),
+    );
+});
+
+const ferrySuggestions = computed(() => {
+    return ['All Ferries'];
+});
+
+const activeMarkupRuleDescription = computed(() => {
+    const numAmt = Number(amount.value) || 0;
+    const numPax = Math.max(1, Number(pax.value) || 1);
+    const legs = tripType.value === 'round_trip' ? 2 : 1;
+
+    if (formType.value === 'airline') {
+        if (flightType.value === 'local') {
+            const rule = props.airlineMarkups.find(
+                (m) =>
+                    (m.service_type ?? 'flight') === 'flight' &&
+                    m.flight_type === 'local' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    const earned =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                    return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+                }
+
+                const base = Number(rule.markup_amount) || 0;
+
+                return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+            }
+        } else if (flightType.value === 'international') {
+            const categoryName =
+                carrierCategory.value === 'full_service'
+                    ? 'Full Service Carriers'
+                    : 'Budget Carriers';
+            const rule =
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() === categoryName.toLowerCase(),
+                ) ||
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() ===
+                            provider.value.trim().toLowerCase(),
+                );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    const earned =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                    return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+                }
+
+                const base = Number(rule.markup_amount) || 0;
+
+                return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+            }
+        }
+    } else if (formType.value === 'ferry') {
+        const rule =
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            ) ||
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() === 'all ferries',
+            ) ||
+            props.airlineMarkups.find((m) => m.service_type === 'ferry');
+
+        if (rule) {
+            if (rule.markup_type === 'percent') {
+                const earned =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+            }
+
+            const base = Number(rule.markup_amount) || 0;
+
+            return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+        }
+    }
+
+    return null;
 });
 
 // Client-side computed previews
@@ -366,6 +573,18 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             :value="flightType"
         />
         <input
+            v-if="formType === 'airline' || formType === 'ferry'"
+            type="hidden"
+            name="trip_type"
+            :value="tripType"
+        />
+        <input
+            v-if="formType === 'airline' && flightType === 'international'"
+            type="hidden"
+            name="carrier_category"
+            :value="carrierCategory"
+        />
+        <input
             v-if="formType === 'airline'"
             type="hidden"
             name="baggage_option_id"
@@ -406,7 +625,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="airline">
-                            Airline Ticket / Travel
+                            Airline Ticket / Flight
+                        </SelectItem>
+                        <SelectItem value="ferry">
+                            Ferry Ticket / Booking
                         </SelectItem>
                         <SelectItem value="translation">
                             Document Translation
@@ -636,9 +858,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <!-- ============================================== -->
 
             <!-- AIRLINE TICKET -->
+            <!-- AIRLINE TICKETING -->
             <template v-if="formType === 'airline'">
                 <div class="grid gap-2">
-                    <Label for="pax">Passengers (Pax)</Label>
+                    <Label for="pax">Number of Passengers (Pax)</Label>
                     <Input
                         id="pax"
                         name="pax"
@@ -653,12 +876,91 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <div class="grid gap-2">
+                    <Label>Trip Type</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="tripType = 'one_way'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'one_way'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>One-way (1 leg)</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="tripType = 'round_trip'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'round_trip'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>Round-trip (2 legs)</span>
+                        </button>
+                    </div>
+                    <InputError :message="errors.trip_type" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="flight_type_select">Flight Type</Label>
+                    <Select v-model="flightType">
+                        <SelectTrigger id="flight_type_select" class="w-full">
+                            <SelectValue placeholder="Select flight type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="local"
+                                >Domestic (Local)</SelectItem
+                            >
+                            <SelectItem value="international"
+                                >International</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.flight_type" />
+                </div>
+
+                <!-- Carrier Category for International Flights -->
+                <div v-if="flightType === 'international'" class="grid gap-2">
+                    <Label for="carrier_category_select"
+                        >Carrier Category</Label
+                    >
+                    <Select v-model="carrierCategory">
+                        <SelectTrigger
+                            id="carrier_category_select"
+                            class="w-full"
+                        >
+                            <SelectValue
+                                placeholder="Select carrier category"
+                            />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="budget">
+                                Budget Carrier (₱1,250 Markup)
+                            </SelectItem>
+                            <SelectItem value="full_service">
+                                Full Service Carrier (₱1,500 Markup)
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.carrier_category" />
+                </div>
+
+                <div class="grid gap-2">
                     <Label for="provider">Airline or provider</Label>
                     <Input
                         id="provider"
                         name="provider"
                         v-model="provider"
-                        placeholder="e.g. Cebu Pacific"
+                        :placeholder="
+                            flightType === 'international'
+                                ? 'e.g. Scoot, PAL, Singapore Airlines'
+                                : 'e.g. Cebu Pacific'
+                        "
                         list="airlines"
                     />
                     <datalist id="airlines">
@@ -671,20 +973,22 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.provider" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="flight_type_select">Flight Type</Label>
-                    <Select v-model="flightType">
-                        <SelectTrigger id="flight_type_select" class="w-full">
-                            <SelectValue placeholder="Select flight type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="local">Local</SelectItem>
-                            <SelectItem value="international"
-                                >International</SelectItem
-                            >
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.flight_type" />
+                <div
+                    class="grid gap-2"
+                    :class="
+                        flightType === 'international' ? '' : 'md:col-span-2'
+                    "
+                >
+                    <Label for="airline_service_details"
+                        >Flight Route / Details</Label
+                    >
+                    <Input
+                        id="airline_service_details"
+                        name="service_details"
+                        v-model="serviceDetails"
+                        placeholder="e.g. Manila to Cebu (MNL-CEB)"
+                    />
+                    <InputError :message="errors.service_details" />
                 </div>
 
                 <div class="grid gap-2 md:col-span-2">
@@ -778,11 +1082,214 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     v-if="numAmount > 0 && numThirdParty > 0"
                     class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
                 >
+                    <div class="flex items-center justify-between">
+                        <div
+                            class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        >
+                            <Calculator class="size-4" />
+                            <span>Flight Ticketing Margin Preview</span>
+                        </div>
+                        <span
+                            v-if="activeMarkupRuleDescription"
+                            class="text-xs font-medium text-muted-foreground"
+                        >
+                            {{ activeMarkupRuleDescription }}
+                        </span>
+                    </div>
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
                     >
-                        <Calculator class="size-4" />
-                        <span>Ticketing Margin Preview</span>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-semibold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Portal Cost</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >DDN Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(
+                                        Math.max(0, numAmount - numThirdParty),
+                                    )
+                                }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- FERRY TICKETING -->
+            <template v-if="formType === 'ferry'">
+                <div class="grid gap-2">
+                    <Label for="ferry_pax">Number of Passengers (Pax)</Label>
+                    <Input
+                        id="ferry_pax"
+                        name="pax"
+                        type="number"
+                        min="1"
+                        step="1"
+                        v-model="pax"
+                        required
+                        placeholder="e.g. 1"
+                    />
+                    <InputError :message="errors.pax" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>Trip Type</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="tripType = 'one_way'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'one_way'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>One-way (1 leg)</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="tripType = 'round_trip'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'round_trip'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>Round-trip (2 legs)</span>
+                        </button>
+                    </div>
+                    <InputError :message="errors.trip_type" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_provider"
+                        >Ferry Provider / Category</Label
+                    >
+                    <Input
+                        id="ferry_provider"
+                        name="provider"
+                        v-model="provider"
+                        placeholder="All Ferries"
+                        list="ferries-list"
+                    />
+                    <datalist id="ferries-list">
+                        <option
+                            v-for="ferry in ferrySuggestions"
+                            :key="ferry"
+                            :value="ferry"
+                        />
+                    </datalist>
+                    <InputError :message="errors.provider" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_service_details"
+                        >Route / Trip Details</Label
+                    >
+                    <Input
+                        id="ferry_service_details"
+                        name="service_details"
+                        v-model="serviceDetails"
+                        placeholder="e.g. Batangas to Calapan"
+                    />
+                    <InputError :message="errors.service_details" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_amount"
+                        >Customer Ticket Price (PHP)</Label
+                    >
+                    <Input
+                        id="ferry_amount"
+                        name="amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="amount"
+                        required
+                        placeholder="0.00"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Total amount collected from customer.
+                    </p>
+                    <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <div class="flex items-center justify-between">
+                        <Label for="ferry_third_party_payment"
+                            >Portal Net Cost (PHP)</Label
+                        >
+                        <span
+                            v-if="props.portalBalance !== undefined"
+                            :class="[
+                                'text-xs font-medium',
+                                props.portalBalance < 10000
+                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground',
+                            ]"
+                        >
+                            Balance: {{ formatPhp(props.portalBalance) }}
+                        </span>
+                    </div>
+                    <Input
+                        id="ferry_third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (Optional)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Net ticket fare deducted from portal deposit.
+                        Auto-calculates with fixed ₱200 markup per pax/leg.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Ferry Calculation Preview -->
+                <div
+                    v-if="numAmount > 0 && numThirdParty > 0"
+                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div class="flex items-center justify-between">
+                        <div
+                            class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        >
+                            <Ship class="size-4" />
+                            <span>Ferry Ticketing Margin Preview</span>
+                        </div>
+                        <span
+                            v-if="activeMarkupRuleDescription"
+                            class="text-xs font-medium text-muted-foreground"
+                        >
+                            {{ activeMarkupRuleDescription }}
+                        </span>
                     </div>
                     <div
                         class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"

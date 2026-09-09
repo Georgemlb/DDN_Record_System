@@ -43,6 +43,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('portal-deposits/top-up', [FlightPortalDepositController::class, 'storeTopUp'])->name('portal-deposits.top-up');
         Route::post('portal-deposits/adjustment', [FlightPortalDepositController::class, 'storeAdjustment'])->name('portal-deposits.adjustment');
         Route::put('portal-deposits/{deposit}', [FlightPortalDepositController::class, 'update'])->name('portal-deposits.update');
+        Route::post('portal-deposits/{deposit}/move', [FlightPortalDepositController::class, 'move'])->name('portal-deposits.move');
         Route::delete('portal-deposits/{deposit}', [FlightPortalDepositController::class, 'destroy'])->name('portal-deposits.destroy');
     });
 

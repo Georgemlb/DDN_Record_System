@@ -331,3 +331,64 @@ test('transactions can be filtered by custom date range', function () {
             ->where('summary.total_payments', 1500)
         );
 });
+
+test('an authenticated user can record an airline transaction with trip_type and carrier_category', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'international',
+        'carrier_category' => 'budget',
+        'provider' => 'Scoot',
+        'amount' => '15000.00',
+        'third_party_payment' => '10000.00',
+    ]));
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'airline',
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'international',
+        'carrier_category' => 'budget',
+        'amount' => '15000.00',
+        'third_party_payment' => '10000.00',
+        'ddn_amount' => '5000.00',
+    ]);
+});
+
+test('an authenticated user can record a ferry transaction with ddn calculation', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'ferry',
+        'payment_method' => 'cash',
+        'transaction_date' => '2026-09-09',
+        'customer_name' => 'Ferry Passenger',
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'provider' => 'All Ferries',
+        'service_details' => 'Batangas to Calapan',
+        'amount' => '2400.00',
+        'third_party_payment' => '1600.00',
+    ]);
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'ferry',
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'provider' => 'All Ferries',
+        'service_details' => 'Batangas to Calapan',
+        'amount' => '2400.00',
+        'third_party_payment' => '1600.00',
+        'ddn_amount' => '800.00',
+    ]);
+});

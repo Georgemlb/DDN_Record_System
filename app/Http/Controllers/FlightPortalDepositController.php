@@ -58,12 +58,37 @@ class FlightPortalDepositController extends Controller
             $query->orderBy('entry_date', 'desc');
         }
 
+        if ($sort === 'entry_date') {
+            $query->orderBy('sort_order', 'asc');
+        }
+
         // Secondary sort to stabilize pagination
         if ($sort !== 'id') {
             $query->orderBy('id', 'desc');
         }
 
         $deposits = $query->paginate(15)->withQueryString();
+
+        $pageDates = $deposits->getCollection()->pluck('entry_date')->map(function ($d) {
+            return $d instanceof Carbon ? $d->toDateString() : (string) $d;
+        })->unique();
+
+        $dateStats = FlightPortalDeposit::whereIn('entry_date', $pageDates)
+            ->selectRaw('entry_date, MIN(sort_order) as min_order, MAX(sort_order) as max_order, COUNT(*) as entry_count')
+            ->groupBy('entry_date')
+            ->get()
+            ->keyBy(function ($item) {
+                return Carbon::parse($item->entry_date)->toDateString();
+            });
+
+        $deposits->getCollection()->transform(function ($deposit) use ($dateStats) {
+            $dateStr = Carbon::parse($deposit->entry_date)->toDateString();
+            $stat = $dateStats->get($dateStr);
+            $deposit->can_move_up = $stat && $stat->entry_count > 1 && $deposit->sort_order > $stat->min_order;
+            $deposit->can_move_down = $stat && $stat->entry_count > 1 && $deposit->sort_order < $stat->max_order;
+
+            return $deposit;
+        });
 
         // Calculate summary metrics
         $currentBalance = FlightPortalDeposit::getCurrentBalance();
@@ -149,6 +174,10 @@ class FlightPortalDepositController extends Controller
         $deposit->reference_number = $validated['reference_number'] ?? null;
         $deposit->notes = $validated['notes'] ?? null;
         $deposit->expense_id = $expenseId;
+
+        $minOrder = FlightPortalDeposit::where('entry_date', $validated['entry_date'])->min('sort_order');
+        $deposit->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+
         $deposit->save();
 
         FlightPortalDeposit::recalculateRunningBalances();
@@ -178,6 +207,10 @@ class FlightPortalDepositController extends Controller
         $deposit->amount = $validated['amount'];
         $deposit->entry_date = $validated['entry_date'];
         $deposit->notes = 'Adjustment: '.$validated['notes'];
+
+        $maxOrder = FlightPortalDeposit::where('entry_date', $validated['entry_date'])->max('sort_order') ?? 0;
+        $deposit->sort_order = $maxOrder + 1;
+
         $deposit->save();
 
         FlightPortalDeposit::recalculateRunningBalances();
@@ -317,6 +350,77 @@ class FlightPortalDepositController extends Controller
             'type' => 'success',
             'message' => 'Ledger entry deleted and balances updated.',
         ]);
+
+        return back();
+    }
+
+    /**
+     * Move a deposit entry up or down in same-day sequence.
+     */
+    public function move(Request $request, FlightPortalDeposit $deposit): RedirectResponse
+    {
+        $validated = $request->validate([
+            'direction' => ['required', 'in:up,down'],
+        ]);
+
+        $direction = $validated['direction'];
+
+        // Fetch all active entries for this date ordered by sort_order asc, id asc
+        $dayEntries = FlightPortalDeposit::where('entry_date', $deposit->entry_date)
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($dayEntries->count() <= 1) {
+            return back();
+        }
+
+        // Re-normalize sort_orders to 1, 2, 3... to avoid ties or gaps
+        foreach ($dayEntries as $index => $entry) {
+            $expectedOrder = $index + 1;
+            if ($entry->sort_order !== $expectedOrder) {
+                $entry->sort_order = $expectedOrder;
+                $entry->saveQuietly();
+            }
+        }
+
+        $currentIndex = $dayEntries->search(fn ($item) => $item->id === $deposit->id);
+
+        if ($currentIndex === false) {
+            return back();
+        }
+
+        if ($direction === 'up' && $currentIndex > 0) {
+            $sibling = $dayEntries[$currentIndex - 1];
+            $currentOrder = $deposit->sort_order;
+            $deposit->sort_order = $sibling->sort_order;
+            $sibling->sort_order = $currentOrder;
+
+            $deposit->saveQuietly();
+            $sibling->saveQuietly();
+
+            FlightPortalDeposit::recalculateRunningBalances();
+
+            Inertia::flash('toast', [
+                'type' => 'success',
+                'message' => 'Entry moved earlier in day sequence. Balances recalculated.',
+            ]);
+        } elseif ($direction === 'down' && $currentIndex < $dayEntries->count() - 1) {
+            $sibling = $dayEntries[$currentIndex + 1];
+            $currentOrder = $deposit->sort_order;
+            $deposit->sort_order = $sibling->sort_order;
+            $sibling->sort_order = $currentOrder;
+
+            $deposit->saveQuietly();
+            $sibling->saveQuietly();
+
+            FlightPortalDeposit::recalculateRunningBalances();
+
+            Inertia::flash('toast', [
+                'type' => 'success',
+                'message' => 'Entry moved later in day sequence. Balances recalculated.',
+            ]);
+        }
 
         return back();
     }

@@ -34,6 +34,7 @@ class DatabaseSeeder extends Seeder
             OnlineAssistanceTypeSeeder::class,
             ExpenseCategorySeeder::class,
             PsaRateSeeder::class,
+            AirlineMarkupSeeder::class,
         ]);
     }
 }

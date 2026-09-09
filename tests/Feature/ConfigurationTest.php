@@ -23,6 +23,7 @@ beforeEach(function () {
         OnlineAssistanceTypeSeeder::class,
         ExpenseCategorySeeder::class,
         PsaRateSeeder::class,
+        \Database\Seeders\AirlineMarkupSeeder::class,
     ]);
 });
 
@@ -42,6 +43,7 @@ test('an authenticated user can view configurations page with all master data', 
             ->has('onlineAssistanceTypes')
             ->has('expenseCategories')
             ->has('psaRates')
+            ->has('airlineMarkups')
             ->where('currentTab', 'online-assistance')
         );
 });
@@ -397,4 +399,68 @@ test('officer_fee must not exceed price when saving psa rate', function () {
     ]);
 
     $response->assertSessionHasErrors(['officer_fee']);
+});
+
+test('an authenticated user can create, update, and delete ticketing markups', function () {
+    $user = User::factory()->create();
+
+    // Create domestic flight markup
+    $response = $this->actingAs($user)->post('/configurations/airline-markups', [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'fixed',
+        'markup_amount' => '250.00',
+        'is_active' => true,
+    ]);
+
+    $response->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'fixed',
+        'markup_amount' => '250.00',
+    ]);
+
+    $markup = \App\Models\AirlineMarkup::where('airline', 'Test Air')->first();
+
+    // Update to percent markup
+    $updateResponse = $this->actingAs($user)->put("/configurations/airline-markups/{$markup->id}", [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'percent',
+        'markup_amount' => '5.00',
+        'is_active' => true,
+    ]);
+
+    $updateResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'id' => $markup->id,
+        'markup_type' => 'percent',
+        'markup_amount' => '5.00',
+    ]);
+
+    // Create ferry markup
+    $ferryResponse = $this->actingAs($user)->post('/configurations/airline-markups', [
+        'service_type' => 'ferry',
+        'airline' => 'Test Lines',
+        'markup_type' => 'fixed',
+        'markup_amount' => '150.00',
+        'is_active' => true,
+    ]);
+
+    $ferryResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'service_type' => 'ferry',
+        'airline' => 'Test Lines',
+        'flight_type' => null,
+        'markup_amount' => '150.00',
+    ]);
+
+    // Delete
+    $deleteResponse = $this->actingAs($user)->delete("/configurations/airline-markups/{$markup->id}");
+    $deleteResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseMissing('airline_markups', ['id' => $markup->id]);
 });
