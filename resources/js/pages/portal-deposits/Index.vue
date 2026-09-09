@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowUpRight,
+    ChevronDown,
+    ChevronUp,
+    ExternalLink,
     Loader2,
     Minus,
+    Pencil,
+    Pin,
     Plane,
     Plus,
     Search,
@@ -191,6 +196,119 @@ const submitAdjustment = () => {
         });
 };
 
+// Edit Deposit Modal State & Form
+const isEditModalOpen = ref(false);
+const depositToEdit = ref<FlightPortalDeposit | null>(null);
+const editAdjustmentDirection = ref<'credit' | 'debit'>('credit');
+const isAnchorOverride = ref(false);
+
+const editForm = useForm({
+    amount: '',
+    entry_date: '',
+    payment_source: 'bank_transfer' as FlightPortalPaymentSource,
+    reference_number: '',
+    notes: '',
+    running_balance: '',
+    is_balance_anchor: false,
+});
+
+const openEditModal = (deposit: FlightPortalDeposit) => {
+    depositToEdit.value = deposit;
+    editForm.clearErrors();
+
+    isAnchorOverride.value = Boolean(deposit.is_balance_anchor);
+    editForm.running_balance =
+        deposit.running_balance !== null &&
+        deposit.running_balance !== undefined
+            ? String(Math.abs(Number(deposit.running_balance)))
+            : '';
+    editForm.is_balance_anchor = Boolean(deposit.is_balance_anchor);
+
+    if (deposit.type === 'top_up') {
+        editForm.amount = String(Math.abs(Number(deposit.amount)));
+        editForm.entry_date = deposit.entry_date;
+        editForm.payment_source = deposit.payment_source ?? 'bank_transfer';
+        editForm.reference_number = deposit.reference_number ?? '';
+        editForm.notes = deposit.notes ?? '';
+    } else if (deposit.type === 'adjustment') {
+        const numAmount = Number(deposit.amount);
+        editAdjustmentDirection.value = numAmount < 0 ? 'debit' : 'credit';
+        editForm.amount = String(Math.abs(numAmount));
+        editForm.entry_date = deposit.entry_date;
+        editForm.reference_number = deposit.reference_number ?? '';
+        editForm.notes = deposit.notes ?? '';
+    } else {
+        editForm.amount = String(Math.abs(Number(deposit.amount)));
+        editForm.entry_date = deposit.entry_date;
+        editForm.reference_number = deposit.reference_number ?? '';
+        editForm.notes = deposit.notes ?? '';
+    }
+
+    isEditModalOpen.value = true;
+};
+
+const resetAnchorToAuto = () => {
+    isAnchorOverride.value = false;
+    editForm.is_balance_anchor = false;
+};
+
+const submitEdit = () => {
+    if (!depositToEdit.value) {
+        return;
+    }
+
+    if (depositToEdit.value.type === 'adjustment') {
+        const rawAmount = parseFloat(editForm.amount as string);
+
+        if (isNaN(rawAmount) || rawAmount <= 0) {
+            return;
+        }
+
+        const signedAmount =
+            editAdjustmentDirection.value === 'debit' ? -rawAmount : rawAmount;
+
+        editForm
+            .transform((data) => ({
+                ...data,
+                amount: signedAmount.toFixed(2),
+                is_balance_anchor: isAnchorOverride.value,
+                running_balance: isAnchorOverride.value
+                    ? parseFloat(
+                          (data.running_balance as string) || '0',
+                      ).toFixed(2)
+                    : null,
+            }))
+            .put(`/portal-deposits/${depositToEdit.value.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    isEditModalOpen.value = false;
+                    depositToEdit.value = null;
+                },
+            });
+    } else {
+        editForm
+            .transform((data) => ({
+                ...data,
+                amount: parseFloat((editForm.amount as string) || '0').toFixed(
+                    2,
+                ),
+                is_balance_anchor: isAnchorOverride.value,
+                running_balance: isAnchorOverride.value
+                    ? parseFloat(
+                          (data.running_balance as string) || '0',
+                      ).toFixed(2)
+                    : null,
+            }))
+            .put(`/portal-deposits/${depositToEdit.value.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    isEditModalOpen.value = false;
+                    depositToEdit.value = null;
+                },
+            });
+    }
+};
+
 // Delete Confirmation Modal
 const isDeleteModalOpen = ref(false);
 const depositToDelete = ref<FlightPortalDeposit | null>(null);
@@ -235,6 +353,34 @@ const formatSource = (source: string | null) => {
     }
 
     return source;
+};
+
+const formatEntryDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) {
+        return '';
+    }
+
+    return String(dateStr).split('T')[0];
+};
+
+// Reordering / Move Up & Down
+const movingId = ref<number | null>(null);
+
+const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
+    movingId.value = deposit.id;
+    router.post(
+        `/portal-deposits/${deposit.id}/move`,
+        {
+            direction,
+            table_direction: props.filters.direction || 'desc',
+        },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                movingId.value = null;
+            },
+        },
+    );
 };
 </script>
 
@@ -557,7 +703,21 @@ const formatSource = (source: string | null) => {
                                 <td
                                     class="px-4 py-3 font-medium whitespace-nowrap"
                                 >
-                                    {{ entry.entry_date }}
+                                    <div class="flex items-center gap-1.5">
+                                        <span>{{
+                                            formatEntryDate(entry.entry_date)
+                                        }}</span>
+                                        <span
+                                            v-if="
+                                                entry.can_move_up ||
+                                                entry.can_move_down
+                                            "
+                                            class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground"
+                                            title="Same-day sequence order"
+                                        >
+                                            #{{ entry.sort_order }}
+                                        </span>
+                                    </div>
                                 </td>
 
                                 <!-- Type Badge -->
@@ -655,7 +815,21 @@ const formatSource = (source: string | null) => {
                                 <td
                                     class="px-4 py-3 text-right font-medium whitespace-nowrap"
                                 >
-                                    {{ formatPhp(entry.running_balance) }}
+                                    <div
+                                        class="flex items-center justify-end gap-1.5"
+                                    >
+                                        <span
+                                            v-if="entry.is_balance_anchor"
+                                            class="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                                            title="Manually anchored running balance"
+                                        >
+                                            <Pin class="size-2.5" />
+                                            Anchor
+                                        </span>
+                                        <span>{{
+                                            formatPhp(entry.running_balance)
+                                        }}</span>
+                                    </div>
                                 </td>
 
                                 <!-- Source / Details -->
@@ -696,22 +870,89 @@ const formatSource = (source: string | null) => {
                                 <td
                                     class="px-4 py-3 text-right whitespace-nowrap"
                                 >
-                                    <Button
-                                        v-if="entry.type !== 'ticket_deduction'"
-                                        variant="ghost"
-                                        size="icon"
-                                        class="size-7 text-muted-foreground hover:text-destructive"
-                                        @click="confirmDelete(entry)"
-                                        title="Delete entry"
+                                    <div
+                                        class="flex items-center justify-end gap-1"
                                     >
-                                        <Trash2 class="size-3.5" />
-                                    </Button>
-                                    <span
-                                        v-else
-                                        class="text-xs text-muted-foreground/60"
-                                    >
-                                        Auto
-                                    </span>
+                                        <!-- Reorder buttons (active when multiple entries exist on this date) -->
+                                        <div
+                                            v-if="
+                                                entry.can_move_up ||
+                                                entry.can_move_down
+                                            "
+                                            class="mr-1 flex items-center rounded-md border border-border/60 bg-muted/40 p-0.5"
+                                        >
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-6 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                                :disabled="
+                                                    !entry.can_move_up ||
+                                                    movingId === entry.id
+                                                "
+                                                @click="moveEntry(entry, 'up')"
+                                                title="Move up in day sequence"
+                                            >
+                                                <ChevronUp class="size-3.5" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-6 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                                :disabled="
+                                                    !entry.can_move_down ||
+                                                    movingId === entry.id
+                                                "
+                                                @click="
+                                                    moveEntry(entry, 'down')
+                                                "
+                                                title="Move down in day sequence"
+                                            >
+                                                <ChevronDown class="size-3.5" />
+                                            </Button>
+                                        </div>
+                                        <template
+                                            v-if="
+                                                entry.type !==
+                                                'ticket_deduction'
+                                            "
+                                        >
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-7 text-muted-foreground hover:text-foreground"
+                                                @click="openEditModal(entry)"
+                                                title="Edit deposit entry"
+                                            >
+                                                <Pencil class="size-3.5" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                class="size-7 text-muted-foreground hover:text-destructive"
+                                                @click="confirmDelete(entry)"
+                                                title="Delete entry"
+                                            >
+                                                <Trash2 class="size-3.5" />
+                                            </Button>
+                                        </template>
+                                        <template v-else>
+                                            <span
+                                                class="text-xs text-muted-foreground/60"
+                                            >
+                                                Auto
+                                            </span>
+                                            <Link
+                                                v-if="entry.transaction_id"
+                                                :href="`/transactions/${entry.transaction_id}/edit`"
+                                                class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                                title="Edit linked airline transaction"
+                                            >
+                                                <ExternalLink
+                                                    class="size-3.5"
+                                                />
+                                            </Link>
+                                        </template>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -1072,6 +1313,412 @@ const formatSource = (source: string | null) => {
                         <span>Confirm Delete</span>
                     </Button>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <!-- MODAL: Edit Deposit Entry -->
+        <Dialog v-model:open="isEditModalOpen">
+            <DialogContent class="sm:max-w-[480px]">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2">
+                        <Pencil class="size-5 text-primary" />
+                        <span v-if="depositToEdit?.type === 'top_up'"
+                            >Edit Flight Portal Top-Up</span
+                        >
+                        <span v-else-if="depositToEdit?.type === 'adjustment'"
+                            >Edit Balance Adjustment</span
+                        >
+                        <span v-else>Edit Deposit Entry</span>
+                    </DialogTitle>
+                    <DialogDescription>
+                        <span v-if="depositToEdit?.type === 'top_up'">
+                            Update top-up details. Running balances and any
+                            linked expense records will automatically
+                            synchronize.
+                        </span>
+                        <span v-else-if="depositToEdit?.type === 'adjustment'">
+                            Update manual balance adjustment. Running balances
+                            will be recalculated chronologically.
+                        </span>
+                        <span v-else> Update deposit ledger record. </span>
+                    </DialogDescription>
+                </DialogHeader>
+
+                <form @submit.prevent="submitEdit" class="space-y-4 py-2">
+                    <!-- Linked Expense Notice if applicable -->
+                    <div
+                        v-if="depositToEdit?.expense"
+                        class="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-900 dark:text-emerald-200"
+                    >
+                        <Wallet
+                            class="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                        />
+                        <div>
+                            <span class="font-semibold"
+                                >Linked to Expense #{{
+                                    depositToEdit.expense.id
+                                }}:</span
+                            >
+                            Updating this top-up will automatically update the
+                            agency cash/expense ledger and daily cash
+                            settlement.
+                        </div>
+                    </div>
+
+                    <!-- Top-Up Edit Form -->
+                    <template v-if="depositToEdit?.type === 'top_up'">
+                        <!-- Amount -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_topup_amount"
+                                >Top-Up Amount (PHP)
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_topup_amount"
+                                v-model="editForm.amount"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                required
+                                placeholder="0.00"
+                            />
+                            <span
+                                v-if="editForm.errors.amount"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.amount }}
+                            </span>
+                        </div>
+
+                        <!-- Date & Payment Source -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1.5">
+                                <Label for="edit_topup_date"
+                                    >Date
+                                    <span class="text-destructive"
+                                        >*</span
+                                    ></Label
+                                >
+                                <Input
+                                    id="edit_topup_date"
+                                    v-model="editForm.entry_date"
+                                    type="date"
+                                    required
+                                />
+                                <span
+                                    v-if="editForm.errors.entry_date"
+                                    class="text-xs text-destructive"
+                                >
+                                    {{ editForm.errors.entry_date }}
+                                </span>
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label for="edit_topup_source"
+                                    >Payment Source
+                                    <span class="text-destructive"
+                                        >*</span
+                                    ></Label
+                                >
+                                <Select v-model="editForm.payment_source">
+                                    <SelectTrigger
+                                        id="edit_topup_source"
+                                        class="w-full"
+                                    >
+                                        <SelectValue
+                                            placeholder="Select Source"
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="bank_transfer"
+                                            >Bank Transfer</SelectItem
+                                        >
+                                        <SelectItem value="gcash"
+                                            >GCash</SelectItem
+                                        >
+                                        <SelectItem value="cash"
+                                            >Cash</SelectItem
+                                        >
+                                    </SelectContent>
+                                </Select>
+                                <span
+                                    v-if="editForm.errors.payment_source"
+                                    class="text-xs text-destructive"
+                                >
+                                    {{ editForm.errors.payment_source }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Reference Number -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_topup_ref"
+                                >Reference Number (Optional)</Label
+                            >
+                            <Input
+                                id="edit_topup_ref"
+                                v-model="editForm.reference_number"
+                                placeholder="e.g. Bank Deposit Slip # or Ref ID"
+                            />
+                            <span
+                                v-if="editForm.errors.reference_number"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.reference_number }}
+                            </span>
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_topup_notes"
+                                >Notes / Purpose (Optional)</Label
+                            >
+                            <Input
+                                id="edit_topup_notes"
+                                v-model="editForm.notes"
+                                placeholder="e.g. Reload via BDO Online for peak season"
+                            />
+                            <span
+                                v-if="editForm.errors.notes"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.notes }}
+                            </span>
+                        </div>
+                    </template>
+
+                    <!-- Adjustment Edit Form -->
+                    <template v-else-if="depositToEdit?.type === 'adjustment'">
+                        <!-- Adjustment Direction -->
+                        <div class="space-y-1.5">
+                            <Label>Adjustment Type</Label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <Button
+                                    type="button"
+                                    :variant="
+                                        editAdjustmentDirection === 'credit'
+                                            ? 'default'
+                                            : 'outline'
+                                    "
+                                    class="w-full gap-2"
+                                    @click="editAdjustmentDirection = 'credit'"
+                                >
+                                    <Plus class="size-4" />
+                                    <span>Credit (+ Add)</span>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    :variant="
+                                        editAdjustmentDirection === 'debit'
+                                            ? 'destructive'
+                                            : 'outline'
+                                    "
+                                    class="w-full gap-2"
+                                    @click="editAdjustmentDirection = 'debit'"
+                                >
+                                    <Minus class="size-4" />
+                                    <span>Debit (- Deduct)</span>
+                                </Button>
+                            </div>
+                        </div>
+
+                        <!-- Amount -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_adj_amount"
+                                >Adjustment Amount (PHP)
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_adj_amount"
+                                v-model="editForm.amount"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                required
+                                placeholder="0.00"
+                            />
+                            <span
+                                v-if="editForm.errors.amount"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.amount }}
+                            </span>
+                        </div>
+
+                        <!-- Date -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_adj_date"
+                                >Date
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_adj_date"
+                                v-model="editForm.entry_date"
+                                type="date"
+                                required
+                            />
+                            <span
+                                v-if="editForm.errors.entry_date"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.entry_date }}
+                            </span>
+                        </div>
+
+                        <!-- Notes / Audit Reason -->
+                        <div class="space-y-1.5">
+                            <Label for="edit_adj_notes"
+                                >Audit Reason / Explanation
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_adj_notes"
+                                v-model="editForm.notes"
+                                required
+                                placeholder="e.g. Portal monthly bonus credit, or fee discrepancy"
+                            />
+                            <span
+                                v-if="editForm.errors.notes"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.notes }}
+                            </span>
+                        </div>
+                    </template>
+
+                    <!-- Fallback / Unlinked -->
+                    <template v-else>
+                        <div class="space-y-1.5">
+                            <Label for="edit_gen_amount"
+                                >Amount (PHP)
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_gen_amount"
+                                v-model="editForm.amount"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                required
+                            />
+                            <span
+                                v-if="editForm.errors.amount"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.amount }}
+                            </span>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="edit_gen_date"
+                                >Date
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="edit_gen_date"
+                                v-model="editForm.entry_date"
+                                type="date"
+                                required
+                            />
+                            <span
+                                v-if="editForm.errors.entry_date"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.entry_date }}
+                            </span>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label for="edit_gen_notes">Notes</Label>
+                            <Input
+                                id="edit_gen_notes"
+                                v-model="editForm.notes"
+                            />
+                            <span
+                                v-if="editForm.errors.notes"
+                                class="text-xs text-destructive"
+                            >
+                                {{ editForm.errors.notes }}
+                            </span>
+                        </div>
+                    </template>
+
+                    <!-- Running Balance Anchor Override Section -->
+                    <div
+                        class="space-y-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs"
+                    >
+                        <div class="flex items-center justify-between">
+                            <label
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <input
+                                    type="checkbox"
+                                    v-model="isAnchorOverride"
+                                    class="size-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span
+                                    class="flex items-center gap-1.5 font-semibold text-foreground"
+                                >
+                                    <Pin
+                                        class="size-3 text-amber-600 dark:text-amber-400"
+                                    />
+                                    Anchor Running Balance (Manual Calibration)
+                                </span>
+                            </label>
+
+                            <Button
+                                v-if="depositToEdit?.is_balance_anchor"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                class="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                                @click="resetAnchorToAuto"
+                            >
+                                Reset to Auto
+                            </Button>
+                        </div>
+
+                        <div v-if="isAnchorOverride" class="space-y-1.5 pt-1">
+                            <Label for="edit_running_balance" class="text-xs">
+                                Desired Running Balance on this row (PHP)
+                            </Label>
+                            <Input
+                                id="edit_running_balance"
+                                v-model="editForm.running_balance"
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                class="bg-background"
+                            />
+                            <p class="text-[11px] text-muted-foreground">
+                                Setting an anchor sets this row's running
+                                balance explicitly. Subsequent rows calculate
+                                forward from this exact balance.
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter class="pt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="isEditModalOpen = false"
+                            :disabled="editForm.processing"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            :disabled="editForm.processing"
+                            class="gap-2"
+                        >
+                            <Loader2
+                                v-if="editForm.processing"
+                                class="size-4 animate-spin"
+                            />
+                            <span>Save Changes</span>
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     </div>

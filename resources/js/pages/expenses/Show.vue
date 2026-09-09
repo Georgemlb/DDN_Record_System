@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, Copy, Pencil, Trash2 } from '@lucide/vue';
-import { computed } from 'vue';
+import { ArrowLeft, Copy, HandCoins, Pencil, Trash2 } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import ExpenseController from '@/actions/App/Http/Controllers/ExpenseController';
+import ReimburseExpenseModal from '@/components/ReimburseExpenseModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +39,8 @@ import type { Expense } from '@/types/expense';
 const props = defineProps<{
     expense: Expense;
 }>();
+
+const reimburseModalOpen = ref(false);
 
 const page = usePage();
 const currentUser = computed(() => page.props.auth?.user);
@@ -83,12 +86,32 @@ defineOptions({
         <!-- Header & Action Buttons -->
         <section class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <p class="text-sm font-medium text-primary">
                         Expense details
                     </p>
                     <Badge variant="secondary" v-if="props.expense.category">
                         {{ props.expense.category.name }}
+                    </Badge>
+                    <Badge
+                        v-if="
+                            props.expense.is_personal &&
+                            props.expense.reimbursement_status === 'pending'
+                        "
+                        variant="outline"
+                        class="border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    >
+                        Personal (Pending Reimbursement)
+                    </Badge>
+                    <Badge
+                        v-else-if="
+                            props.expense.is_personal &&
+                            props.expense.reimbursement_status === 'reimbursed'
+                        "
+                        variant="outline"
+                        class="border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    >
+                        Personal (Reimbursed)
                     </Badge>
                 </div>
                 <h1
@@ -102,7 +125,21 @@ defineOptions({
                 </p>
             </div>
 
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Reimburse Button for Pending Personal Expenses -->
+                <Button
+                    v-if="
+                        props.expense.is_personal &&
+                        props.expense.reimbursement_status === 'pending' &&
+                        canModify
+                    "
+                    class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                    @click="reimburseModalOpen = true"
+                >
+                    <HandCoins class="size-4" />
+                    <span>Record Reimbursement</span>
+                </Button>
+
                 <!-- Duplicate Button -->
                 <Button variant="outline" as-child>
                     <Link
@@ -315,6 +352,123 @@ defineOptions({
                 </CardContent>
             </Card>
 
+            <!-- Personal Errand & Reimbursement Card -->
+            <Card
+                v-if="props.expense.is_personal"
+                class="border-amber-200 md:col-span-2 dark:border-amber-900/50"
+            >
+                <CardHeader>
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-2"
+                    >
+                        <div>
+                            <CardTitle
+                                class="flex items-center gap-2 text-base font-semibold"
+                            >
+                                <HandCoins
+                                    class="size-4 text-amber-600 dark:text-amber-400"
+                                />
+                                Personal Errand & Reimbursement Status
+                            </CardTitle>
+                            <CardDescription>
+                                Personal or family funds disbursed using agency
+                                accounts
+                            </CardDescription>
+                        </div>
+                        <Badge
+                            :variant="
+                                props.expense.reimbursement_status ===
+                                'reimbursed'
+                                    ? 'default'
+                                    : 'outline'
+                            "
+                            :class="
+                                props.expense.reimbursement_status ===
+                                'reimbursed'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                            "
+                        >
+                            {{
+                                props.expense.reimbursement_status ===
+                                'reimbursed'
+                                    ? 'Reimbursed'
+                                    : 'Pending Reimbursement'
+                            }}
+                        </Badge>
+                    </div>
+                </CardHeader>
+                <CardContent class="space-y-4">
+                    <div
+                        v-if="
+                            props.expense.reimbursement_status === 'reimbursed'
+                        "
+                        class="grid grid-cols-1 gap-4 sm:grid-cols-3"
+                    >
+                        <div>
+                            <span
+                                class="text-xs font-medium text-muted-foreground"
+                                >Date Repaid</span
+                            >
+                            <div class="mt-1 font-semibold text-foreground">
+                                {{
+                                    formatExpenseDate(
+                                        props.expense.reimbursed_at,
+                                    )
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <span
+                                class="text-xs font-medium text-muted-foreground"
+                                >Repayment Channel</span
+                            >
+                            <div
+                                class="mt-1 font-semibold text-foreground capitalize"
+                            >
+                                {{
+                                    formatExpensePaymentMethod(
+                                        props.expense.reimbursement_method ||
+                                            'cash',
+                                    )
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <span
+                                class="text-xs font-medium text-muted-foreground"
+                                >Reimbursement Notes</span
+                            >
+                            <div class="mt-1 text-sm text-foreground">
+                                {{ props.expense.reimbursement_notes || '—' }}
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-amber-50/70 p-3.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+                    >
+                        <div>
+                            <span class="font-medium">Repayment Pending: </span>
+                            <span>
+                                This disbursement was paid from agency funds and
+                                is awaiting repayment from
+                                {{ props.expense.payee || 'the person' }}.
+                            </span>
+                        </div>
+                        <Button
+                            v-if="canModify"
+                            size="sm"
+                            class="shrink-0 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                            @click="reimburseModalOpen = true"
+                        >
+                            <HandCoins class="size-3.5" />
+                            <span>Mark as Reimbursed</span>
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
             <!-- Notes Card -->
             <Card class="md:col-span-2" v-if="props.expense.notes">
                 <CardHeader>
@@ -336,5 +490,11 @@ defineOptions({
                 <span>Back to expenses</span>
             </Link>
         </Button>
+
+        <!-- Reimburse Modal -->
+        <ReimburseExpenseModal
+            v-model:open="reimburseModalOpen"
+            :expense="props.expense"
+        />
     </main>
 </template>

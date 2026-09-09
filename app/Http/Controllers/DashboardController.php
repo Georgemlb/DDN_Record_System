@@ -60,6 +60,12 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
+        // Pending personal reimbursements
+        $pendingReimbursements = [
+            'count' => Expense::query()->pendingReimbursement()->count(),
+            'total' => (float) Expense::query()->pendingReimbursement()->sum('amount'),
+        ];
+
         if ($isStaff) {
             return Inertia::render('Dashboard', [
                 'isStaff' => true,
@@ -67,6 +73,7 @@ class DashboardController extends Controller
                 'register' => $registerData,
                 'recentTransactions' => $recentTransactions,
                 'recentExpenses' => $recentExpenses,
+                'pendingReimbursements' => $pendingReimbursements,
             ]);
         }
 
@@ -177,6 +184,7 @@ class DashboardController extends Controller
             'expensesByCategory' => $expensesByCategory,
             'recentTransactions' => $recentTransactions,
             'recentExpenses' => $recentExpenses,
+            'pendingReimbursements' => $pendingReimbursements,
         ]);
     }
 

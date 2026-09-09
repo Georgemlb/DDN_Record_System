@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -20,6 +21,11 @@ use Illuminate\Support\Carbon;
  * @property string|null $reference_number
  * @property string $recurring_frequency
  * @property string|null $notes
+ * @property bool $is_personal
+ * @property string $reimbursement_status
+ * @property Carbon|null $reimbursed_at
+ * @property string|null $reimbursement_method
+ * @property string|null $reimbursement_notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -37,6 +43,11 @@ use Illuminate\Support\Carbon;
     'reference_number',
     'recurring_frequency',
     'notes',
+    'is_personal',
+    'reimbursement_status',
+    'reimbursed_at',
+    'reimbursement_method',
+    'reimbursement_notes',
 ])]
 class Expense extends Model
 {
@@ -81,6 +92,18 @@ class Expense extends Model
         self::FREQUENCY_ANNUALLY,
     ];
 
+    public const REIMBURSEMENT_STATUS_NONE = 'none';
+
+    public const REIMBURSEMENT_STATUS_PENDING = 'pending';
+
+    public const REIMBURSEMENT_STATUS_REIMBURSED = 'reimbursed';
+
+    public const REIMBURSEMENT_STATUSES = [
+        self::REIMBURSEMENT_STATUS_NONE,
+        self::REIMBURSEMENT_STATUS_PENDING,
+        self::REIMBURSEMENT_STATUS_REIMBURSED,
+    ];
+
     /**
      * Get the attributes that should be cast.
      *
@@ -91,7 +114,43 @@ class Expense extends Model
         return [
             'expense_date' => 'date:Y-m-d',
             'amount' => 'decimal:2',
+            'is_personal' => 'boolean',
+            'reimbursed_at' => 'date:Y-m-d',
         ];
+    }
+
+    /**
+     * @param  Builder<Expense>  $query
+     */
+    public function scopePersonal($query)
+    {
+        return $query->where('is_personal', true);
+    }
+
+    /**
+     * @param  Builder<Expense>  $query
+     */
+    public function scopeBusiness($query)
+    {
+        return $query->where('is_personal', false);
+    }
+
+    /**
+     * @param  Builder<Expense>  $query
+     */
+    public function scopePendingReimbursement($query)
+    {
+        return $query->where('is_personal', true)
+            ->where('reimbursement_status', self::REIMBURSEMENT_STATUS_PENDING);
+    }
+
+    /**
+     * @param  Builder<Expense>  $query
+     */
+    public function scopeReimbursed($query)
+    {
+        return $query->where('is_personal', true)
+            ->where('reimbursement_status', self::REIMBURSEMENT_STATUS_REIMBURSED);
     }
 
     /**

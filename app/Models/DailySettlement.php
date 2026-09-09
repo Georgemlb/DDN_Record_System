@@ -44,6 +44,12 @@ use Illuminate\Support\Carbon;
     'expected_cash',
     'actual_cash',
     'discrepancy',
+    'opening_gcash',
+    'gcash_in',
+    'gcash_out',
+    'expected_gcash',
+    'actual_gcash',
+    'gcash_discrepancy',
     'total_gcash',
     'total_bank_transfer',
     'total_sales',
@@ -75,6 +81,12 @@ class DailySettlement extends Model
             'expected_cash' => 'decimal:2',
             'actual_cash' => 'decimal:2',
             'discrepancy' => 'decimal:2',
+            'opening_gcash' => 'decimal:2',
+            'gcash_in' => 'decimal:2',
+            'gcash_out' => 'decimal:2',
+            'expected_gcash' => 'decimal:2',
+            'actual_gcash' => 'decimal:2',
+            'gcash_discrepancy' => 'decimal:2',
             'total_gcash' => 'decimal:2',
             'total_bank_transfer' => 'decimal:2',
             'total_sales' => 'decimal:2',
@@ -208,12 +220,118 @@ class DailySettlement extends Model
             }
         }
 
+        // PSA document processing fees paid out in cash (not retained in drawer daily count)
+        $psaCashDisbursements = 0.0;
+        $psaTransactions = Transaction::query()
+            ->where('type', Transaction::TYPE_PSA)
+            ->whereDate('transaction_date', $dateString)
+            ->whereNotNull('third_party_payment')
+            ->where('third_party_payment', '>', 0)
+            ->get(['payment_method', 'cash_amount', 'third_party_payment']);
+
+        foreach ($psaTransactions as $psaTx) {
+            $fee = (float) $psaTx->third_party_payment;
+            if ($psaTx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
+                $psaCashDisbursements += $fee;
+            } elseif ($psaTx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashPaid = (float) ($psaTx->cash_amount ?? 0);
+                $psaCashDisbursements += min($cashPaid, $fee);
+            }
+        }
+
+        // Avoid double-counting if an explicit PSA cash expense was already recorded on this date
+        $existingPsaCashExpenses = (float) Expense::query()
+            ->whereDate('expense_date', $dateString)
+            ->where('payment_method', Expense::PAYMENT_METHOD_CASH)
+            ->where(function ($q) {
+                $q->where('title', 'like', '%PSA%')
+                    ->orWhere('title', 'like', '%CENOMAR%');
+            })
+            ->sum('amount');
+
+        $netPsaDisbursements = max(0.0, $psaCashDisbursements - $existingPsaCashExpenses);
+        $cashOut += $netPsaDisbursements;
+        $totalExpenses += $netPsaDisbursements;
+
+        // Personal expense reimbursements received on this date
+        $reimbursements = Expense::query()
+            ->where('is_personal', true)
+            ->where('reimbursement_status', Expense::REIMBURSEMENT_STATUS_REIMBURSED)
+            ->whereDate('reimbursed_at', $dateString)
+            ->get(['amount', 'reimbursement_method']);
+
+        foreach ($reimbursements as $reimb) {
+            $amount = (float) $reimb->amount;
+            if ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_CASH) {
+                $cashIn += $amount;
+            } elseif ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_GCASH) {
+                $totalGcash += $amount;
+            } elseif ($reimb->reimbursement_method === Expense::PAYMENT_METHOD_BANK_TRANSFER) {
+                $totalBankTransfer += $amount;
+            }
+        }
+
+        // GCash Inflows (Customer payments via GCash and GCash reimbursements)
+        $gcashIn = $totalGcash;
+
+        // GCash Outflows: Expenses paid via GCash
+        $gcashOut = $expenseGcash;
+
+        // Third-party government fees paid via GCash (e.g. Online Assistance)
+        $gcashDisbursements = (float) Transaction::query()
+            ->whereDate('transaction_date', $dateString)
+            ->where('disbursement_source', Transaction::DISBURSEMENT_SOURCE_GCASH)
+            ->whereNotNull('third_party_payment')
+            ->where('third_party_payment', '>', 0)
+            ->sum('third_party_payment');
+
+        $gcashOut += $gcashDisbursements;
+
+        // Remittance adjustments
+        // Cash-Out: Customer sends GCash to agency (+gcashIn), agency gives cash from drawer (+cashOut)
+        $remittanceCashOuts = Transaction::query()
+            ->where('type', Transaction::TYPE_REMITTANCE)
+            ->whereDate('transaction_date', $dateString)
+            ->where(function ($q) {
+                $q->where('service_details', 'GCASH_CASH_OUT')
+                    ->orWhere('notes', 'like', '%cash out%');
+            })
+            ->get(['amount', 'payment_method', 'gcash_amount']);
+
+        foreach ($remittanceCashOuts as $rem) {
+            $amt = (float) $rem->amount;
+            $cashOut += $amt; // physical cash given out to customer
+            if ($rem->payment_method !== Transaction::PAYMENT_METHOD_GCASH) {
+                $gcashIn += $amt; // ensure GCash inflow is tracked
+            }
+        }
+
+        // Cash-In: Customer gives cash to agency (+cashIn), agency sends GCash from wallet (+gcashOut)
+        $remittanceCashIns = Transaction::query()
+            ->where('type', Transaction::TYPE_REMITTANCE)
+            ->whereDate('transaction_date', $dateString)
+            ->where(function ($q) {
+                $q->where('service_details', 'GCASH_CASH_IN')
+                    ->orWhere('notes', 'like', '%cash in%');
+            })
+            ->get(['amount', 'payment_method']);
+
+        foreach ($remittanceCashIns as $rem) {
+            $amt = (float) $rem->amount;
+            if ($rem->payment_method !== Transaction::PAYMENT_METHOD_CASH) {
+                $cashIn += $amt; // ensure physical cash received into drawer
+            }
+            $gcashOut += $amt; // GCash transferred to customer
+        }
+
         return [
             'cash_in' => round($cashIn, 2),
+            'cash_out' => round($cashOut, 2),
+            'gcash_in' => round($gcashIn, 2),
+            'gcash_out' => round($gcashOut, 2),
             'total_gcash' => round($totalGcash, 2),
             'total_sales' => round($totalSales, 2),
             'total_ddn_earnings' => round($totalDdnEarnings, 2),
-            'cash_out' => round($cashOut, 2),
             'expense_gcash' => round($expenseGcash, 2),
             'total_bank_transfer' => round($totalBankTransfer, 2),
             'total_expenses' => round($totalExpenses, 2),
@@ -241,6 +359,14 @@ class DailySettlement extends Model
 
         if ($this->actual_cash !== null) {
             $this->discrepancy = round((float) $this->actual_cash - (float) $this->expected_cash, 2);
+        }
+
+        $this->gcash_in = $metrics['gcash_in'];
+        $this->gcash_out = $metrics['gcash_out'];
+        $this->expected_gcash = round((float) ($this->opening_gcash ?? 0) + $metrics['gcash_in'] - $metrics['gcash_out'], 2);
+
+        if ($this->actual_gcash !== null) {
+            $this->gcash_discrepancy = round((float) $this->actual_gcash - (float) $this->expected_gcash, 2);
         }
     }
 

@@ -37,6 +37,11 @@ class ExpenseRequest extends FormRequest
             'reference_number' => ['nullable', 'string', 'max:100'],
             'recurring_frequency' => ['nullable', 'string', Rule::in(Expense::RECURRING_FREQUENCIES)],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'is_personal' => ['nullable', 'boolean'],
+            'reimbursement_status' => ['nullable', 'string', Rule::in(Expense::REIMBURSEMENT_STATUSES)],
+            'reimbursed_at' => ['nullable', 'date'],
+            'reimbursement_method' => ['nullable', 'string', Rule::in(Expense::PAYMENT_METHODS)],
+            'reimbursement_notes' => ['nullable', 'string', 'max:2000'],
         ];
     }
 

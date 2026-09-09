@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property string $type
  * @property string $amount
  * @property string $running_balance
+ * @property bool $is_balance_anchor
  * @property int|null $transaction_id
  * @property int|null $expense_id
  * @property string|null $reference_number
@@ -32,11 +33,13 @@ use Illuminate\Support\Carbon;
     'type',
     'amount',
     'running_balance',
+    'is_balance_anchor',
     'transaction_id',
     'expense_id',
     'reference_number',
     'payment_source',
     'entry_date',
+    'sort_order',
     'notes',
 ])]
 class FlightPortalDeposit extends Model
@@ -77,10 +80,24 @@ class FlightPortalDeposit extends Model
     protected function casts(): array
     {
         return [
-            'entry_date' => 'date',
+            'entry_date' => 'date:Y-m-d',
             'amount' => 'decimal:2',
             'running_balance' => 'decimal:2',
+            'is_balance_anchor' => 'boolean',
+            'sort_order' => 'integer',
         ];
+    }
+
+    /**
+     * Bootstrap the model and its traits.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $deposit) {
+            if ($deposit->entry_date) {
+                $deposit->attributes['entry_date'] = \Carbon\Carbon::parse($deposit->entry_date)->toDateString();
+            }
+        });
     }
 
     /**
@@ -119,6 +136,7 @@ class FlightPortalDeposit extends Model
     public static function getCurrentBalance(): float
     {
         $latest = static::orderBy('entry_date', 'desc')
+            ->orderBy('sort_order', 'desc')
             ->orderBy('id', 'desc')
             ->first();
 
@@ -131,6 +149,7 @@ class FlightPortalDeposit extends Model
     public static function recalculateRunningBalances(): void
     {
         $entries = static::orderBy('entry_date', 'asc')
+            ->orderBy('sort_order', 'asc')
             ->orderBy('id', 'asc')
             ->get();
 
@@ -139,17 +158,21 @@ class FlightPortalDeposit extends Model
         foreach ($entries as $entry) {
             $amount = (float) $entry->amount;
 
-            if ($entry->type === self::TYPE_TOP_UP) {
-                $running += $amount;
-            } elseif ($entry->type === self::TYPE_TICKET_DEDUCTION) {
-                $running -= $amount;
-            } elseif ($entry->type === self::TYPE_ADJUSTMENT) {
-                $running += $amount;
-            }
+            if ($entry->is_balance_anchor) {
+                $running = (float) $entry->running_balance;
+            } else {
+                if ($entry->type === self::TYPE_TOP_UP) {
+                    $running += $amount;
+                } elseif ($entry->type === self::TYPE_TICKET_DEDUCTION) {
+                    $running -= $amount;
+                } elseif ($entry->type === self::TYPE_ADJUSTMENT) {
+                    $running += $amount;
+                }
 
-            if ((float) $entry->running_balance !== $running) {
-                $entry->running_balance = number_format($running, 2, '.', '');
-                $entry->saveQuietly();
+                if ((float) $entry->running_balance !== $running) {
+                    $entry->running_balance = number_format($running, 2, '.', '');
+                    $entry->saveQuietly();
+                }
             }
         }
     }
@@ -161,13 +184,16 @@ class FlightPortalDeposit extends Model
     {
         $cost = (float) ($transaction->third_party_payment ?? 0);
 
-        if ($transaction->type === Transaction::TYPE_AIRLINE && $cost > 0) {
+        if (in_array($transaction->type, [Transaction::TYPE_AIRLINE, Transaction::TYPE_FERRY], true) && $cost > 0) {
             $entry = static::withTrashed()->where('transaction_id', $transaction->id)->first();
 
             if (! $entry) {
                 $entry = new static;
                 $entry->transaction_id = $transaction->id;
                 $entry->type = self::TYPE_TICKET_DEDUCTION;
+
+                $maxOrder = static::whereDate('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
+                $entry->sort_order = $maxOrder + 1;
             } else {
                 if ($entry->trashed()) {
                     $entry->restore();
@@ -179,6 +205,12 @@ class FlightPortalDeposit extends Model
             $entry->entry_date = $transaction->transaction_date;
             $entry->reference_number = $transaction->reference_number;
             $entry->notes = "Ticket booking deduction for {$transaction->customer_name}";
+
+            if (! $entry->sort_order) {
+                $maxOrder = static::whereDate('entry_date', $transaction->transaction_date)->max('sort_order') ?? 0;
+                $entry->sort_order = $maxOrder + 1;
+            }
+
             $entry->save();
 
             static::recalculateRunningBalances();

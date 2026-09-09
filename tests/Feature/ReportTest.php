@@ -288,3 +288,105 @@ test('user can export financial report as CSV', function () {
     expect($csvContent)->toContain('SERVICE BREAKDOWN');
     expect($csvContent)->toContain('EXPENSES BREAKDOWN BY CATEGORY');
 });
+
+test('user can close an old open settlement record from previous dates', function () {
+    $user = User::factory()->create();
+    $oldDate = '2026-08-15';
+
+    // Create a transaction on that date so syncMetricsWithRecords calculates cash_in
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => $oldDate,
+        'customer_name' => 'Past Customer',
+        'amount' => 1000.00,
+        'ddn_amount' => 1000.00,
+    ]);
+
+    // Create an old open settlement
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => $oldDate,
+        'user_id' => $user->id,
+        'status' => DailySettlement::STATUS_OPEN,
+        'opening_cash' => 2000.00,
+        'cash_in' => 1000.00,
+        'cash_out' => 0.00,
+        'expected_cash' => 3000.00,
+        'total_sales' => 1000.00,
+        'total_ddn_earnings' => 1000.00,
+        'opened_at' => Carbon::parse($oldDate),
+    ]);
+
+    $response = $this->actingAs($user)->put(route('reports.settlements.close', $settlement), [
+        'actual_cash' => 2950.00,
+        'notes' => 'Old record closed by admin. ₱50 short.',
+    ]);
+
+    $response->assertRedirect();
+
+    $settlement->refresh();
+    expect($settlement->status)->toBe(DailySettlement::STATUS_CLOSED);
+    expect((float) $settlement->actual_cash)->toBe(2950.00);
+    expect((float) $settlement->discrepancy)->toBe(-50.00);
+    expect($settlement->closed_by_user_id)->toBe($user->id);
+    expect($settlement->notes)->toBe('Old record closed by admin. ₱50 short.');
+    expect($settlement->closed_at)->not->toBeNull();
+});
+
+test('admin can edit an existing cash settlement record', function () {
+    $user = User::factory()->create();
+    $date = '2026-08-20';
+
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => $date,
+        'user_id' => $user->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 1000.00,
+        'cash_in' => 2000.00,
+        'cash_out' => 500.00,
+        'expected_cash' => 2500.00,
+        'actual_cash' => 2500.00,
+        'discrepancy' => 0.00,
+        'total_sales' => 2000.00,
+        'total_ddn_earnings' => 1000.00,
+        'opened_at' => Carbon::parse($date),
+        'closed_at' => Carbon::parse($date),
+    ]);
+
+    // Admin edits opening float and actual cash count
+    $response = $this->actingAs($user)->put(route('reports.settlements.update', $settlement), [
+        'opening_cash' => 1500.00,
+        'actual_cash' => 3000.00,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'notes' => 'Adjusted opening cash float from ₱1,000 to ₱1,500.',
+        'sync_metrics' => false,
+    ]);
+
+    $response->assertRedirect();
+
+    $settlement->refresh();
+    expect((float) $settlement->opening_cash)->toBe(1500.00);
+    expect((float) $settlement->expected_cash)->toBe(3000.00); // 1500 + 2000 - 500
+    expect((float) $settlement->actual_cash)->toBe(3000.00);
+    expect((float) $settlement->discrepancy)->toBe(0.00);
+    expect($settlement->notes)->toBe('Adjusted opening cash float from ₱1,000 to ₱1,500.');
+});
+
+test('updating a settlement validates inputs', function () {
+    $user = User::factory()->create();
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => '2026-08-25',
+        'status' => DailySettlement::STATUS_OPEN,
+        'opening_cash' => 1000.00,
+        'cash_in' => 0.00,
+        'cash_out' => 0.00,
+        'expected_cash' => 1000.00,
+    ]);
+
+    $response = $this->actingAs($user)->put(route('reports.settlements.update', $settlement), [
+        'opening_cash' => -50,
+        'status' => 'invalid_status',
+    ]);
+
+    $response->assertSessionHasErrors(['opening_cash', 'status']);
+});

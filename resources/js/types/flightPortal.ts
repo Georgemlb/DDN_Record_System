@@ -9,11 +9,15 @@ export interface FlightPortalDeposit {
     type: FlightPortalDepositType;
     amount: string | number;
     running_balance: string | number;
+    is_balance_anchor?: boolean;
     transaction_id: number | null;
     expense_id: number | null;
     reference_number: string | null;
     payment_source: FlightPortalPaymentSource | null;
     entry_date: string;
+    sort_order?: number;
+    can_move_up?: boolean;
+    can_move_down?: boolean;
     notes: string | null;
     created_at: string;
     updated_at: string;

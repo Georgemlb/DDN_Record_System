@@ -10,6 +10,8 @@ export type ExpenseCategory = {
     sort_order?: number;
 };
 
+export type ReimbursementStatus = 'none' | 'pending' | 'reimbursed';
+
 export type Expense = {
     id: number;
     user_id?: number | null;
@@ -23,6 +25,11 @@ export type Expense = {
     reference_number: string | null;
     recurring_frequency: RecurringFrequency;
     notes: string | null;
+    is_personal?: boolean;
+    reimbursement_status?: ReimbursementStatus;
+    reimbursed_at?: string | null;
+    reimbursement_method?: ExpensePaymentMethod | null;
+    reimbursement_notes?: string | null;
     created_at?: string;
     updated_at?: string;
     deleted_at?: string | null;
@@ -44,6 +51,11 @@ export type ExpenseSummary = {
     } | null;
 };
 
+export type PendingPersonalSummary = {
+    count: number;
+    total: number;
+};
+
 export type ExpenseFilters = {
     search?: string;
     category_id?: string | number;
@@ -53,10 +65,18 @@ export type ExpenseFilters = {
     date_to?: string;
     sort?: string;
     direction?: 'asc' | 'desc';
-    status?: 'active' | 'trash';
+    status?:
+        | 'active'
+        | 'business'
+        | 'personal_pending'
+        | 'personal_reimbursed'
+        | 'trash';
 };
 
 export type ExpenseCounts = {
     active: number;
+    business?: number;
+    personal_pending?: number;
+    personal_reimbursed?: number;
     trash: number;
 };

@@ -64,7 +64,29 @@ const form = useForm({
     recurring_frequency: (initialData?.recurring_frequency ??
         'none') as RecurringFrequency,
     notes: initialData?.notes ?? '',
+    is_personal: Boolean(initialData?.is_personal ?? false),
+    reimbursement_status: initialData?.reimbursement_status ?? 'none',
+    reimbursed_at: initialData?.reimbursed_at ?? getTodayDateString(),
+    reimbursement_method: (initialData?.reimbursement_method ??
+        'cash') as ExpensePaymentMethod,
+    reimbursement_notes: initialData?.reimbursement_notes ?? '',
 });
+
+watch(
+    () => form.is_personal,
+    (isPersonal) => {
+        if (
+            isPersonal &&
+            (form.reimbursement_status === 'none' || !form.reimbursement_status)
+        ) {
+            form.reimbursement_status = 'pending';
+        }
+
+        if (!isPersonal) {
+            form.reimbursement_status = 'none';
+        }
+    },
+);
 
 const isCategoryModalOpen = ref(false);
 
@@ -84,12 +106,21 @@ watch(
 );
 
 const submit = () => {
+    const isPersonal = Boolean(form.is_personal);
+    const isReimbursed =
+        isPersonal && form.reimbursement_status === 'reimbursed';
+
     const payload = {
         ...form.data(),
         expense_category_id: form.expense_category_id || '',
         payee: form.payee || null,
         reference_number: form.reference_number || null,
         notes: form.notes || null,
+        is_personal: isPersonal,
+        reimbursement_status: isPersonal ? form.reimbursement_status : 'none',
+        reimbursed_at: isReimbursed ? form.reimbursed_at : null,
+        reimbursement_method: isReimbursed ? form.reimbursement_method : null,
+        reimbursement_notes: isReimbursed ? form.reimbursement_notes : null,
     };
 
     if (props.method === 'put') {
@@ -291,6 +322,137 @@ const submit = () => {
                         copying.
                     </p>
                     <InputError :message="form.errors.recurring_frequency" />
+                </div>
+
+                <!-- Personal / Errand Settings -->
+                <div
+                    class="rounded-lg border border-amber-200 bg-amber-50/50 p-4 md:col-span-2 dark:border-amber-900/50 dark:bg-amber-950/20"
+                >
+                    <div class="flex items-start space-x-3">
+                        <input
+                            id="is_personal"
+                            v-model="form.is_personal"
+                            type="checkbox"
+                            class="mt-1 size-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <div class="grid gap-1">
+                            <Label
+                                for="is_personal"
+                                class="cursor-pointer font-medium text-foreground"
+                            >
+                                Personal / Family Errand (To be reimbursed)
+                            </Label>
+                            <p class="text-xs text-muted-foreground">
+                                Check this if this payment was for personal use
+                                (e.g., Shopee order, personal online errand)
+                                using agency funds that will be reimbursed. It
+                                will be tracked separately so company
+                                operational expenses are not inflated.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- If marked personal, options for reimbursement status -->
+                    <div
+                        v-if="form.is_personal"
+                        class="mt-4 grid gap-4 border-t border-amber-200/60 pt-3 sm:grid-cols-2 dark:border-amber-900/40"
+                    >
+                        <div class="grid gap-2">
+                            <Label for="reimbursement_status"
+                                >Reimbursement Status</Label
+                            >
+                            <Select
+                                :model-value="form.reimbursement_status"
+                                @update:model-value="
+                                    (val) =>
+                                        (form.reimbursement_status = val as any)
+                                "
+                            >
+                                <SelectTrigger
+                                    id="reimbursement_status"
+                                    class="w-full bg-background"
+                                >
+                                    <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="pending">
+                                        Pending Reimbursement (Unpaid)
+                                    </SelectItem>
+                                    <SelectItem value="reimbursed">
+                                        Already Reimbursed (Repaid)
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div
+                            v-if="form.reimbursement_status === 'reimbursed'"
+                            class="grid gap-2"
+                        >
+                            <Label for="reimbursed_at"
+                                >Reimbursement Date</Label
+                            >
+                            <Input
+                                id="reimbursed_at"
+                                v-model="form.reimbursed_at"
+                                type="date"
+                                :max="getTodayDateString()"
+                                class="bg-background"
+                            />
+                        </div>
+
+                        <div
+                            v-if="form.reimbursement_status === 'reimbursed'"
+                            class="grid gap-2"
+                        >
+                            <Label for="reimbursement_method"
+                                >Reimbursement Method</Label
+                            >
+                            <Select
+                                :model-value="form.reimbursement_method"
+                                @update:model-value="
+                                    (val) =>
+                                        (form.reimbursement_method = val as any)
+                                "
+                            >
+                                <SelectTrigger
+                                    id="reimbursement_method"
+                                    class="w-full bg-background"
+                                >
+                                    <SelectValue
+                                        placeholder="How was it repaid?"
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="cash">
+                                        Cash (Put into cash drawer)
+                                    </SelectItem>
+                                    <SelectItem value="gcash">
+                                        GCash (Sent to agency GCash)
+                                    </SelectItem>
+                                    <SelectItem value="bank_transfer">
+                                        Bank Transfer
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div
+                            v-if="form.reimbursement_status === 'reimbursed'"
+                            class="grid gap-2"
+                        >
+                            <Label for="reimbursement_notes"
+                                >Reimbursement Notes</Label
+                            >
+                            <Input
+                                id="reimbursement_notes"
+                                v-model="form.reimbursement_notes"
+                                type="text"
+                                placeholder="e.g., Repaid in cash by Gel"
+                                class="bg-background"
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 9. Notes -->

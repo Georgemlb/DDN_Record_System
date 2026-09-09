@@ -40,6 +40,12 @@ class ReportController extends Controller
             ->orderByDesc('settlement_date')
             ->value('actual_cash') ?? 0);
 
+        $suggestedOpeningGcash = (float) (DailySettlement::query()
+            ->where('status', DailySettlement::STATUS_CLOSED)
+            ->whereNotNull('actual_gcash')
+            ->orderByDesc('settlement_date')
+            ->value('actual_gcash') ?? 0);
+
         $settlementHistory = DailySettlement::query()
             ->with(['user', 'closedByUser'])
             ->orderByDesc('settlement_date')
@@ -58,6 +64,7 @@ class ReportController extends Controller
                 'todaySettlement' => $todaySettlement,
                 'todayDraftMetrics' => $todayDraftMetrics,
                 'suggestedOpeningFloat' => $suggestedOpeningFloat,
+                'suggestedOpeningGcash' => $suggestedOpeningGcash,
                 'history' => $settlementHistory,
                 'todayDate' => $todayDate,
             ],
@@ -79,6 +86,7 @@ class ReportController extends Controller
     {
         $validated = $request->validate([
             'opening_cash' => ['required', 'numeric', 'min:0'],
+            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
             'settlement_date' => ['nullable', 'date'],
         ]);
 
@@ -92,6 +100,7 @@ class ReportController extends Controller
         }
 
         $openingCash = (float) $validated['opening_cash'];
+        $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
         $metrics = DailySettlement::calculateMetricsForDate($date);
 
         $settlement = DailySettlement::query()->create([
@@ -102,6 +111,10 @@ class ReportController extends Controller
             'cash_in' => $metrics['cash_in'],
             'cash_out' => $metrics['cash_out'],
             'expected_cash' => round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2),
+            'opening_gcash' => $openingGcash,
+            'gcash_in' => $metrics['gcash_in'],
+            'gcash_out' => $metrics['gcash_out'],
+            'expected_gcash' => round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2),
             'total_gcash' => $metrics['total_gcash'],
             'total_bank_transfer' => $metrics['total_bank_transfer'],
             'total_sales' => $metrics['total_sales'],
@@ -118,28 +131,106 @@ class ReportController extends Controller
     }
 
     /**
+     * Update an existing daily cash settlement record.
+     */
+    public function update(Request $request, DailySettlement $settlement): RedirectResponse
+    {
+        $validated = $request->validate([
+            'opening_cash' => ['required', 'numeric', 'min:0'],
+            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
+            'actual_cash' => ['nullable', 'numeric', 'min:0'],
+            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['required', 'string', 'in:'.DailySettlement::STATUS_OPEN.','.DailySettlement::STATUS_CLOSED],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'sync_metrics' => ['nullable', 'boolean'],
+        ]);
+
+        $settlement->opening_cash = (float) $validated['opening_cash'];
+        if (array_key_exists('opening_gcash', $validated)) {
+            $settlement->opening_gcash = (float) ($validated['opening_gcash'] ?? 0);
+        }
+        $settlement->notes = $validated['notes'] ?? null;
+        $newStatus = $validated['status'];
+
+        if ($request->boolean('sync_metrics', true)) {
+            $settlement->syncMetricsWithRecords();
+        } else {
+            $settlement->expected_cash = round((float) $settlement->opening_cash + (float) $settlement->cash_in - (float) $settlement->cash_out, 2);
+            $settlement->expected_gcash = round((float) ($settlement->opening_gcash ?? 0) + (float) ($settlement->gcash_in ?? 0) - (float) ($settlement->gcash_out ?? 0), 2);
+        }
+
+        if ($newStatus === DailySettlement::STATUS_CLOSED) {
+            $actualCash = $validated['actual_cash'] !== null
+                ? (float) $validated['actual_cash']
+                : (float) ($settlement->actual_cash ?? $settlement->expected_cash);
+
+            $settlement->actual_cash = $actualCash;
+            $settlement->discrepancy = round($actualCash - (float) $settlement->expected_cash, 2);
+
+            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                $actualGcash = (float) $validated['actual_gcash'];
+                $settlement->actual_gcash = $actualGcash;
+                $settlement->gcash_discrepancy = round($actualGcash - (float) $settlement->expected_gcash, 2);
+            }
+
+            $settlement->status = DailySettlement::STATUS_CLOSED;
+            if (! $settlement->closed_at) {
+                $settlement->closed_at = now();
+                $settlement->closed_by_user_id = auth()->id();
+            }
+        } else {
+            $settlement->status = DailySettlement::STATUS_OPEN;
+            $settlement->closed_at = null;
+            $settlement->closed_by_user_id = null;
+            if ($validated['actual_cash'] !== null) {
+                $settlement->actual_cash = (float) $validated['actual_cash'];
+                $settlement->discrepancy = round((float) $settlement->actual_cash - (float) $settlement->expected_cash, 2);
+            }
+            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                $settlement->actual_gcash = (float) $validated['actual_gcash'];
+                $settlement->gcash_discrepancy = round((float) $settlement->actual_gcash - (float) $settlement->expected_gcash, 2);
+            }
+        }
+
+        $settlement->save();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Daily settlement for '.$settlement->settlement_date->format('M d, Y').' updated successfully.',
+        ]);
+
+        return back();
+    }
+
+    /**
      * Close the daily settlement drawer and calculate discrepancy.
      */
     public function closeDay(Request $request, DailySettlement $settlement): RedirectResponse
     {
         $validated = $request->validate([
             'actual_cash' => ['required', 'numeric', 'min:0'],
+            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $actualCash = (float) $validated['actual_cash'];
         $settlement->actual_cash = $actualCash;
+        if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+            $settlement->actual_gcash = (float) $validated['actual_gcash'];
+        }
         $settlement->syncMetricsWithRecords();
 
         $settlement->status = DailySettlement::STATUS_CLOSED;
         $settlement->closed_by_user_id = auth()->id();
         $settlement->closed_at = now();
-        $settlement->notes = $validated['notes'] ?? null;
+        if (array_key_exists('notes', $validated)) {
+            $settlement->notes = $validated['notes'];
+        }
         $settlement->save();
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Daily register closed and reconciled.',
+            'message' => 'Daily register for '.$settlement->settlement_date->format('M d, Y').' closed and reconciled.',
         ]);
 
         return back();
@@ -182,12 +273,20 @@ class ReportController extends Controller
         $expenses = Expense::query()
             ->whereDate('expense_date', $date)
             ->with('category:id,name')
-            ->get(['id', 'title', 'expense_category_id', 'payment_method', 'amount']);
+            ->get(['id', 'title', 'expense_category_id', 'payment_method', 'amount', 'is_personal', 'reimbursement_status']);
+
+        $reimbursements = Expense::query()
+            ->where('is_personal', true)
+            ->where('reimbursement_status', Expense::REIMBURSEMENT_STATUS_REIMBURSED)
+            ->whereDate('reimbursed_at', $date)
+            ->with('category:id,name')
+            ->get(['id', 'title', 'expense_category_id', 'amount', 'reimbursement_method', 'reimbursed_at', 'payee']);
 
         return [
             'settlement' => $settlement,
             'transactions' => $transactions,
             'expenses' => $expenses,
+            'reimbursements' => $reimbursements,
         ];
     }
 

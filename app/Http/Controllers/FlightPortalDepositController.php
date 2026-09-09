@@ -52,18 +52,59 @@ class FlightPortalDepositController extends Controller
         $sort = $request->input('sort', 'entry_date');
         $direction = $request->input('direction', 'desc');
 
-        if (in_array($sort, ['entry_date', 'amount', 'running_balance', 'type', 'created_at'])) {
+        if (in_array($sort, ['amount', 'running_balance', 'type', 'created_at'])) {
             $query->orderBy($sort, $direction);
         } else {
-            $query->orderBy('entry_date', 'desc');
+            $query->orderByRaw('date(entry_date) '.$direction);
+        }
+
+        if ($sort === 'entry_date' || ! $request->has('sort')) {
+            $query->orderBy('sort_order', $direction);
         }
 
         // Secondary sort to stabilize pagination
         if ($sort !== 'id') {
-            $query->orderBy('id', 'desc');
+            $query->orderBy('id', $direction);
         }
 
         $deposits = $query->paginate(15)->withQueryString();
+
+        $pageDates = $deposits->getCollection()->map(function ($d) {
+            return Carbon::parse($d->entry_date)->toDateString();
+        })->unique()->values()->all();
+
+        $dateStats = FlightPortalDeposit::whereIn('entry_date', $pageDates)
+            ->selectRaw('entry_date, MIN(sort_order) as min_order, MAX(sort_order) as max_order, COUNT(*) as entry_count')
+            ->groupBy('entry_date')
+            ->get()
+            ->keyBy(function ($item) {
+                return Carbon::parse($item->entry_date)->toDateString();
+            });
+
+        $deposits->getCollection()->transform(function ($deposit) use ($dateStats, $direction) {
+            $dateStr = Carbon::parse($deposit->entry_date)->toDateString();
+            $stat = $dateStats->get($dateStr);
+            if (! $stat || $stat->entry_count <= 1) {
+                $deposit->can_move_up = false;
+                $deposit->can_move_down = false;
+
+                return $deposit;
+            }
+
+            if ($direction === 'desc') {
+                // When newest is on top (desc):
+                // Higher sort_order is displayed visually higher on screen
+                $deposit->can_move_up = $deposit->sort_order < $stat->max_order;
+                $deposit->can_move_down = $deposit->sort_order > $stat->min_order;
+            } else {
+                // When oldest is on top (asc):
+                // Lower sort_order is displayed visually higher on screen
+                $deposit->can_move_up = $deposit->sort_order > $stat->min_order;
+                $deposit->can_move_down = $deposit->sort_order < $stat->max_order;
+            }
+
+            return $deposit;
+        });
 
         // Calculate summary metrics
         $currentBalance = FlightPortalDeposit::getCurrentBalance();
@@ -149,6 +190,10 @@ class FlightPortalDepositController extends Controller
         $deposit->reference_number = $validated['reference_number'] ?? null;
         $deposit->notes = $validated['notes'] ?? null;
         $deposit->expense_id = $expenseId;
+
+        $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
+        $deposit->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+
         $deposit->save();
 
         FlightPortalDeposit::recalculateRunningBalances();
@@ -178,6 +223,15 @@ class FlightPortalDepositController extends Controller
         $deposit->amount = $validated['amount'];
         $deposit->entry_date = $validated['entry_date'];
         $deposit->notes = 'Adjustment: '.$validated['notes'];
+
+        if (str_contains(strtolower($validated['notes']), 'initial balance')) {
+            $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
+            $deposit->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+        } else {
+            $maxOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0;
+            $deposit->sort_order = $maxOrder + 1;
+        }
+
         $deposit->save();
 
         FlightPortalDeposit::recalculateRunningBalances();
@@ -185,6 +239,105 @@ class FlightPortalDepositController extends Controller
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => 'Balance adjustment of ₱'.number_format((float) $validated['amount'], 2).' applied.',
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Update an existing deposit entry.
+     */
+    public function update(Request $request, FlightPortalDeposit $deposit): RedirectResponse
+    {
+        if ($deposit->type === FlightPortalDeposit::TYPE_TICKET_DEDUCTION && $deposit->transaction_id) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'This deduction is linked to an airline transaction. Please edit the transaction directly.',
+            ]);
+
+            return back();
+        }
+
+        if ($deposit->type === FlightPortalDeposit::TYPE_TOP_UP) {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+                'entry_date' => ['required', 'date'],
+                'payment_source' => ['required', 'string', 'in:cash,gcash,bank_transfer'],
+                'reference_number' => ['nullable', 'string', 'max:100'],
+                'notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $oldDate = $deposit->entry_date?->toDateString();
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->payment_source = $validated['payment_source'];
+            $deposit->reference_number = $validated['reference_number'] ?? null;
+            $deposit->notes = $validated['notes'] ?? null;
+            $deposit->save();
+
+            // Synchronize linked expense if exists
+            if ($deposit->expense) {
+                $expense = $deposit->expense;
+                $expense->amount = $validated['amount'];
+                $expense->expense_date = $validated['entry_date'];
+                $expense->payment_method = $validated['payment_source'];
+                $expense->reference_number = $validated['reference_number'] ?? null;
+                $expense->title = 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : '');
+                $expense->notes = $validated['notes'] ?? null;
+                $expense->save();
+
+                if ($oldDate) {
+                    DailySettlement::syncForDate($oldDate);
+                }
+                DailySettlement::syncForDate($validated['entry_date']);
+            }
+        } elseif ($deposit->type === FlightPortalDeposit::TYPE_ADJUSTMENT) {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'not_in:0'],
+                'entry_date' => ['required', 'date'],
+                'notes' => ['required', 'string', 'max:1000'],
+            ]);
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->notes = $validated['notes'];
+            $deposit->save();
+        } else {
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
+                'entry_date' => ['required', 'date'],
+                'notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->notes = $validated['notes'] ?? null;
+            $deposit->save();
+        }
+
+        // Handle manual running balance anchor override if provided
+        $anchorValidated = $request->validate([
+            'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
+            'is_balance_anchor' => ['nullable', 'boolean'],
+        ]);
+
+        if ($request->has('is_balance_anchor')) {
+            $isAnchor = $request->boolean('is_balance_anchor');
+            $deposit->is_balance_anchor = $isAnchor;
+
+            if ($isAnchor && $request->filled('running_balance')) {
+                $deposit->running_balance = number_format((float) $request->input('running_balance'), 2, '.', '');
+            }
+
+            $deposit->save();
+        }
+
+        FlightPortalDeposit::recalculateRunningBalances();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Deposit entry updated successfully and balances recalculated.',
         ]);
 
         return back();
@@ -218,6 +371,79 @@ class FlightPortalDepositController extends Controller
             'type' => 'success',
             'message' => 'Ledger entry deleted and balances updated.',
         ]);
+
+        return back();
+    }
+
+    /**
+     * Move a deposit entry up or down in same-day sequence.
+     */
+    public function move(Request $request, FlightPortalDeposit $deposit): RedirectResponse
+    {
+        $validated = $request->validate([
+            'direction' => ['required', 'in:up,down'],
+            'table_direction' => ['nullable', 'in:asc,desc'],
+        ]);
+
+        $visualDirection = $validated['direction'];
+        $tableDirection = $validated['table_direction'] ?? 'desc';
+
+        // Fetch all active entries for this date ordered by sort_order asc, id asc
+        $dayEntries = FlightPortalDeposit::whereDate('entry_date', $deposit->entry_date)
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($dayEntries->count() <= 1) {
+            return back();
+        }
+
+        // Re-normalize sort_orders to 1, 2, 3... to avoid ties or gaps
+        foreach ($dayEntries as $index => $entry) {
+            $expectedOrder = $index + 1;
+            if ($entry->sort_order !== $expectedOrder) {
+                $entry->sort_order = $expectedOrder;
+                $entry->saveQuietly();
+            }
+        }
+
+        $currentIndex = $dayEntries->search(fn ($item) => $item->id === $deposit->id);
+
+        if ($currentIndex === false) {
+            return back();
+        }
+
+        $targetIndex = null;
+        if ($tableDirection === 'desc') {
+            if ($visualDirection === 'up' && $currentIndex < $dayEntries->count() - 1) {
+                $targetIndex = $currentIndex + 1;
+            } elseif ($visualDirection === 'down' && $currentIndex > 0) {
+                $targetIndex = $currentIndex - 1;
+            }
+        } else {
+            if ($visualDirection === 'up' && $currentIndex > 0) {
+                $targetIndex = $currentIndex - 1;
+            } elseif ($visualDirection === 'down' && $currentIndex < $dayEntries->count() - 1) {
+                $targetIndex = $currentIndex + 1;
+            }
+        }
+
+        if ($targetIndex !== null) {
+            $sibling = $dayEntries[$targetIndex];
+            $currentOrder = $deposit->sort_order;
+            $deposit->sort_order = $sibling->sort_order;
+            $sibling->sort_order = $currentOrder;
+
+            $deposit->saveQuietly();
+            $sibling->saveQuietly();
+
+            FlightPortalDeposit::recalculateRunningBalances();
+
+            Inertia::flash('toast', [
+                'type' => 'success',
+                'message' => 'Entry order updated. Balances recalculated.',
+            ]);
+        }
 
         return back();
     }

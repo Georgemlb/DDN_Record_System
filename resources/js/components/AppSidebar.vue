@@ -6,6 +6,7 @@ import {
     LayoutDashboard,
     ReceiptText,
     SlidersHorizontal,
+    Smartphone,
     Users,
     Wallet,
 } from '@lucide/vue';
@@ -25,6 +26,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as configurations } from '@/routes/configurations';
 import { index as expenses } from '@/routes/expenses';
+import { index as gcashLedger } from '@/routes/gcash-ledger';
 import { index as portalDeposits } from '@/routes/portal-deposits';
 import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
@@ -75,6 +77,11 @@ const mainNavItems = computed<NavItem[]>(() => {
             title: 'Portal Deposit',
             href: portalDeposits(),
             icon: Wallet,
+        },
+        {
+            title: 'GCash Ledger',
+            href: gcashLedger(),
+            icon: Smartphone,
         },
         {
             title: 'Reports',

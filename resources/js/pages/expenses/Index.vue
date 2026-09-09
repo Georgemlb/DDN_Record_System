@@ -4,16 +4,20 @@ import {
     ArrowDown,
     ArrowUp,
     ArrowUpDown,
+    Briefcase,
     CheckCircle2,
     Copy,
     FileText,
+    HandCoins,
     Pencil,
     Plus,
     RotateCcw,
     Trash2,
+    UserCheck,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import Pagination from '@/components/Pagination.vue';
+import ReimburseExpenseModal from '@/components/ReimburseExpenseModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +46,7 @@ import type {
     ExpenseCounts,
     ExpenseFilters,
     ExpenseSummary,
+    PendingPersonalSummary,
 } from '@/types/expense';
 
 const props = defineProps<{
@@ -54,6 +59,7 @@ const props = defineProps<{
     filters: ExpenseFilters;
     summary: ExpenseSummary;
     counts?: ExpenseCounts;
+    pendingPersonalSummary?: PendingPersonalSummary;
 }>();
 
 defineOptions({
@@ -67,6 +73,13 @@ defineOptions({
     },
 });
 
+type ExpenseTabStatus =
+    | 'active'
+    | 'business'
+    | 'personal_pending'
+    | 'personal_reimbursed'
+    | 'trash';
+
 const search = ref(props.filters.search ?? '');
 const categoryId = ref(
     props.filters.category_id ? String(props.filters.category_id) : 'all',
@@ -77,9 +90,17 @@ const dateFrom = ref(props.filters.date_from ?? '');
 const dateTo = ref(props.filters.date_to ?? '');
 const sort = ref(props.filters.sort ?? 'expense_date');
 const direction = ref(props.filters.direction ?? 'desc');
-const status = ref<'active' | 'trash'>(
-    props.filters.status === 'trash' ? 'trash' : 'active',
+const status = ref<ExpenseTabStatus>(
+    (props.filters.status as ExpenseTabStatus) || 'active',
 );
+
+const reimburseModalOpen = ref(false);
+const expenseToReimburse = ref<Expense | null>(null);
+
+const openReimburseModal = (expense: Expense) => {
+    expenseToReimburse.value = expense;
+    reimburseModalOpen.value = true;
+};
 
 let timeout: ReturnType<typeof setTimeout>;
 const applyFilters = () => {
@@ -108,7 +129,7 @@ watch(
     applyFilters,
 );
 
-const setStatus = (newStatus: 'active' | 'trash') => {
+const setStatus = (newStatus: ExpenseTabStatus) => {
     if (status.value !== newStatus) {
         status.value = newStatus;
     }
@@ -181,8 +202,8 @@ const toggleSort = (field: string) => {
             </Button>
         </section>
 
-        <!-- Status View Tabs (Active vs Trash) -->
-        <section class="flex items-center gap-2 border-b pb-3">
+        <!-- Status View Tabs -->
+        <section class="flex flex-wrap items-center gap-2 border-b pb-3">
             <Button
                 :variant="status === 'active' ? 'default' : 'outline'"
                 size="sm"
@@ -190,7 +211,7 @@ const toggleSort = (field: string) => {
                 @click="setStatus('active')"
             >
                 <CheckCircle2 class="size-4" />
-                Active Expenses
+                All Active
                 <Badge
                     v-if="counts"
                     :variant="status === 'active' ? 'secondary' : 'outline'"
@@ -199,6 +220,72 @@ const toggleSort = (field: string) => {
                     {{ counts.active }}
                 </Badge>
             </Button>
+
+            <Button
+                :variant="status === 'business' ? 'default' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('business')"
+            >
+                <Briefcase class="size-4" />
+                Business
+                <Badge
+                    v-if="counts?.business !== undefined"
+                    :variant="status === 'business' ? 'secondary' : 'outline'"
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.business }}
+                </Badge>
+            </Button>
+
+            <Button
+                :variant="status === 'personal_pending' ? 'default' : 'outline'"
+                size="sm"
+                class="gap-1.5"
+                :class="
+                    status !== 'personal_pending' &&
+                    (counts?.personal_pending ?? 0) > 0
+                        ? 'border-amber-500/60 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30'
+                        : ''
+                "
+                @click="setStatus('personal_pending')"
+            >
+                <HandCoins class="size-4 text-amber-500" />
+                Personal (Pending)
+                <Badge
+                    v-if="counts?.personal_pending !== undefined"
+                    :variant="
+                        status === 'personal_pending' ? 'secondary' : 'outline'
+                    "
+                    class="ml-1 border-amber-500/40 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-300"
+                >
+                    {{ counts.personal_pending }}
+                </Badge>
+            </Button>
+
+            <Button
+                :variant="
+                    status === 'personal_reimbursed' ? 'default' : 'outline'
+                "
+                size="sm"
+                class="gap-1.5"
+                @click="setStatus('personal_reimbursed')"
+            >
+                <UserCheck class="size-4 text-emerald-500" />
+                Personal (Reimbursed)
+                <Badge
+                    v-if="counts?.personal_reimbursed !== undefined"
+                    :variant="
+                        status === 'personal_reimbursed'
+                            ? 'secondary'
+                            : 'outline'
+                    "
+                    class="ml-1 text-xs"
+                >
+                    {{ counts.personal_reimbursed }}
+                </Badge>
+            </Button>
+
             <Button
                 :variant="status === 'trash' ? 'destructive' : 'outline'"
                 size="sm"
@@ -214,6 +301,51 @@ const toggleSort = (field: string) => {
                 >
                     {{ counts.trash }}
                 </Badge>
+            </Button>
+        </section>
+
+        <!-- Pending Personal Reimbursements Reminder Banner -->
+        <section
+            v-if="
+                pendingPersonalSummary &&
+                pendingPersonalSummary.count > 0 &&
+                status !== 'personal_pending'
+            "
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50/80 p-3.5 text-sm dark:border-amber-800/60 dark:bg-amber-950/30"
+        >
+            <div class="flex items-center gap-2.5">
+                <span
+                    class="flex size-7 items-center justify-center rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                >
+                    <HandCoins class="size-4" />
+                </span>
+                <div>
+                    <span
+                        class="font-medium text-amber-900 dark:text-amber-200"
+                    >
+                        {{ pendingPersonalSummary.count }} Personal Expense(s)
+                        Awaiting Reimbursement:
+                    </span>
+                    <span
+                        class="ml-1 font-bold text-amber-800 dark:text-amber-100"
+                    >
+                        {{ formatPhp(pendingPersonalSummary.total) }}
+                    </span>
+                    <span
+                        class="ml-1.5 text-xs text-amber-700/80 dark:text-amber-300/80"
+                    >
+                        (Repayments return directly to cash drawer / GCash
+                        without duplicating sales revenue)
+                    </span>
+                </div>
+            </div>
+            <Button
+                size="sm"
+                variant="outline"
+                class="h-7 border-amber-400 bg-white text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/70"
+                @click="setStatus('personal_pending')"
+            >
+                View Pending Items
             </Button>
         </section>
 
@@ -499,6 +631,37 @@ const toggleSort = (field: string) => {
                                         )
                                     }}
                                 </div>
+                                <div
+                                    v-if="expense.is_personal"
+                                    class="mt-1 flex flex-wrap items-center gap-1.5"
+                                >
+                                    <Badge
+                                        v-if="
+                                            expense.reimbursement_status ===
+                                            'pending'
+                                        "
+                                        variant="outline"
+                                        class="border-amber-500/50 bg-amber-500/10 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+                                    >
+                                        Personal (Pending)
+                                    </Badge>
+                                    <Badge
+                                        v-else-if="
+                                            expense.reimbursement_status ===
+                                            'reimbursed'
+                                        "
+                                        variant="outline"
+                                        class="border-emerald-500/50 bg-emerald-500/10 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                                    >
+                                        Reimbursed via
+                                        {{
+                                            formatExpensePaymentMethod(
+                                                expense.reimbursement_method ||
+                                                    'cash',
+                                            )
+                                        }}
+                                    </Badge>
+                                </div>
                             </td>
 
                             <!-- Category -->
@@ -574,8 +737,24 @@ const toggleSort = (field: string) => {
                                 </div>
                                 <div
                                     v-else
-                                    class="flex items-center justify-end gap-1"
+                                    class="flex items-center justify-end gap-1.5"
                                 >
+                                    <Button
+                                        v-if="
+                                            expense.is_personal &&
+                                            expense.reimbursement_status ===
+                                                'pending'
+                                        "
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-8 gap-1 border-amber-500/60 bg-amber-50/50 text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                                        @click="openReimburseModal(expense)"
+                                    >
+                                        <HandCoins
+                                            class="size-3.5 text-amber-600 dark:text-amber-400"
+                                        />
+                                        <span>Reimburse</span>
+                                    </Button>
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -655,5 +834,11 @@ const toggleSort = (field: string) => {
                 </div>
             </div>
         </section>
+
+        <!-- Reimburse Expense Modal -->
+        <ReimburseExpenseModal
+            v-model:open="reimburseModalOpen"
+            :expense="expenseToReimburse"
+        />
     </main>
 </template>

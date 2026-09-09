@@ -328,6 +328,7 @@ const toggleSort = (field: string) => {
                     <SelectContent>
                         <SelectItem value="all">All Service Types</SelectItem>
                         <SelectItem value="airline">Airline</SelectItem>
+                        <SelectItem value="ferry">Ferry</SelectItem>
                         <SelectItem value="translation">Translation</SelectItem>
                         <SelectItem value="psa">PSA Application</SelectItem>
                         <SelectItem value="online_assistance"

@@ -1,14 +1,18 @@
 <?php
 
+use App\Models\AirlineMarkup;
 use App\Models\BaggageOption;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\OnlineAssistanceType;
+use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\User;
+use Database\Seeders\AirlineMarkupSeeder;
 use Database\Seeders\BaggageOptionSeeder;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
+use Database\Seeders\PsaRateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -20,6 +24,8 @@ beforeEach(function () {
         BaggageOptionSeeder::class,
         OnlineAssistanceTypeSeeder::class,
         ExpenseCategorySeeder::class,
+        PsaRateSeeder::class,
+        AirlineMarkupSeeder::class,
     ]);
 });
 
@@ -38,6 +44,8 @@ test('an authenticated user can view configurations page with all master data', 
             ->has('baggageOptions')
             ->has('onlineAssistanceTypes')
             ->has('expenseCategories')
+            ->has('psaRates')
+            ->has('airlineMarkups')
             ->where('currentTab', 'online-assistance')
         );
 });
@@ -284,4 +292,177 @@ test('submitting null or empty sort_order defaults safely to 0 across configurat
         'name' => 'Marketing & Ads',
         'sort_order' => 0,
     ]);
+
+    // PSA Rate with null sort_order
+    $this->actingAs($user)->post('/configurations/psa-rates', [
+        'document_type' => 'TEST_DOC',
+        'name' => 'Test Document',
+        'price' => '350.00',
+        'officer_fee' => '250.00',
+        'sort_order' => null,
+    ])->assertRedirect('/configurations?tab=psa-rates');
+
+    $this->assertDatabaseHas('psa_rates', [
+        'document_type' => 'TEST_DOC',
+        'sort_order' => 0,
+    ]);
+});
+
+test('an authenticated user can create, update, and delete a psa rate', function () {
+    $user = User::factory()->create();
+
+    // Create
+    $response = $this->actingAs($user)->post('/configurations/psa-rates', [
+        'document_type' => 'AFFIDAVIT',
+        'name' => 'Affidavit Authentication',
+        'price' => '500.00',
+        'officer_fee' => '350.00',
+        'is_active' => true,
+        'sort_order' => 10,
+    ]);
+
+    $response->assertRedirect('/configurations?tab=psa-rates');
+    $this->assertDatabaseHas('psa_rates', [
+        'document_type' => 'AFFIDAVIT',
+        'name' => 'Affidavit Authentication',
+        'price' => 500.00,
+        'officer_fee' => 350.00,
+    ]);
+
+    $rate = PsaRate::where('document_type', 'AFFIDAVIT')->first();
+    expect($rate->net_income)->toEqual(150.00);
+
+    // Update
+    $updateResponse = $this->actingAs($user)->put("/configurations/psa-rates/{$rate->id}", [
+        'document_type' => 'AFFIDAVIT',
+        'name' => 'Affidavit of Support',
+        'price' => '550.00',
+        'officer_fee' => '380.00',
+        'is_active' => false,
+        'sort_order' => 12,
+    ]);
+
+    $updateResponse->assertRedirect('/configurations?tab=psa-rates');
+    $this->assertDatabaseHas('psa_rates', [
+        'id' => $rate->id,
+        'name' => 'Affidavit of Support',
+        'price' => 550.00,
+        'officer_fee' => 380.00,
+        'is_active' => false,
+    ]);
+
+    // Delete
+    $deleteResponse = $this->actingAs($user)->delete("/configurations/psa-rates/{$rate->id}");
+    $deleteResponse->assertRedirect('/configurations?tab=psa-rates');
+    $this->assertDatabaseMissing('psa_rates', ['id' => $rate->id]);
+});
+
+test('an authenticated user cannot delete a psa rate if used in transactions', function () {
+    $user = User::factory()->create();
+    $rate = PsaRate::where('document_type', 'BC')->first();
+
+    Transaction::create([
+        'type' => Transaction::TYPE_PSA,
+        'psa_document_type' => 'BC',
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-08-28',
+        'customer_name' => 'Juan Dela Cruz',
+        'amount' => '320.00',
+        'third_party_payment' => '260.00',
+        'ddn_amount' => '60.00',
+    ]);
+
+    $response = $this->actingAs($user)->delete("/configurations/psa-rates/{$rate->id}");
+    $response->assertRedirect('/configurations?tab=psa-rates');
+    $this->assertDatabaseHas('psa_rates', ['id' => $rate->id]);
+});
+
+test('an authenticated user cannot create a psa rate with duplicate document_type', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post('/configurations/psa-rates', [
+        'document_type' => 'BC',
+        'name' => 'Duplicate Birth Certificate',
+        'price' => '320.00',
+        'officer_fee' => '260.00',
+    ]);
+
+    $response->assertSessionHasErrors(['document_type']);
+});
+
+test('officer_fee must not exceed price when saving psa rate', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post('/configurations/psa-rates', [
+        'document_type' => 'INVALID_FEE',
+        'name' => 'Invalid Fee Doc',
+        'price' => '300.00',
+        'officer_fee' => '350.00',
+    ]);
+
+    $response->assertSessionHasErrors(['officer_fee']);
+});
+
+test('an authenticated user can create, update, and delete ticketing markups', function () {
+    $user = User::factory()->create();
+
+    // Create domestic flight markup
+    $response = $this->actingAs($user)->post('/configurations/airline-markups', [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'fixed',
+        'markup_amount' => '250.00',
+        'is_active' => true,
+    ]);
+
+    $response->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'fixed',
+        'markup_amount' => '250.00',
+    ]);
+
+    $markup = AirlineMarkup::where('airline', 'Test Air')->first();
+
+    // Update to percent markup
+    $updateResponse = $this->actingAs($user)->put("/configurations/airline-markups/{$markup->id}", [
+        'service_type' => 'flight',
+        'airline' => 'Test Air',
+        'flight_type' => 'local',
+        'markup_type' => 'percent',
+        'markup_amount' => '5.00',
+        'is_active' => true,
+    ]);
+
+    $updateResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'id' => $markup->id,
+        'markup_type' => 'percent',
+        'markup_amount' => '5.00',
+    ]);
+
+    // Create ferry markup
+    $ferryResponse = $this->actingAs($user)->post('/configurations/airline-markups', [
+        'service_type' => 'ferry',
+        'airline' => 'Test Lines',
+        'markup_type' => 'fixed',
+        'markup_amount' => '150.00',
+        'is_active' => true,
+    ]);
+
+    $ferryResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseHas('airline_markups', [
+        'service_type' => 'ferry',
+        'airline' => 'Test Lines',
+        'flight_type' => null,
+        'markup_amount' => '150.00',
+    ]);
+
+    // Delete
+    $deleteResponse = $this->actingAs($user)->delete("/configurations/airline-markups/{$markup->id}");
+    $deleteResponse->assertRedirect('/configurations?tab=airline-markups');
+    $this->assertDatabaseMissing('airline_markups', ['id' => $markup->id]);
 });

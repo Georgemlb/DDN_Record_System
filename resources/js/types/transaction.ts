@@ -1,11 +1,25 @@
 export type TransactionType =
-    'airline' | 'translation' | 'psa' | 'online_assistance' | 'printing';
+    | 'airline'
+    | 'ferry'
+    | 'translation'
+    | 'psa'
+    | 'online_assistance'
+    | 'remittance'
+    | 'printing';
 
 export type PaymentMethod = 'cash' | 'gcash' | 'split';
 
 export type PaymentStatus = 'paid' | 'partial' | 'unpaid';
 
 export type FlightType = 'local' | 'international';
+
+export type TripType = 'one_way' | 'round_trip';
+
+export type CarrierCategory = 'budget' | 'full_service';
+
+export type ServiceType = 'flight' | 'ferry';
+
+export type MarkupType = 'fixed' | 'percent';
 
 export type PsaDocumentType = 'BC' | 'MC' | 'DC' | 'Cenomar';
 
@@ -49,8 +63,10 @@ export type BaggageOption = {
 
 export type AirlineMarkup = {
     id: number;
+    service_type: ServiceType;
     airline: string;
-    flight_type: FlightType;
+    flight_type?: FlightType | null;
+    markup_type: MarkupType;
     markup_amount: string | number;
     is_active?: boolean;
 };
@@ -59,6 +75,17 @@ export type OnlineAssistanceType = {
     id: number;
     name: string;
     price: string | number;
+    is_active?: boolean;
+    sort_order?: number;
+};
+
+export type PsaRate = {
+    id: number;
+    document_type: string;
+    name: string;
+    price: string | number;
+    officer_fee: string | number;
+    net_income?: number;
     is_active?: boolean;
     sort_order?: number;
 };
@@ -80,8 +107,10 @@ export type Transaction = {
     transaction_date: string;
     customer_name: string;
     pax: number | null;
+    trip_type?: TripType | null;
     provider: string | null;
     flight_type: FlightType | null;
+    carrier_category?: CarrierCategory | null;
     service_details: string | null;
     baggage_option_id: number | null;
     baggage_option?: BaggageOption | null;
@@ -94,6 +123,7 @@ export type Transaction = {
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
     third_party_payment: string | number | null;
+    disbursement_source?: 'cash' | 'gcash' | null;
     ddn_amount: string | number | null;
     employee_share: string | number | null;
     notes: string | null;

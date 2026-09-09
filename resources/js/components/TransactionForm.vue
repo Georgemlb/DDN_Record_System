@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { Form, Link } from '@inertiajs/vue3';
-import { AlertCircle, Calculator, CheckCircle, Clock, Info } from '@lucide/vue';
+import {
+    AlertCircle,
+    ArrowDownLeft,
+    ArrowUpRight,
+    Calculator,
+    CheckCircle,
+    Clock,
+    Info,
+    Ship,
+    Smartphone,
+    Wallet,
+} from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -18,6 +29,7 @@ import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
     BaggageOption,
+    CarrierCategory,
     Customer,
     DdnSplitConfig,
     FlightType,
@@ -25,8 +37,10 @@ import type {
     PaymentMethod,
     PaymentStatus,
     PsaDocumentType,
+    PsaRate,
     Transaction,
     TransactionType,
+    TripType,
 } from '@/types/transaction';
 
 const props = withDefaults(
@@ -39,6 +53,7 @@ const props = withDefaults(
         onlineAssistanceTypes?: OnlineAssistanceType[];
         airlineMarkups?: AirlineMarkup[];
         psaDocumentTypes?: PsaDocumentType[];
+        psaRates?: PsaRate[];
         ddnSplitConfig?: DdnSplitConfig;
         portalBalance?: number;
         recurringCustomers?: Customer[];
@@ -49,6 +64,7 @@ const props = withDefaults(
         onlineAssistanceTypes: () => [],
         airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
+        psaRates: () => [],
         ddnSplitConfig: () => ({ ddn: 0.6, employee: 0.4 }),
         recurringCustomers: () => [],
         initialCustomers: () => [],
@@ -77,10 +93,18 @@ const amountPaid = ref<number | string>(
         : '',
 );
 const pax = ref<number | string>(props.transaction?.pax ?? 1);
-const provider = ref<string>(props.transaction?.provider ?? '');
+const tripType = ref<TripType>(props.transaction?.trip_type ?? 'one_way');
+const carrierCategory = ref<CarrierCategory>(
+    props.transaction?.carrier_category ?? 'budget',
+);
+const provider = ref<string>(
+    props.transaction?.provider ??
+        (formType.value === 'ferry' ? 'All Ferries' : ''),
+);
 const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
+const serviceDetails = ref<string>(props.transaction?.service_details ?? '');
 const baggageOptionId = ref<string>(
     props.transaction?.baggage_option_id
         ? String(props.transaction.baggage_option_id)
@@ -104,35 +128,141 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
-// Auto-calculation for Airline Markups
+const disbursementSource = ref<'gcash' | 'cash'>(
+    props.transaction?.disbursement_source === 'cash' ? 'cash' : 'gcash',
+);
+
+const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
+    props.transaction?.service_details === 'GCASH_CASH_IN'
+        ? 'GCASH_CASH_IN'
+        : 'GCASH_CASH_OUT',
+);
+
+const remittanceFee = ref<number | string>(
+    props.transaction?.ddn_amount !== null &&
+        props.transaction?.ddn_amount !== undefined
+        ? props.transaction.ddn_amount
+        : (props.transaction?.third_party_payment ?? '0.00'),
+);
 
 watch(
-    [provider, flightType, amount],
-    ([newProvider, newFlightType, newAmount]) => {
-        if (formType.value !== 'airline') {
-            return;
-        }
-
-        const numAmt = Number(newAmount) || 0;
-
-        if (!newProvider || !newFlightType || numAmt <= 0) {
-            return;
-        }
-
-        const markup = props.airlineMarkups.find(
-            (m) =>
-                m.airline.toLowerCase() === newProvider.toLowerCase() &&
-                m.flight_type === newFlightType,
-        );
-
-        if (markup) {
-            const markupAmt = Number(markup.markup_amount) || 0;
-            const calculatedCost = Math.max(0, numAmt - markupAmt);
-
-            thirdPartyPayment.value = calculatedCost;
+    [formType, remittanceDirection],
+    () => {
+        if (formType.value === 'remittance') {
+            paymentStatus.value = 'paid';
+            paymentMethod.value =
+                remittanceDirection.value === 'GCASH_CASH_OUT'
+                    ? 'gcash'
+                    : 'cash';
         }
     },
+    { immediate: true },
 );
+
+// Auto-calculation for Airline & Ferry Markups
+const calculatePortalCost = () => {
+    const numAmt = Number(amount.value) || 0;
+
+    if (numAmt <= 0) {
+        return;
+    }
+
+    const numPax = Math.max(1, Number(pax.value) || 1);
+    const legs = tripType.value === 'round_trip' ? 2 : 1;
+
+    if (formType.value === 'airline') {
+        let rule: AirlineMarkup | undefined;
+
+        if (flightType.value === 'local') {
+            rule = props.airlineMarkups.find(
+                (m) =>
+                    (m.service_type ?? 'flight') === 'flight' &&
+                    m.flight_type === 'local' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            );
+        } else if (flightType.value === 'international') {
+            const categoryName =
+                carrierCategory.value === 'full_service'
+                    ? 'Full Service Carriers'
+                    : 'Budget Carriers';
+            rule =
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() === categoryName.toLowerCase(),
+                ) ||
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() ===
+                            provider.value.trim().toLowerCase(),
+                );
+        }
+
+        if (rule) {
+            let markupTotal = 0;
+
+            if (rule.markup_type === 'percent') {
+                markupTotal =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+            } else {
+                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
+            }
+
+            const portalCost = Math.max(0, numAmt - markupTotal);
+            thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
+        }
+    } else if (formType.value === 'ferry') {
+        const rule =
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            ) ||
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() === 'all ferries',
+            ) ||
+            props.airlineMarkups.find((m) => m.service_type === 'ferry');
+
+        if (rule) {
+            let markupTotal = 0;
+
+            if (rule.markup_type === 'percent') {
+                markupTotal =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+            } else {
+                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
+            }
+
+            const portalCost = Math.max(0, numAmt - markupTotal);
+            thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
+        }
+    }
+};
+
+watch(
+    [formType, provider, flightType, tripType, carrierCategory, pax, amount],
+    () => {
+        calculatePortalCost();
+    },
+);
+
+watch(formType, (newType) => {
+    if (
+        newType === 'ferry' &&
+        (!provider.value || provider.value === 'Cebu Pacific')
+    ) {
+        provider.value = 'All Ferries';
+    } else if (newType === 'airline' && provider.value === 'All Ferries') {
+        provider.value = 'Cebu Pacific';
+    }
+});
 
 // Computed Remaining Balance
 const computedRemainingBalance = computed(() => {
@@ -191,22 +321,73 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 
     if (selected) {
         amount.value = selected.price;
+        const nameLower = selected.name.toLowerCase();
+
+        if (nameLower.includes('police')) {
+            thirdPartyPayment.value = 180;
+        } else if (nameLower.includes('nbi')) {
+            thirdPartyPayment.value = 160;
+        }
     }
 };
 
-// If online assistance is selected initially and amount is empty, populate from default option
+// Auto-fill amount and third party fee when PSA document type changes
+const applyPsaRate = (docType: string) => {
+    if (!docType || props.psaRates.length === 0) {
+        return;
+    }
+
+    const selected = props.psaRates.find(
+        (r) => r.document_type.toLowerCase() === docType.toLowerCase(),
+    );
+
+    if (selected) {
+        amount.value = selected.price;
+        thirdPartyPayment.value = selected.officer_fee;
+    }
+};
+
+const handlePsaDocumentTypeChange = (value: unknown) => {
+    const docCode = (value ? String(value) : '') as PsaDocumentType;
+    psaDocumentType.value = docCode;
+    applyPsaRate(docCode);
+};
+
+// Automatically apply configured rates whenever formType or psaRates change
 watch(
     formType,
     (newType) => {
-        if (
-            newType === 'online_assistance' &&
-            !amount.value &&
-            onlineAssistanceTypeId.value
-        ) {
-            handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
+        if (newType === 'online_assistance') {
+            if (!amount.value && onlineAssistanceTypeId.value) {
+                handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
+            }
+        } else if (newType === 'psa') {
+            if (!psaDocumentType.value && props.psaRates.length > 0) {
+                psaDocumentType.value = props.psaRates[0]
+                    .document_type as PsaDocumentType;
+            }
+
+            if (psaDocumentType.value) {
+                applyPsaRate(psaDocumentType.value);
+            }
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => props.psaRates,
+    (rates) => {
+        if (formType.value === 'psa' && rates && rates.length > 0) {
+            if (!psaDocumentType.value) {
+                psaDocumentType.value = rates[0]
+                    .document_type as PsaDocumentType;
+            }
+
+            applyPsaRate(psaDocumentType.value);
+        }
+    },
+    { immediate: true, deep: true },
 );
 
 const filteredBaggageOptions = computed(() => {
@@ -229,12 +410,127 @@ const filteredBaggageOptions = computed(() => {
 });
 
 const airlineSuggestions = computed(() => {
-    const defaultAirlines = ['Cebu Pacific', 'Philippine Airlines', 'AirAsia'];
-    const configuredAirlines = props.baggageOptions
+    const configuredAirlines = props.airlineMarkups
+        .filter(
+            (m) =>
+                (m.service_type ?? 'flight') === 'flight' &&
+                m.flight_type === 'local',
+        )
+        .map((m) => m.airline.trim());
+    const baggageAirlines = props.baggageOptions
         .map((opt) => opt.airline?.trim())
         .filter((airline): airline is string => Boolean(airline));
+    const defaultAirlines = [
+        'Cebu Pacific',
+        'Philippine Airlines',
+        'Philippines AirAsia',
+        'Air Swift',
+        'Sunlight Air',
+    ];
 
-    return Array.from(new Set([...defaultAirlines, ...configuredAirlines]));
+    return Array.from(
+        new Set([
+            ...defaultAirlines,
+            ...configuredAirlines,
+            ...baggageAirlines,
+        ]),
+    );
+});
+
+const ferrySuggestions = computed(() => {
+    return ['All Ferries'];
+});
+
+const activeMarkupRuleDescription = computed(() => {
+    const numAmt = Number(amount.value) || 0;
+    const numPax = Math.max(1, Number(pax.value) || 1);
+    const legs = tripType.value === 'round_trip' ? 2 : 1;
+
+    if (formType.value === 'airline') {
+        if (flightType.value === 'local') {
+            const rule = props.airlineMarkups.find(
+                (m) =>
+                    (m.service_type ?? 'flight') === 'flight' &&
+                    m.flight_type === 'local' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    const earned =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                    return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+                }
+
+                const base = Number(rule.markup_amount) || 0;
+
+                return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+            }
+        } else if (flightType.value === 'international') {
+            const categoryName =
+                carrierCategory.value === 'full_service'
+                    ? 'Full Service Carriers'
+                    : 'Budget Carriers';
+            const rule =
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() === categoryName.toLowerCase(),
+                ) ||
+                props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'international' &&
+                        m.airline.toLowerCase() ===
+                            provider.value.trim().toLowerCase(),
+                );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    const earned =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                    return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+                }
+
+                const base = Number(rule.markup_amount) || 0;
+
+                return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+            }
+        }
+    } else if (formType.value === 'ferry') {
+        const rule =
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() ===
+                        provider.value.trim().toLowerCase(),
+            ) ||
+            props.airlineMarkups.find(
+                (m) =>
+                    m.service_type === 'ferry' &&
+                    m.airline.toLowerCase() === 'all ferries',
+            ) ||
+            props.airlineMarkups.find((m) => m.service_type === 'ferry');
+
+        if (rule) {
+            if (rule.markup_type === 'percent') {
+                const earned =
+                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+
+                return `Rule: ${rule.airline} ${rule.markup_amount}% = ₱${earned.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DDN Markup`;
+            }
+
+            const base = Number(rule.markup_amount) || 0;
+
+            return `Rule: ${rule.airline} (₱${base} × ${numPax} pax × ${legs} leg${legs > 1 ? 's' : ''}) = ₱${(base * numPax * legs).toLocaleString()} DDN Markup`;
+        }
+    }
+
+    return null;
 });
 
 // Client-side computed previews
@@ -245,16 +541,20 @@ const computedTranslationOrPsaDdnAmount = computed(() => {
     return Math.max(0, numAmount.value - numThirdParty.value);
 });
 
+const computedOnlineNetMargin = computed(() => {
+    return Math.max(0, numAmount.value - numThirdParty.value);
+});
+
 const computedOnlineDdnShare = computed(() => {
     const ddnRate = props.ddnSplitConfig?.ddn ?? 0.6;
 
-    return numAmount.value * ddnRate;
+    return computedOnlineNetMargin.value * ddnRate;
 });
 
 const computedOnlineEmployeeShare = computed(() => {
     const empRate = props.ddnSplitConfig?.employee ?? 0.4;
 
-    return numAmount.value * empRate;
+    return computedOnlineNetMargin.value * empRate;
 });
 
 function onCustomerInput() {
@@ -319,6 +619,18 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             :value="flightType"
         />
         <input
+            v-if="formType === 'airline' || formType === 'ferry'"
+            type="hidden"
+            name="trip_type"
+            :value="tripType"
+        />
+        <input
+            v-if="formType === 'airline' && flightType === 'international'"
+            type="hidden"
+            name="carrier_category"
+            :value="carrierCategory"
+        />
+        <input
             v-if="formType === 'airline'"
             type="hidden"
             name="baggage_option_id"
@@ -331,10 +643,50 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             :value="psaDocumentType"
         />
         <input
+            v-if="formType === 'psa'"
+            type="hidden"
+            name="amount"
+            :value="amount"
+        />
+        <input
+            v-if="formType === 'psa'"
+            type="hidden"
+            name="third_party_payment"
+            :value="thirdPartyPayment"
+        />
+        <input
             v-if="formType === 'online_assistance'"
             type="hidden"
             name="online_assistance_type_id"
             :value="onlineAssistanceTypeId"
+        />
+        <input
+            v-if="
+                formType === 'online_assistance' ||
+                formType === 'translation' ||
+                formType === 'psa'
+            "
+            type="hidden"
+            name="disbursement_source"
+            :value="disbursementSource"
+        />
+        <input
+            v-if="formType === 'online_assistance'"
+            type="hidden"
+            name="third_party_payment"
+            :value="thirdPartyPayment"
+        />
+        <input
+            v-if="formType === 'remittance'"
+            type="hidden"
+            name="service_details"
+            :value="remittanceDirection"
+        />
+        <input
+            v-if="formType === 'remittance'"
+            type="hidden"
+            name="third_party_payment"
+            :value="remittanceFee"
         />
 
         <div class="grid gap-6 md:grid-cols-2">
@@ -347,7 +699,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="airline">
-                            Airline Ticket / Travel
+                            Airline Ticket / Flight
+                        </SelectItem>
+                        <SelectItem value="ferry">
+                            Ferry Ticket / Booking
                         </SelectItem>
                         <SelectItem value="translation">
                             Document Translation
@@ -355,6 +710,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         <SelectItem value="psa"> PSA Assistance </SelectItem>
                         <SelectItem value="online_assistance">
                             Online Assistance
+                        </SelectItem>
+                        <SelectItem value="remittance">
+                            GCash Remittance / Cash Exchange
                         </SelectItem>
                         <SelectItem value="printing"> Printing </SelectItem>
                     </SelectContent>
@@ -430,7 +788,36 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </div>
 
             <!-- 4. Payment Status (Paid / Downpayment / Unpaid) -->
-            <div class="grid gap-2 md:col-span-2">
+            <div
+                v-if="formType === 'remittance'"
+                class="flex items-center justify-between rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 dark:bg-blue-950/20"
+            >
+                <div class="flex items-center gap-2">
+                    <Smartphone
+                        class="size-4 shrink-0 text-blue-600 dark:text-blue-400"
+                    />
+                    <span>
+                        <strong class="font-semibold text-foreground"
+                            >Remittance Flow:</strong
+                        >
+                        {{
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)'
+                                : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)'
+                        }}
+                    </span>
+                </div>
+                <span
+                    class="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                >
+                    Settles Immediately (Paid)
+                </span>
+            </div>
+
+            <div
+                v-if="formType !== 'remittance'"
+                class="grid gap-2 md:col-span-2"
+            >
                 <Label>Payment Status</Label>
                 <div class="grid grid-cols-3 gap-2">
                     <button
@@ -519,7 +906,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </template>
 
             <!-- 4. Payment Method -->
-            <div class="grid gap-2 md:col-span-2">
+            <div
+                v-if="formType !== 'remittance'"
+                class="grid gap-2 md:col-span-2"
+            >
                 <Label for="payment_method_select">Payment method</Label>
                 <Select v-model="paymentMethod">
                     <SelectTrigger id="payment_method_select" class="w-full">
@@ -577,9 +967,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <!-- ============================================== -->
 
             <!-- AIRLINE TICKET -->
+            <!-- AIRLINE TICKETING -->
             <template v-if="formType === 'airline'">
                 <div class="grid gap-2">
-                    <Label for="pax">Passengers (Pax)</Label>
+                    <Label for="pax">Number of Passengers (Pax)</Label>
                     <Input
                         id="pax"
                         name="pax"
@@ -594,12 +985,91 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <div class="grid gap-2">
+                    <Label>Trip Type</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="tripType = 'one_way'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'one_way'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>One-way (1 leg)</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="tripType = 'round_trip'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'round_trip'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>Round-trip (2 legs)</span>
+                        </button>
+                    </div>
+                    <InputError :message="errors.trip_type" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="flight_type_select">Flight Type</Label>
+                    <Select v-model="flightType">
+                        <SelectTrigger id="flight_type_select" class="w-full">
+                            <SelectValue placeholder="Select flight type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="local"
+                                >Domestic (Local)</SelectItem
+                            >
+                            <SelectItem value="international"
+                                >International</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.flight_type" />
+                </div>
+
+                <!-- Carrier Category for International Flights -->
+                <div v-if="flightType === 'international'" class="grid gap-2">
+                    <Label for="carrier_category_select"
+                        >Carrier Category</Label
+                    >
+                    <Select v-model="carrierCategory">
+                        <SelectTrigger
+                            id="carrier_category_select"
+                            class="w-full"
+                        >
+                            <SelectValue
+                                placeholder="Select carrier category"
+                            />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="budget">
+                                Budget Carrier (₱1,250 Markup)
+                            </SelectItem>
+                            <SelectItem value="full_service">
+                                Full Service Carrier (₱1,500 Markup)
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.carrier_category" />
+                </div>
+
+                <div class="grid gap-2">
                     <Label for="provider">Airline or provider</Label>
                     <Input
                         id="provider"
                         name="provider"
                         v-model="provider"
-                        placeholder="e.g. Cebu Pacific"
+                        :placeholder="
+                            flightType === 'international'
+                                ? 'e.g. Scoot, PAL, Singapore Airlines'
+                                : 'e.g. Cebu Pacific'
+                        "
                         list="airlines"
                     />
                     <datalist id="airlines">
@@ -612,20 +1082,22 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.provider" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="flight_type_select">Flight Type</Label>
-                    <Select v-model="flightType">
-                        <SelectTrigger id="flight_type_select" class="w-full">
-                            <SelectValue placeholder="Select flight type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="local">Local</SelectItem>
-                            <SelectItem value="international"
-                                >International</SelectItem
-                            >
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.flight_type" />
+                <div
+                    class="grid gap-2"
+                    :class="
+                        flightType === 'international' ? '' : 'md:col-span-2'
+                    "
+                >
+                    <Label for="airline_service_details"
+                        >Flight Route / Details</Label
+                    >
+                    <Input
+                        id="airline_service_details"
+                        name="service_details"
+                        v-model="serviceDetails"
+                        placeholder="e.g. Manila to Cebu (MNL-CEB)"
+                    />
+                    <InputError :message="errors.service_details" />
                 </div>
 
                 <div class="grid gap-2 md:col-span-2">
@@ -719,11 +1191,214 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     v-if="numAmount > 0 && numThirdParty > 0"
                     class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
                 >
+                    <div class="flex items-center justify-between">
+                        <div
+                            class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        >
+                            <Calculator class="size-4" />
+                            <span>Flight Ticketing Margin Preview</span>
+                        </div>
+                        <span
+                            v-if="activeMarkupRuleDescription"
+                            class="text-xs font-medium text-muted-foreground"
+                        >
+                            {{ activeMarkupRuleDescription }}
+                        </span>
+                    </div>
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
                     >
-                        <Calculator class="size-4" />
-                        <span>Ticketing Margin Preview</span>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-semibold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Portal Cost</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >DDN Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(
+                                        Math.max(0, numAmount - numThirdParty),
+                                    )
+                                }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- FERRY TICKETING -->
+            <template v-if="formType === 'ferry'">
+                <div class="grid gap-2">
+                    <Label for="ferry_pax">Number of Passengers (Pax)</Label>
+                    <Input
+                        id="ferry_pax"
+                        name="pax"
+                        type="number"
+                        min="1"
+                        step="1"
+                        v-model="pax"
+                        required
+                        placeholder="e.g. 1"
+                    />
+                    <InputError :message="errors.pax" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>Trip Type</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="tripType = 'one_way'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'one_way'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>One-way (1 leg)</span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="tripType = 'round_trip'"
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="
+                                tripType === 'round_trip'
+                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <span>Round-trip (2 legs)</span>
+                        </button>
+                    </div>
+                    <InputError :message="errors.trip_type" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_provider"
+                        >Ferry Provider / Category</Label
+                    >
+                    <Input
+                        id="ferry_provider"
+                        name="provider"
+                        v-model="provider"
+                        placeholder="All Ferries"
+                        list="ferries-list"
+                    />
+                    <datalist id="ferries-list">
+                        <option
+                            v-for="ferry in ferrySuggestions"
+                            :key="ferry"
+                            :value="ferry"
+                        />
+                    </datalist>
+                    <InputError :message="errors.provider" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_service_details"
+                        >Route / Trip Details</Label
+                    >
+                    <Input
+                        id="ferry_service_details"
+                        name="service_details"
+                        v-model="serviceDetails"
+                        placeholder="e.g. Batangas to Calapan"
+                    />
+                    <InputError :message="errors.service_details" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="ferry_amount"
+                        >Customer Ticket Price (PHP)</Label
+                    >
+                    <Input
+                        id="ferry_amount"
+                        name="amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="amount"
+                        required
+                        placeholder="0.00"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Total amount collected from customer.
+                    </p>
+                    <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <div class="flex items-center justify-between">
+                        <Label for="ferry_third_party_payment"
+                            >Portal Net Cost (PHP)</Label
+                        >
+                        <span
+                            v-if="props.portalBalance !== undefined"
+                            :class="[
+                                'text-xs font-medium',
+                                props.portalBalance < 10000
+                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground',
+                            ]"
+                        >
+                            Balance: {{ formatPhp(props.portalBalance) }}
+                        </span>
+                    </div>
+                    <Input
+                        id="ferry_third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (Optional)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Net ticket fare deducted from portal deposit.
+                        Auto-calculates with fixed ₱200 markup per pax/leg.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Ferry Calculation Preview -->
+                <div
+                    v-if="numAmount > 0 && numThirdParty > 0"
+                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div class="flex items-center justify-between">
+                        <div
+                            class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        >
+                            <Ship class="size-4" />
+                            <span>Ferry Ticketing Margin Preview</span>
+                        </div>
+                        <span
+                            v-if="activeMarkupRuleDescription"
+                            class="text-xs font-medium text-muted-foreground"
+                        >
+                            {{ activeMarkupRuleDescription }}
+                        </span>
                     </div>
                     <div
                         class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
@@ -827,79 +1502,100 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <template v-if="formType === 'psa'">
                 <div class="grid gap-2 md:col-span-2">
                     <Label for="psa_doc_select">PSA Document Type</Label>
-                    <Select v-model="psaDocumentType">
+                    <Select
+                        :model-value="psaDocumentType"
+                        @update:model-value="handlePsaDocumentTypeChange"
+                    >
                         <SelectTrigger id="psa_doc_select" class="w-full">
                             <SelectValue
                                 placeholder="Select PSA Document Type"
                             />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem
-                                v-for="docType in psaDocumentTypes"
-                                :key="docType"
-                                :value="docType"
-                            >
-                                {{ psaDocumentTypeLabels[docType] || docType }}
-                            </SelectItem>
+                            <template v-if="props.psaRates.length > 0">
+                                <SelectItem
+                                    v-for="rate in props.psaRates"
+                                    :key="rate.id"
+                                    :value="rate.document_type"
+                                >
+                                    {{ rate.document_type }} —
+                                    {{ rate.name }} ({{
+                                        formatPhp(rate.price)
+                                    }})
+                                </SelectItem>
+                            </template>
+                            <template v-else>
+                                <SelectItem
+                                    v-for="docType in psaDocumentTypes"
+                                    :key="docType"
+                                    :value="docType"
+                                >
+                                    {{
+                                        psaDocumentTypeLabels[docType] ||
+                                        docType
+                                    }}
+                                </SelectItem>
+                            </template>
                         </SelectContent>
                     </Select>
                     <InputError :message="errors.psa_document_type" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="amount"
-                        >Total Price / Customer Payment (PHP)</Label
-                    >
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="third_party_payment"
-                        >PSA Officer Payment (PHP)</Label
-                    >
-                    <Input
-                        id="third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Auto Calculation Preview -->
+                <!-- PSA Margin & Net Breakdown Preview (Price is automated from configuration) -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
                     >
-                        <Calculator class="size-4" />
-                        <span>DDN Amount Calculation</span>
+                        <div class="flex items-center gap-2">
+                            <Calculator class="size-4" />
+                            <span>Configured PSA Fixed Price & Breakdown</span>
+                        </div>
+                        <span class="text-xs font-normal text-muted-foreground">
+                            Automatically set from configuration
+                        </span>
                     </div>
                     <div
-                        class="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3"
+                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
                     >
-                        <span class="text-sm text-muted-foreground">
-                            DDN Net (Price − PSA Officer Payment):
-                        </span>
-                        <span class="text-lg font-bold">
-                            {{ formatPhp(computedTranslationOrPsaDdnAmount) }}
-                        </span>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Price</span
+                            >
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >PSA Officer Fee</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Net DDN Income</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{
+                                    formatPhp(computedTranslationOrPsaDdnAmount)
+                                }}
+                            </p>
+                        </div>
                     </div>
+                    <p
+                        class="mt-2 text-center text-[11px] text-muted-foreground"
+                    >
+                        Customer price and PSA officer payment are fixed
+                        according to branch configuration.
+                    </p>
+                    <InputError :message="errors.amount" />
+                    <InputError :message="errors.third_party_payment" />
                 </div>
             </template>
 
@@ -934,10 +1630,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.online_assistance_type_id" />
                 </div>
 
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="amount"
-                        >Total Price / Customer Payment (PHP)</Label
-                    >
+                <div class="grid gap-2">
+                    <Label for="amount">Customer Payment (PHP)</Label>
                     <Input
                         id="amount"
                         name="amount"
@@ -949,21 +1643,133 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         required
                         placeholder="0.00"
                     />
+                    <p class="text-xs text-muted-foreground">
+                        Total fee collected from the customer.
+                    </p>
                     <InputError :message="errors.amount" />
                 </div>
 
-                <!-- 60/40 Split Calculation Preview -->
+                <div class="grid gap-2">
+                    <Label for="third_party_payment"
+                        >Government / Third-Party Fee (PHP)</Label
+                    >
+                    <Input
+                        id="third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        placeholder="0.00 (e.g. 180.00 for Police Clearance)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Official fee paid to agency (Police, NBI, DFA, etc.).
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Disbursement Source Selector (GCash vs Cash) -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label>Government Fee Disbursed From</Label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            @click="disbursementSource = 'gcash'"
+                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                            :class="
+                                disbursementSource === 'gcash'
+                                    ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <Smartphone
+                                class="size-3.5 text-blue-600 dark:text-blue-400"
+                            />
+                            <span
+                                >GCash Wallet (Auto-deducted from Ledger)</span
+                            >
+                        </button>
+                        <button
+                            type="button"
+                            @click="disbursementSource = 'cash'"
+                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                            :class="
+                                disbursementSource === 'cash'
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <Wallet
+                                class="size-3.5 text-emerald-600 dark:text-emerald-400"
+                            />
+                            <span>Cash Drawer (Drawer Cash Outflow)</span>
+                        </button>
+                    </div>
+                    <p
+                        v-if="
+                            numThirdParty > 0 && disbursementSource === 'gcash'
+                        "
+                        class="text-[11px] text-blue-600 dark:text-blue-400"
+                    >
+                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically
+                        deducted from your live GCash Ledger wallet balance.
+                    </p>
+                </div>
+
+                <!-- Net Margin & 60/40 Split Calculation Preview -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
                     >
-                        <Calculator class="size-4" />
-                        <span>Automatic 60/40 Revenue Split</span>
+                        <div class="flex items-center gap-2">
+                            <Calculator class="size-4" />
+                            <span
+                                >Net Service Margin & 60/40 Revenue Split</span
+                            >
+                        </div>
+                        <span class="text-xs font-normal text-muted-foreground">
+                            Office 60% / Employee 40%
+                        </span>
                     </div>
+
+                    <div
+                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
+                    >
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Gov / Portal Fee</span
+                            >
+                            <p
+                                class="font-semibold text-blue-600 dark:text-blue-400"
+                            >
+                                -{{ formatPhp(numThirdParty) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Net Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(computedOnlineNetMargin) }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2">
                         <div class="rounded-md border bg-card p-3">
                             <p class="text-xs text-muted-foreground">
-                                DDN Share (60%)
+                                DDN Office Share (60%)
                             </p>
                             <p class="mt-1 text-lg font-bold text-primary">
                                 {{ formatPhp(computedOnlineDdnShare) }}
@@ -971,20 +1777,205 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         </div>
                         <div class="rounded-md border bg-card p-3">
                             <p class="text-xs text-muted-foreground">
-                                Employee Share (40%)
+                                Employee Cut (40%)
                             </p>
-                            <p class="mt-1 text-lg font-bold">
+                            <p
+                                class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400"
+                            >
                                 {{ formatPhp(computedOnlineEmployeeShare) }}
                             </p>
                         </div>
                     </div>
                     <p
-                        class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+                        class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                     >
                         <Info class="size-3.5 shrink-0" />
-                        Shares are automatically calculated from the total price
-                        upon saving.
+                        Shares are computed from the net margin (Customer
+                        Payment minus Government Fee).
                     </p>
+                </div>
+            </template>
+
+            <!-- REMITTANCE / CASH EXCHANGE -->
+            <template v-if="formType === 'remittance'">
+                <!-- Direction selector -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label>Remittance Direction</Label>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <button
+                            type="button"
+                            @click="remittanceDirection = 'GCASH_CASH_OUT'"
+                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-200'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <div
+                                class="flex items-center gap-2 font-semibold text-foreground"
+                            >
+                                <ArrowDownLeft
+                                    class="size-4 text-blue-600 dark:text-blue-400"
+                                />
+                                <span>GCash Cash-Out</span>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Customer sends GCash (+GCash) → Staff dispenses
+                                physical cash (-Drawer Cash)
+                            </p>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="remittanceDirection = 'GCASH_CASH_IN'"
+                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_IN'
+                                    ? 'border-emerald-600 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200'
+                                    : 'border-input text-muted-foreground hover:bg-muted'
+                            "
+                        >
+                            <div
+                                class="flex items-center gap-2 font-semibold text-foreground"
+                            >
+                                <ArrowUpRight
+                                    class="size-4 text-emerald-600 dark:text-emerald-400"
+                                />
+                                <span>GCash Cash-In</span>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Customer gives physical cash (+Drawer Cash) →
+                                Staff sends from GCash wallet (-GCash)
+                            </p>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Principal Amount & Fee -->
+                <div class="grid gap-2">
+                    <Label for="remittance_amount"
+                        >Remittance Principal Amount (PHP)</Label
+                    >
+                    <Input
+                        id="remittance_amount"
+                        name="amount"
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="amount"
+                        required
+                        placeholder="e.g. 350.00"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Principal amount being converted / transferred.
+                    </p>
+                    <InputError :message="errors.amount" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="remittance_fee">Agency Service Fee (PHP)</Label>
+                    <Input
+                        id="remittance_fee"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="remittanceFee"
+                        placeholder="0.00 (Optional service charge)"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Office commission for remittance processing.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
+
+                <!-- Dual Cash Drawer & GCash Wallet Flow Preview Card -->
+                <div
+                    class="space-y-3 rounded-lg border bg-muted/40 p-4 md:col-span-2"
+                >
+                    <div
+                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                    >
+                        <Calculator class="size-4" />
+                        <span>Simultaneous Dual Movement Preview</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                        <div class="space-y-1 rounded-md border bg-card p-3">
+                            <div
+                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                            >
+                                <Wallet class="size-3.5" />
+                                <span>Physical Cash Drawer</span>
+                            </div>
+                            <p
+                                class="text-base font-bold"
+                                :class="
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'text-rose-600 dark:text-rose-400'
+                                        : 'text-emerald-600 dark:text-emerald-400'
+                                "
+                            >
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? '-'
+                                        : '+'
+                                }}{{ formatPhp(numAmount) }}
+                            </p>
+                            <p class="text-[11px] text-muted-foreground">
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'Outflow: Dispensed out to customer'
+                                        : 'Inflow: Cash collected into drawer'
+                                }}
+                            </p>
+                        </div>
+
+                        <div class="space-y-1 rounded-md border bg-card p-3">
+                            <div
+                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                            >
+                                <Smartphone class="size-3.5 text-blue-500" />
+                                <span>GCash Ledger Wallet</span>
+                            </div>
+                            <p
+                                class="text-base font-bold"
+                                :class="
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-rose-600 dark:text-rose-400'
+                                "
+                            >
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? '+'
+                                        : '-'
+                                }}{{ formatPhp(numAmount) }}
+                            </p>
+                            <p class="text-[11px] text-muted-foreground">
+                                {{
+                                    remittanceDirection === 'GCASH_CASH_OUT'
+                                        ? 'Inflow: Received in GCash account'
+                                        : 'Outflow: Transferred from GCash wallet'
+                                }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="Number(remittanceFee) > 0"
+                        class="flex items-center justify-between border-t pt-2 text-xs"
+                    >
+                        <span class="font-medium text-muted-foreground"
+                            >DDN Agency Service Fee Earning:</span
+                        >
+                        <span
+                            class="font-bold text-emerald-600 dark:text-emerald-400"
+                            >{{ formatPhp(Number(remittanceFee)) }}</span
+                        >
+                    </div>
                 </div>
             </template>
 
