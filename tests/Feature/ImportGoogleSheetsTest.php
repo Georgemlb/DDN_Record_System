@@ -24,6 +24,10 @@ test('dry run simulation does not write to the database', function () {
         '--dry-run' => true,
     ]);
 
+    if ($exitCode !== 0) {
+        dump(Artisan::output());
+    }
+
     expect($exitCode)->toBe(0);
     expect(Transaction::count())->toBe(0);
     expect(Expense::count())->toBe(0);
@@ -36,6 +40,10 @@ test('actual import successfully creates transactions, expenses, customers, and 
     $exitCode = Artisan::call('import:google-sheets', [
         'file' => $filePath,
     ]);
+
+    if ($exitCode !== 0) {
+        dump(Artisan::output());
+    }
 
     expect($exitCode)->toBe(0);
 
