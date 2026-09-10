@@ -16,12 +16,23 @@ class OnlineAssistanceTypeController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name'],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'has_disbursement' => ['nullable', 'boolean'],
+            'disbursement_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
+        $hasDisbursement = $request->boolean('has_disbursement', false);
+        $amount = isset($validated['disbursement_amount']) && $validated['disbursement_amount'] !== '' && $validated['disbursement_amount'] !== null
+            ? (float) $validated['disbursement_amount']
+            : null;
+
+        if (! $hasDisbursement) {
+            $amount = null;
+        }
+
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
-        $validated['has_disbursement'] = $request->boolean('has_disbursement', true);
+        $validated['has_disbursement'] = $hasDisbursement;
+        $validated['disbursement_amount'] = $amount;
         $validated['is_active'] = $request->boolean('is_active', true);
 
         OnlineAssistanceType::create($validated);
@@ -37,12 +48,23 @@ class OnlineAssistanceTypeController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name,'.$onlineAssistanceType->id],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'has_disbursement' => ['nullable', 'boolean'],
+            'disbursement_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
+        $hasDisbursement = $request->boolean('has_disbursement', false);
+        $amount = isset($validated['disbursement_amount']) && $validated['disbursement_amount'] !== '' && $validated['disbursement_amount'] !== null
+            ? (float) $validated['disbursement_amount']
+            : null;
+
+        if (! $hasDisbursement) {
+            $amount = null;
+        }
+
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
-        $validated['has_disbursement'] = $request->boolean('has_disbursement', true);
+        $validated['has_disbursement'] = $hasDisbursement;
+        $validated['disbursement_amount'] = $amount;
         $validated['is_active'] = $request->boolean('is_active', true);
 
         $onlineAssistanceType->update($validated);

@@ -452,6 +452,30 @@ defineOptions({
                         </div>
                         <div>
                             <dt class="text-muted-foreground">
+                                Government Disbursement
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                <span
+                                    v-if="
+                                        transaction.third_party_payment &&
+                                        Number(transaction.third_party_payment) > 0
+                                    "
+                                    class="text-blue-600 dark:text-blue-400"
+                                >
+                                    {{ formatPhp(transaction.third_party_payment) }}
+                                    ({{
+                                        transaction.disbursement_source === 'cash'
+                                            ? 'Cash Drawer'
+                                            : 'GCash Wallet'
+                                    }})
+                                </span>
+                                <span v-else class="text-muted-foreground">
+                                    None (No Government Fee)
+                                </span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground">
                                 Employee Share (40%)
                             </dt>
                             <dd class="mt-1 font-medium">
@@ -498,7 +522,9 @@ defineOptions({
                             {{
                                 transaction.type === 'psa'
                                     ? 'PSA Officer Payment'
-                                    : 'Translator Payment'
+                                    : transaction.type === 'online_assistance'
+                                      ? 'Government Fee Disbursement'
+                                      : 'Translator Payment'
                             }}
                         </p>
                         <p
@@ -508,9 +534,27 @@ defineOptions({
                         </p>
                     </div>
 
+                    <div
+                        v-if="
+                            transaction.type === 'online_assistance' &&
+                            transaction.employee_share &&
+                            Number(transaction.employee_share) > 0
+                        "
+                        class="border-t border-primary-foreground/20 pt-2"
+                    >
+                        <p class="text-xs text-primary-foreground/70">
+                            Employee Cut (40%)
+                        </p>
+                        <p
+                            class="mt-1 text-lg font-semibold text-primary-foreground/90"
+                        >
+                            - {{ formatPhp(transaction.employee_share) }}
+                        </p>
+                    </div>
+
                     <div class="border-t border-primary-foreground/20 pt-2">
                         <p class="text-xs text-primary-foreground/70">
-                            DDN Net Amount
+                            DDN Net Amount (Office Share)
                         </p>
                         <p class="mt-1 text-3xl font-extrabold tracking-tight">
                             {{

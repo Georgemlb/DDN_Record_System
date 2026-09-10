@@ -76,6 +76,7 @@ export type OnlineAssistanceType = {
     name: string;
     price: string | number;
     has_disbursement?: boolean;
+    disbursement_amount?: string | number | null;
     is_active?: boolean;
     sort_order?: number;
 };

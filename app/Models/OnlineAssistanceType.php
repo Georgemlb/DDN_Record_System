@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string $price
  * @property bool $has_disbursement
+ * @property string|null $disbursement_amount
  * @property bool $is_active
  * @property int $sort_order
  * @property Carbon|null $created_at
@@ -22,6 +23,7 @@ use Illuminate\Support\Carbon;
     'name',
     'price',
     'has_disbursement',
+    'disbursement_amount',
     'is_active',
     'sort_order',
 ])]
@@ -37,6 +39,7 @@ class OnlineAssistanceType extends Model
         return [
             'price' => 'decimal:2',
             'has_disbursement' => 'boolean',
+            'disbursement_amount' => 'decimal:2',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];

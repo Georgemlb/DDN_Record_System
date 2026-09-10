@@ -129,8 +129,12 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
-const disbursementSource = ref<'gcash' | 'cash'>(
-    props.transaction?.disbursement_source === 'cash' ? 'cash' : 'gcash',
+const disbursementSource = ref<'gcash' | 'cash' | 'none'>(
+    props.transaction?.disbursement_source === 'cash'
+        ? 'cash'
+        : props.transaction?.disbursement_source === 'none'
+          ? 'none'
+          : 'gcash',
 );
 
 const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
@@ -337,12 +341,23 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 
         if (selected.has_disbursement === false) {
             thirdPartyPayment.value = 0;
+            disbursementSource.value = 'none';
+        } else if (
+            selected.disbursement_amount !== null &&
+            selected.disbursement_amount !== undefined &&
+            selected.disbursement_amount !== ''
+        ) {
+            thirdPartyPayment.value = Number(selected.disbursement_amount);
+            disbursementSource.value = 'gcash';
         } else if (nameLower.includes('police')) {
             thirdPartyPayment.value = 180;
+            disbursementSource.value = 'gcash';
         } else if (nameLower.includes('nbi')) {
             thirdPartyPayment.value = 160;
+            disbursementSource.value = 'gcash';
         } else {
             thirdPartyPayment.value = 0;
+            disbursementSource.value = 'gcash';
         }
     }
 };
@@ -374,7 +389,7 @@ watch(
     formType,
     (newType) => {
         if (newType === 'online_assistance') {
-            if (!amount.value && onlineAssistanceTypeId.value) {
+            if (!props.transaction && onlineAssistanceTypeId.value) {
                 handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
             }
         } else if (newType === 'psa') {
@@ -684,14 +699,13 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             "
             type="hidden"
             name="disbursement_source"
-            :value="disbursementSource"
+            :value="
+                formType === 'online_assistance' && !selectedAssistanceHasDisbursement
+                    ? 'none'
+                    : disbursementSource
+            "
         />
-        <input
-            v-if="formType === 'online_assistance'"
-            type="hidden"
-            name="third_party_payment"
-            :value="thirdPartyPayment"
-        />
+
         <input
             v-if="formType === 'remittance'"
             type="hidden"
@@ -1640,6 +1654,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 {{ typeOption.name }} ({{
                                     formatPhp(typeOption.price)
                                 }})
+                                <template v-if="typeOption.has_disbursement && typeOption.disbursement_amount">
+                                    — Fee: {{ formatPhp(typeOption.disbursement_amount) }}
+                                </template>
+                                <template v-else-if="typeOption.has_disbursement === false">
+                                    — (No Disb.)
+                                </template>
                             </SelectItem>
                         </SelectContent>
                     </Select>
@@ -1665,84 +1685,37 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.amount" />
                 </div>
 
-                <template v-if="selectedAssistanceHasDisbursement">
-                    <div class="grid gap-2">
-                        <Label for="third_party_payment"
-                            >Government / Third-Party Fee (PHP)</Label
-                        >
-                        <Input
-                            id="third_party_payment"
-                            name="third_party_payment"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            inputmode="decimal"
-                            v-model="thirdPartyPayment"
-                            placeholder="0.00 (e.g. 180.00 for Police Clearance)"
-                        />
-                        <p class="text-xs text-muted-foreground">
-                            Official fee paid to agency (Police, NBI, DFA, etc.).
-                        </p>
-                        <InputError :message="errors.third_party_payment" />
-                    </div>
-
-                    <!-- Disbursement Source Selector (GCash vs Cash) -->
-                    <div class="grid gap-2 md:col-span-2">
-                        <Label>Government Fee Disbursed From</Label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                @click="disbursementSource = 'gcash'"
-                                class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                                :class="
-                                    disbursementSource === 'gcash'
-                                        ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
-                                        : 'border-input text-muted-foreground hover:bg-muted'
-                                "
-                            >
-                                <GcashIcon
-                                    class="size-3.5 text-blue-600 dark:text-blue-400"
-                                />
-                                <span
-                                    >GCash Wallet (Auto-deducted from Ledger)</span
-                                >
-                            </button>
-                            <button
-                                type="button"
-                                @click="disbursementSource = 'cash'"
-                                class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                                :class="
-                                    disbursementSource === 'cash'
-                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                        : 'border-input text-muted-foreground hover:bg-muted'
-                                "
-                            >
-                                <Wallet
-                                    class="size-3.5 text-emerald-600 dark:text-emerald-400"
-                                />
-                                <span>Cash Drawer (Drawer Cash Outflow)</span>
-                            </button>
-                        </div>
-                        <p
-                            v-if="
-                                numThirdParty > 0 && disbursementSource === 'gcash'
-                            "
-                            class="text-[11px] text-blue-600 dark:text-blue-400"
-                        >
-                            ⚡ {{ formatPhp(numThirdParty) }} will be automatically
-                            deducted from your live GCash Ledger wallet balance.
-                        </p>
-                    </div>
-                </template>
+                <!-- Government Fee / GCash Disbursement Input -->
+                <div v-if="selectedAssistanceHasDisbursement" class="grid gap-2">
+                    <Label for="online_third_party_payment" class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                        <GcashIcon class="size-4" />
+                        <span>Government Fee (Paid via GCash)</span>
+                    </Label>
+                    <Input
+                        id="online_third_party_payment"
+                        name="third_party_payment"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputmode="decimal"
+                        v-model="thirdPartyPayment"
+                        required
+                        placeholder="0.00"
+                    />
+                    <p class="text-[11px] text-muted-foreground">
+                        Amount to be automatically deducted from your live GCash Ledger upon submission.
+                    </p>
+                    <InputError :message="errors.third_party_payment" />
+                </div>
                 <div
                     v-else
-                    class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-muted-foreground md:col-span-2"
+                    class="rounded-lg border border-muted bg-muted/30 p-3 text-xs text-muted-foreground md:col-span-2"
                 >
                     <p class="font-medium text-foreground">
-                        ℹ️ No Government Disbursement Required
+                        ℹ️ Pure Online Assistance Service
                     </p>
                     <p class="mt-0.5">
-                        This online assistance service has no government fee deduction configured. 100% of collections remain with the agency and staff split.
+                        No government fee disbursement required. 100% of customer payment is retained for agency and employee split.
                     </p>
                 </div>
 
@@ -1763,6 +1736,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </div>
 
                     <div
+                        v-if="selectedAssistanceHasDisbursement && numThirdParty > 0"
                         class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
                     >
                         <div class="rounded border bg-background p-2">
@@ -1775,7 +1749,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
-                                >Gov / Portal Fee</span
+                                >Gov / GCash Fee</span
                             >
                             <p
                                 class="font-semibold text-blue-600 dark:text-blue-400"
@@ -1786,6 +1760,29 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
                                 >Net Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(computedOnlineNetMargin) }}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="mt-3 grid grid-cols-2 gap-2 text-center text-xs"
+                    >
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Net Service Margin</span
                             >
                             <p
                                 class="font-semibold text-emerald-600 dark:text-emerald-400"
@@ -1819,8 +1816,11 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                     >
                         <Info class="size-3.5 shrink-0" />
-                        Shares are computed from the net margin (Customer
-                        Payment minus Government Fee).
+                        <span>{{
+                            selectedAssistanceHasDisbursement && numThirdParty > 0
+                                ? 'Shares are computed from net margin (Customer Payment minus Government Fee).'
+                                : '100% of customer payment is split 60% Office / 40% Employee.'
+                        }}</span>
                     </p>
                 </div>
             </template>

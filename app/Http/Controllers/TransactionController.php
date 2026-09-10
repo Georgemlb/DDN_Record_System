@@ -515,7 +515,17 @@ class TransactionController extends Controller
                     ? OnlineAssistanceType::find($data['online_assistance_type_id'])
                     : null;
                 $hasDisbursement = $assistanceType ? (bool) $assistanceType->has_disbursement : true;
-                $thirdParty = $hasDisbursement ? (float) ($data['third_party_payment'] ?? 0) : 0.0;
+
+                if (! $hasDisbursement) {
+                    $thirdParty = 0.0;
+                } elseif (isset($data['third_party_payment']) && $data['third_party_payment'] !== '') {
+                    $thirdParty = (float) $data['third_party_payment'];
+                } elseif ($assistanceType && $assistanceType->disbursement_amount !== null) {
+                    $thirdParty = (float) $assistanceType->disbursement_amount;
+                } else {
+                    $thirdParty = 0.0;
+                }
+
                 $margin = max(0, $amount - $thirdParty);
                 $split = config('ddn.online_assistance_split', ['ddn' => 0.60, 'employee' => 0.40]);
                 $prepared['online_assistance_type_id'] = (int) $data['online_assistance_type_id'];
