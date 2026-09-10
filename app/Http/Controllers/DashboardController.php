@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\FlightPortalDeposit;
+use App\Models\GcashLedgerEntry;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use Illuminate\Support\Carbon;
@@ -31,6 +32,22 @@ class DashboardController extends Controller
         $openingCash = $todaySettlement ? (float) $todaySettlement->opening_cash : 0.0;
         $cashInBox = round($openingCash + $todayMetrics['cash_in'] - $todayMetrics['cash_out'], 2);
         $exactNetGcash = round($todayMetrics['total_gcash'] - $todayMetrics['expense_gcash'], 2);
+
+        $portalBalance = FlightPortalDeposit::getCurrentBalance();
+        $portalLowBalance = $portalBalance < FlightPortalDeposit::LOW_BALANCE_THRESHOLD;
+        $portalData = [
+            'balance' => $portalBalance,
+            'is_low_balance' => $portalLowBalance,
+            'low_balance_threshold' => FlightPortalDeposit::LOW_BALANCE_THRESHOLD,
+        ];
+
+        $gcashBalance = GcashLedgerEntry::getCurrentBalance();
+        $gcashLowBalance = $gcashBalance < GcashLedgerEntry::LOW_BALANCE_THRESHOLD;
+        $gcashData = [
+            'balance' => $gcashBalance,
+            'is_low_balance' => $gcashLowBalance,
+            'low_balance_threshold' => GcashLedgerEntry::LOW_BALANCE_THRESHOLD,
+        ];
 
         $registerData = [
             'opening_cash' => $openingCash,
@@ -71,6 +88,8 @@ class DashboardController extends Controller
                 'isStaff' => true,
                 'period' => 'today',
                 'register' => $registerData,
+                'gcash' => $gcashData,
+                'portal' => $portalData,
                 'recentTransactions' => $recentTransactions,
                 'recentExpenses' => $recentExpenses,
                 'pendingReimbursements' => $pendingReimbursements,
@@ -158,9 +177,6 @@ class DashboardController extends Controller
                 'total' => (float) $row->total,
             ]);
 
-        $portalBalance = FlightPortalDeposit::getCurrentBalance();
-        $portalLowBalance = $portalBalance < FlightPortalDeposit::LOW_BALANCE_THRESHOLD;
-
         return Inertia::render('Dashboard', [
             'isStaff' => false,
             'period' => $period,
@@ -175,11 +191,8 @@ class DashboardController extends Controller
                 'cash_in_box' => $cashInBox,
                 'exact_net_gcash' => $exactNetGcash,
             ],
-            'portal' => [
-                'balance' => $portalBalance,
-                'is_low_balance' => $portalLowBalance,
-                'low_balance_threshold' => FlightPortalDeposit::LOW_BALANCE_THRESHOLD,
-            ],
+            'portal' => $portalData,
+            'gcash' => $gcashData,
             'salesTrend' => $salesTrend,
             'expensesByCategory' => $expensesByCategory,
             'recentTransactions' => $recentTransactions,

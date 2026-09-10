@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $name
  * @property string $price
+ * @property bool $has_disbursement
  * @property bool $is_active
  * @property int $sort_order
  * @property Carbon|null $created_at
@@ -20,6 +21,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'name',
     'price',
+    'has_disbursement',
     'is_active',
     'sort_order',
 ])]
@@ -34,6 +36,7 @@ class OnlineAssistanceType extends Model
     {
         return [
             'price' => 'decimal:2',
+            'has_disbursement' => 'boolean',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];

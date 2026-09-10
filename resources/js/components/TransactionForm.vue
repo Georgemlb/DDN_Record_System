@@ -13,6 +13,7 @@ import {
     Wallet,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -312,6 +313,17 @@ const handleGcashChange = () => {
     }
 };
 
+// Check if selected online assistance type requires disbursement
+const selectedAssistanceHasDisbursement = computed(() => {
+    if (formType.value !== 'online_assistance') {
+        return true;
+    }
+    const selected = props.onlineAssistanceTypes.find(
+        (t) => String(t.id) === String(onlineAssistanceTypeId.value),
+    );
+    return selected ? (selected.has_disbursement ?? true) : true;
+});
+
 // Auto-fill amount when online assistance type changes (if creating or user selects new type)
 const handleOnlineAssistanceTypeChange = (value: unknown) => {
     onlineAssistanceTypeId.value = value ? String(value) : '';
@@ -323,10 +335,14 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
         amount.value = selected.price;
         const nameLower = selected.name.toLowerCase();
 
-        if (nameLower.includes('police')) {
+        if (selected.has_disbursement === false) {
+            thirdPartyPayment.value = 0;
+        } else if (nameLower.includes('police')) {
             thirdPartyPayment.value = 180;
         } else if (nameLower.includes('nbi')) {
             thirdPartyPayment.value = 160;
+        } else {
+            thirdPartyPayment.value = 0;
         }
     }
 };
@@ -1649,71 +1665,84 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.amount" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="third_party_payment"
-                        >Government / Third-Party Fee (PHP)</Label
-                    >
-                    <Input
-                        id="third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        placeholder="0.00 (e.g. 180.00 for Police Clearance)"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Official fee paid to agency (Police, NBI, DFA, etc.).
-                    </p>
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Disbursement Source Selector (GCash vs Cash) -->
-                <div class="grid gap-2 md:col-span-2">
-                    <Label>Government Fee Disbursed From</Label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            @click="disbursementSource = 'gcash'"
-                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                            :class="
-                                disbursementSource === 'gcash'
-                                    ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
+                <template v-if="selectedAssistanceHasDisbursement">
+                    <div class="grid gap-2">
+                        <Label for="third_party_payment"
+                            >Government / Third-Party Fee (PHP)</Label
                         >
-                            <Smartphone
-                                class="size-3.5 text-blue-600 dark:text-blue-400"
-                            />
-                            <span
-                                >GCash Wallet (Auto-deducted from Ledger)</span
-                            >
-                        </button>
-                        <button
-                            type="button"
-                            @click="disbursementSource = 'cash'"
-                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                            :class="
-                                disbursementSource === 'cash'
-                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <Wallet
-                                class="size-3.5 text-emerald-600 dark:text-emerald-400"
-                            />
-                            <span>Cash Drawer (Drawer Cash Outflow)</span>
-                        </button>
+                        <Input
+                            id="third_party_payment"
+                            name="third_party_payment"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="thirdPartyPayment"
+                            placeholder="0.00 (e.g. 180.00 for Police Clearance)"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Official fee paid to agency (Police, NBI, DFA, etc.).
+                        </p>
+                        <InputError :message="errors.third_party_payment" />
                     </div>
-                    <p
-                        v-if="
-                            numThirdParty > 0 && disbursementSource === 'gcash'
-                        "
-                        class="text-[11px] text-blue-600 dark:text-blue-400"
-                    >
-                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically
-                        deducted from your live GCash Ledger wallet balance.
+
+                    <!-- Disbursement Source Selector (GCash vs Cash) -->
+                    <div class="grid gap-2 md:col-span-2">
+                        <Label>Government Fee Disbursed From</Label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                @click="disbursementSource = 'gcash'"
+                                class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                                :class="
+                                    disbursementSource === 'gcash'
+                                        ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
+                                        : 'border-input text-muted-foreground hover:bg-muted'
+                                "
+                            >
+                                <GcashIcon
+                                    class="size-3.5 text-blue-600 dark:text-blue-400"
+                                />
+                                <span
+                                    >GCash Wallet (Auto-deducted from Ledger)</span
+                                >
+                            </button>
+                            <button
+                                type="button"
+                                @click="disbursementSource = 'cash'"
+                                class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
+                                :class="
+                                    disbursementSource === 'cash'
+                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                        : 'border-input text-muted-foreground hover:bg-muted'
+                                "
+                            >
+                                <Wallet
+                                    class="size-3.5 text-emerald-600 dark:text-emerald-400"
+                                />
+                                <span>Cash Drawer (Drawer Cash Outflow)</span>
+                            </button>
+                        </div>
+                        <p
+                            v-if="
+                                numThirdParty > 0 && disbursementSource === 'gcash'
+                            "
+                            class="text-[11px] text-blue-600 dark:text-blue-400"
+                        >
+                            ⚡ {{ formatPhp(numThirdParty) }} will be automatically
+                            deducted from your live GCash Ledger wallet balance.
+                        </p>
+                    </div>
+                </template>
+                <div
+                    v-else
+                    class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-muted-foreground md:col-span-2"
+                >
+                    <p class="font-medium text-foreground">
+                        ℹ️ No Government Disbursement Required
+                    </p>
+                    <p class="mt-0.5">
+                        This online assistance service has no government fee deduction configured. 100% of collections remain with the agency and staff split.
                     </p>
                 </div>
 

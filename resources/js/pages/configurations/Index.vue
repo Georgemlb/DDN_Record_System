@@ -237,6 +237,7 @@ const editingAssistanceId = ref<number | null>(null);
 const assistanceForm = useForm({
     name: '',
     price: 0,
+    has_disbursement: true,
     sort_order: 0,
     is_active: true,
 });
@@ -244,6 +245,7 @@ const assistanceForm = useForm({
 const openCreateAssistance = () => {
     editingAssistanceId.value = null;
     assistanceForm.reset();
+    assistanceForm.has_disbursement = true;
     assistanceForm.clearErrors();
     isAssistanceModalOpen.value = true;
 };
@@ -253,6 +255,7 @@ const openEditAssistance = (item: OnlineAssistanceType) => {
     assistanceForm.clearErrors();
     assistanceForm.name = item.name;
     assistanceForm.price = Number(item.price);
+    assistanceForm.has_disbursement = item.has_disbursement ?? true;
     assistanceForm.sort_order = item.sort_order ?? 0;
     assistanceForm.is_active = item.is_active ?? true;
     isAssistanceModalOpen.value = true;
@@ -923,6 +926,9 @@ const submitPsa = () => {
                                     Base Price
                                 </th>
                                 <th class="p-4 text-center font-medium">
+                                    Disbursement
+                                </th>
+                                <th class="p-4 text-center font-medium">
                                     Status
                                 </th>
                                 <th class="p-4 text-right font-medium">
@@ -933,7 +939,7 @@ const submitPsa = () => {
                         <tbody>
                             <tr v-if="onlineAssistanceTypes.length === 0">
                                 <td
-                                    colspan="5"
+                                    colspan="6"
                                     class="p-8 text-center text-muted-foreground"
                                 >
                                     No online assistance types configured yet.
@@ -958,6 +964,22 @@ const submitPsa = () => {
                                     class="p-4 text-right align-middle font-medium"
                                 >
                                     {{ formatPhp(item.price) }}
+                                </td>
+                                <td class="p-4 text-center align-middle">
+                                    <Badge
+                                        variant="outline"
+                                        :class="
+                                            item.has_disbursement
+                                                ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            item.has_disbursement
+                                                ? 'Required'
+                                                : 'None'
+                                        }}
+                                    </Badge>
                                 </td>
                                 <td class="p-4 text-center align-middle">
                                     <Badge
@@ -1692,6 +1714,30 @@ const submitPsa = () => {
                                 class="text-xs text-destructive"
                             >
                                 {{ assistanceForm.errors.sort_order }}
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border p-3 bg-muted/30">
+                            <div class="flex items-start space-x-2">
+                                <Checkbox
+                                    id="assistance-disbursement"
+                                    :checked="assistanceForm.has_disbursement"
+                                    @update:checked="
+                                        assistanceForm.has_disbursement = $event
+                                    "
+                                    class="mt-0.5"
+                                />
+                                <div class="space-y-0.5">
+                                    <Label
+                                        for="assistance-disbursement"
+                                        class="cursor-pointer font-medium"
+                                    >
+                                        Requires Government Fee Disbursement
+                                    </Label>
+                                    <p class="text-xs text-muted-foreground">
+                                        Enable if this service involves paying a government/third-party fee (e.g., NBI or Police Clearance). Disable if this service has no government disbursement.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 

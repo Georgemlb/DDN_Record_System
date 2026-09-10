@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailySettlement;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -143,12 +145,34 @@ class GcashLedgerController extends Controller
             'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
         ]);
 
+        $isFromDrawer = $request->boolean('from_drawer') && (float) $validated['amount'] > 0;
+
         $entry = new GcashLedgerEntry;
         $entry->user_id = auth()->id();
         $entry->type = GcashLedgerEntry::TYPE_ADJUSTMENT;
         $entry->amount = $validated['amount'];
         $entry->entry_date = $validated['entry_date'];
-        $entry->notes = 'Adjustment: '.$validated['notes'];
+        $entry->notes = $isFromDrawer
+            ? 'GCash Top-Up from Cash Drawer: '.$validated['notes']
+            : 'Adjustment: '.$validated['notes'];
+
+        if ($isFromDrawer) {
+            $category = ExpenseCategory::firstOrCreate(
+                ['name' => 'Miscellaneous'],
+                ['is_active' => true, 'sort_order' => 1]
+            );
+            $expense = Expense::create([
+                'user_id' => auth()->id(),
+                'expense_category_id' => $category->id,
+                'title' => 'GCash Top-Up from Drawer',
+                'amount' => $validated['amount'],
+                'expense_date' => $validated['entry_date'],
+                'payment_method' => Expense::PAYMENT_METHOD_CASH,
+                'payee' => 'GCash Wallet',
+                'notes' => 'Drawer cash withdrawn to top up GCash: '.$validated['notes'],
+            ]);
+            $entry->expense_id = $expense->id;
+        }
 
         if (! empty($validated['is_balance_anchor'])) {
             $entry->is_balance_anchor = true;
@@ -170,7 +194,9 @@ class GcashLedgerController extends Controller
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'GCash balance adjustment applied successfully.',
+            'message' => $isFromDrawer
+                ? 'GCash top-up recorded and cash drawer withdrawal created successfully.'
+                : 'GCash balance adjustment applied successfully.',
         ]);
 
         return back();

@@ -15,11 +15,13 @@ class OnlineAssistanceTypeController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name'],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
+            'has_disbursement' => ['nullable', 'boolean'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['has_disbursement'] = $request->boolean('has_disbursement', true);
         $validated['is_active'] = $request->boolean('is_active', true);
 
         OnlineAssistanceType::create($validated);
@@ -34,11 +36,13 @@ class OnlineAssistanceTypeController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:online_assistance_types,name,'.$onlineAssistanceType->id],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
+            'has_disbursement' => ['nullable', 'boolean'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['has_disbursement'] = $request->boolean('has_disbursement', true);
         $validated['is_active'] = $request->boolean('is_active', true);
 
         $onlineAssistanceType->update($validated);

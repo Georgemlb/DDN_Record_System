@@ -511,12 +511,18 @@ class TransactionController extends Controller
                 break;
 
             case Transaction::TYPE_ONLINE_ASSISTANCE:
-                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                $assistanceType = ! empty($data['online_assistance_type_id'])
+                    ? OnlineAssistanceType::find($data['online_assistance_type_id'])
+                    : null;
+                $hasDisbursement = $assistanceType ? (bool) $assistanceType->has_disbursement : true;
+                $thirdParty = $hasDisbursement ? (float) ($data['third_party_payment'] ?? 0) : 0.0;
                 $margin = max(0, $amount - $thirdParty);
                 $split = config('ddn.online_assistance_split', ['ddn' => 0.60, 'employee' => 0.40]);
                 $prepared['online_assistance_type_id'] = (int) $data['online_assistance_type_id'];
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
-                $prepared['disbursement_source'] = $data['disbursement_source'] ?? ($thirdParty > 0 ? Transaction::DISBURSEMENT_SOURCE_GCASH : Transaction::DISBURSEMENT_SOURCE_NONE);
+                $prepared['disbursement_source'] = $hasDisbursement
+                    ? ($data['disbursement_source'] ?? ($thirdParty > 0 ? Transaction::DISBURSEMENT_SOURCE_GCASH : Transaction::DISBURSEMENT_SOURCE_NONE))
+                    : Transaction::DISBURSEMENT_SOURCE_NONE;
                 $prepared['ddn_amount'] = round($margin * $split['ddn'], 2);
                 $prepared['employee_share'] = round($margin * $split['employee'], 2);
                 break;

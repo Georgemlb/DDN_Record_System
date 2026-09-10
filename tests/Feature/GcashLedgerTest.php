@@ -239,3 +239,71 @@ test('daily settlement can reconcile gcash opening, actual, and discrepancy', fu
         ->and((float) $settlement->actual_gcash)->toEqual(5000.00)
         ->and((float) $settlement->gcash_discrepancy)->toEqual(0.00);
 });
+
+test('online assistance without disbursement does not deduct government fee from gcash ledger', function () {
+    $user = User::factory()->create();
+
+    $type = OnlineAssistanceType::create([
+        'name' => 'Online Form Assistance',
+        'price' => 300.00,
+        'has_disbursement' => false,
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_ONLINE_ASSISTANCE,
+            'online_assistance_type_id' => $type->id,
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Maria Clara',
+            'amount' => 300.00,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    // 0 disbursement -> full 300 margin -> DDN: 180 (60%), Employee: 120 (40%)
+    $this->assertDatabaseHas('transactions', [
+        'type' => Transaction::TYPE_ONLINE_ASSISTANCE,
+        'customer_name' => 'Maria Clara',
+        'amount' => 300.00,
+        'third_party_payment' => null,
+        'ddn_amount' => 180.00,
+        'employee_share' => 120.00,
+    ]);
+
+    // Ensure NO government disbursement entry was created
+    $this->assertDatabaseMissing('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+    ]);
+});
+
+test('gcash adjustment funded from cash drawer creates cash drawer expense', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->post(route('gcash-ledger.adjustment'), [
+            'amount' => 500.00,
+            'entry_date' => '2026-09-09',
+            'notes' => 'Reload wallet from register float',
+            'from_drawer' => true,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    // Verify Expense created for cash drawer
+    $this->assertDatabaseHas('expenses', [
+        'title' => 'GCash Top-Up from Drawer',
+        'amount' => 500.00,
+        'payment_method' => 'cash',
+        'expense_date' => '2026-09-09',
+    ]);
+
+    // Verify GCash ledger entry created
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_ADJUSTMENT,
+        'amount' => 500.00,
+        'entry_date' => '2026-09-09',
+    ]);
+});
