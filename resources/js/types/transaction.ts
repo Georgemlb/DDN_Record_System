@@ -125,7 +125,7 @@ export type Transaction = {
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
     third_party_payment: string | number | null;
-    disbursement_source?: 'cash' | 'gcash' | null;
+    disbursement_source?: 'cash' | 'gcash' | 'flight_portal' | 'none' | null;
     ddn_amount: string | number | null;
     employee_share: string | number | null;
     notes: string | null;

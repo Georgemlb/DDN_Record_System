@@ -129,12 +129,17 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
+const getInitialDisbursementSource = (): 'gcash' | 'cash' | 'none' => {
+    if (props.transaction?.disbursement_source === 'cash') return 'cash';
+    if (props.transaction?.disbursement_source === 'none') return 'none';
+    if (props.transaction?.disbursement_source === 'gcash') return 'gcash';
+    if (formType.value === 'psa' || formType.value === 'translation')
+        return 'cash';
+    return 'gcash';
+};
+
 const disbursementSource = ref<'gcash' | 'cash' | 'none'>(
-    props.transaction?.disbursement_source === 'cash'
-        ? 'cash'
-        : props.transaction?.disbursement_source === 'none'
-          ? 'none'
-          : 'gcash',
+    getInitialDisbursementSource(),
 );
 
 const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
@@ -393,6 +398,7 @@ watch(
                 handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
             }
         } else if (newType === 'psa') {
+            disbursementSource.value = 'cash';
             if (!psaDocumentType.value && props.psaRates.length > 0) {
                 psaDocumentType.value = props.psaRates[0]
                     .document_type as PsaDocumentType;
@@ -400,6 +406,10 @@ watch(
 
             if (psaDocumentType.value) {
                 applyPsaRate(psaDocumentType.value);
+            }
+        } else if (newType === 'translation') {
+            if (!props.transaction?.disbursement_source) {
+                disbursementSource.value = 'cash';
             }
         }
     },
@@ -700,9 +710,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             type="hidden"
             name="disbursement_source"
             :value="
-                formType === 'online_assistance' && !selectedAssistanceHasDisbursement
-                    ? 'none'
-                    : disbursementSource
+                formType === 'psa'
+                    ? 'cash'
+                    : formType === 'online_assistance' &&
+                        !selectedAssistanceHasDisbursement
+                      ? 'none'
+                      : disbursementSource
             "
         />
 
@@ -1507,6 +1520,42 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.third_party_payment" />
                 </div>
 
+                <!-- Disbursement Source for Translation -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label
+                        for="translation_disbursement_source"
+                        class="flex items-center gap-1.5 font-medium"
+                    >
+                        <Wallet class="size-4 text-muted-foreground" />
+                        <span>Disbursement Source (Payment to Translator)</span>
+                    </Label>
+                    <Select v-model="disbursementSource">
+                        <SelectTrigger
+                            id="translation_disbursement_source"
+                            class="w-full"
+                        >
+                            <SelectValue
+                                placeholder="Select disbursement source"
+                            />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cash">
+                                Cash Drawer (Paid in cash from physical drawer)
+                            </SelectItem>
+                            <SelectItem value="gcash">
+                                GCash Wallet (Paid via GCash — recorded in GCash
+                                Ledger)
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-xs text-muted-foreground">
+                        Specify where the translator fee is disbursed from. If
+                        GCash is selected, it will automatically record a
+                        disbursement outflow in your live GCash Ledger.
+                    </p>
+                    <InputError :message="errors.disbursement_source" />
+                </div>
+
                 <!-- Auto Calculation Preview -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
@@ -1654,10 +1703,24 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 {{ typeOption.name }} ({{
                                     formatPhp(typeOption.price)
                                 }})
-                                <template v-if="typeOption.has_disbursement && typeOption.disbursement_amount">
-                                    — Fee: {{ formatPhp(typeOption.disbursement_amount) }}
+                                <template
+                                    v-if="
+                                        typeOption.has_disbursement &&
+                                        typeOption.disbursement_amount
+                                    "
+                                >
+                                    — Fee:
+                                    {{
+                                        formatPhp(
+                                            typeOption.disbursement_amount,
+                                        )
+                                    }}
                                 </template>
-                                <template v-else-if="typeOption.has_disbursement === false">
+                                <template
+                                    v-else-if="
+                                        typeOption.has_disbursement === false
+                                    "
+                                >
                                     — (No Disb.)
                                 </template>
                             </SelectItem>
@@ -1686,8 +1749,14 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <!-- Government Fee / GCash Disbursement Input -->
-                <div v-if="selectedAssistanceHasDisbursement" class="grid gap-2">
-                    <Label for="online_third_party_payment" class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                <div
+                    v-if="selectedAssistanceHasDisbursement"
+                    class="grid gap-2"
+                >
+                    <Label
+                        for="online_third_party_payment"
+                        class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400"
+                    >
                         <GcashIcon class="size-4" />
                         <span>Government Fee (Paid via GCash)</span>
                     </Label>
@@ -1703,7 +1772,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="0.00"
                     />
                     <p class="text-[11px] text-muted-foreground">
-                        Amount to be automatically deducted from your live GCash Ledger upon submission.
+                        Amount to be automatically deducted from your live GCash
+                        Ledger upon submission.
                     </p>
                     <InputError :message="errors.third_party_payment" />
                 </div>
@@ -1715,7 +1785,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         ℹ️ Pure Online Assistance Service
                     </p>
                     <p class="mt-0.5">
-                        No government fee disbursement required. 100% of customer payment is retained for agency and employee split.
+                        No government fee disbursement required. 100% of
+                        customer payment is retained for agency and employee
+                        split.
                     </p>
                 </div>
 
@@ -1736,7 +1808,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </div>
 
                     <div
-                        v-if="selectedAssistanceHasDisbursement && numThirdParty > 0"
+                        v-if="
+                            selectedAssistanceHasDisbursement &&
+                            numThirdParty > 0
+                        "
                         class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
                     >
                         <div class="rounded border bg-background p-2">
@@ -1817,7 +1892,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     >
                         <Info class="size-3.5 shrink-0" />
                         <span>{{
-                            selectedAssistanceHasDisbursement && numThirdParty > 0
+                            selectedAssistanceHasDisbursement &&
+                            numThirdParty > 0
                                 ? 'Shares are computed from net margin (Customer Payment minus Government Fee).'
                                 : '100% of customer payment is split 60% Office / 40% Employee.'
                         }}</span>

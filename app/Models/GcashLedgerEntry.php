@@ -273,7 +273,9 @@ class GcashLedgerEntry extends Model
             $disbursementEntry->amount = $thirdPartyCost;
             $disbursementEntry->entry_date = $date;
             $disbursementEntry->reference_number = $transaction->reference_number;
-            $disbursementEntry->notes = "Government fee disbursement for {$transaction->customer_name} ({$transaction->service_details})";
+            $disbursementEntry->notes = $transaction->type === Transaction::TYPE_TRANSLATION
+                ? "Translator fee disbursement for {$transaction->customer_name}"
+                : "Government fee disbursement for {$transaction->customer_name}".($transaction->service_details ? " ({$transaction->service_details})" : '');
             $disbursementEntry->save();
         } else {
             if ($disbursementEntry) {

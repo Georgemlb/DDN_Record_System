@@ -506,7 +506,7 @@ class TransactionController extends Controller
                 }
                 $prepared['psa_document_type'] = $data['psa_document_type'];
                 $prepared['third_party_payment'] = $thirdParty;
-                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_CASH;
+                $prepared['disbursement_source'] = Transaction::DISBURSEMENT_SOURCE_CASH;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
