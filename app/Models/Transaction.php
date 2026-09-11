@@ -52,6 +52,7 @@ use Illuminate\Support\Carbon;
     'customer_name',
     'pax',
     'provider',
+    'return_provider',
     'service_details',
     'baggage_option_id',
     'psa_document_type',

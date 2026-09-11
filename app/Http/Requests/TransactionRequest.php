@@ -78,6 +78,7 @@ class TransactionRequest extends FormRequest
             $rules['pax'] = ['required', 'integer', 'min:1'];
             $rules['trip_type'] = ['nullable', 'string', Rule::in(Transaction::TRIP_TYPES)];
             $rules['provider'] = ['nullable', 'string', 'max:255'];
+            $rules['return_provider'] = ['nullable', 'string', 'max:255'];
             $rules['flight_type'] = ['nullable', 'string', Rule::in(['local', 'international'])];
             $rules['carrier_category'] = ['nullable', 'string', Rule::in(Transaction::CARRIER_CATEGORIES)];
             $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];

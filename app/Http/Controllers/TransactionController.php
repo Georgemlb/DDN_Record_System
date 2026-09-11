@@ -438,6 +438,7 @@ class TransactionController extends Controller
             'pax' => null,
             'trip_type' => null,
             'provider' => null,
+            'return_provider' => null,
             'flight_type' => null,
             'carrier_category' => null,
             'service_details' => null,
@@ -455,7 +456,9 @@ class TransactionController extends Controller
                 $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['pax'] = (int) $data['pax'];
                 $prepared['trip_type'] = $data['trip_type'] ?? Transaction::TRIP_TYPE_ONE_WAY;
+                $isRoundTrip = ($data['trip_type'] ?? null) === Transaction::TRIP_TYPE_ROUND_TRIP;
                 $prepared['provider'] = $data['provider'] ?? null;
+                $prepared['return_provider'] = $isRoundTrip ? ($data['return_provider'] ?? null) : null;
                 $prepared['flight_type'] = $data['flight_type'] ?? null;
                 $prepared['carrier_category'] = $data['carrier_category'] ?? null;
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;

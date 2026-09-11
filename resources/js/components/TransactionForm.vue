@@ -102,6 +102,10 @@ const provider = ref<string>(
     props.transaction?.provider ??
         (formType.value === 'ferry' ? 'All Ferries' : ''),
 );
+const returnProvider = ref<string>(props.transaction?.return_provider ?? '');
+const hasDifferentReturnAirline = ref<boolean>(
+    Boolean(props.transaction?.return_provider),
+);
 const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
@@ -181,22 +185,62 @@ const calculatePortalCost = () => {
     const legs = tripType.value === 'round_trip' ? 2 : 1;
 
     if (formType.value === 'airline') {
-        let rule: AirlineMarkup | undefined;
+        let markupTotal = 0;
 
         if (flightType.value === 'local') {
-            rule = props.airlineMarkups.find(
+            const ruleOutbound = props.airlineMarkups.find(
                 (m) =>
                     (m.service_type ?? 'flight') === 'flight' &&
                     m.flight_type === 'local' &&
                     m.airline.toLowerCase() ===
                         provider.value.trim().toLowerCase(),
             );
+
+            if (
+                tripType.value === 'round_trip' &&
+                hasDifferentReturnAirline.value &&
+                returnProvider.value.trim()
+            ) {
+                const ruleReturn = props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'local' &&
+                        m.airline.toLowerCase() ===
+                            returnProvider.value.trim().toLowerCase(),
+                );
+
+                const getLegMarkup = (rule?: AirlineMarkup) => {
+                    if (!rule) return 0;
+                    if (rule.markup_type === 'percent') {
+                        return (
+                            ((numAmt / 2) * (Number(rule.markup_amount) || 0)) /
+                            100
+                        );
+                    }
+                    return (Number(rule.markup_amount) || 0) * numPax;
+                };
+
+                const outboundMarkup = getLegMarkup(ruleOutbound);
+                const returnMarkup = getLegMarkup(ruleReturn);
+                markupTotal = outboundMarkup + returnMarkup;
+            } else if (ruleOutbound) {
+                if (ruleOutbound.markup_type === 'percent') {
+                    markupTotal =
+                        (numAmt * (Number(ruleOutbound.markup_amount) || 0)) /
+                        100;
+                } else {
+                    markupTotal =
+                        (Number(ruleOutbound.markup_amount) || 0) *
+                        numPax *
+                        legs;
+                }
+            }
         } else if (flightType.value === 'international') {
             const categoryName =
                 carrierCategory.value === 'full_service'
                     ? 'Full Service Carriers'
                     : 'Budget Carriers';
-            rule =
+            const rule =
                 props.airlineMarkups.find(
                     (m) =>
                         (m.service_type ?? 'flight') === 'flight' &&
@@ -210,18 +254,19 @@ const calculatePortalCost = () => {
                         m.airline.toLowerCase() ===
                             provider.value.trim().toLowerCase(),
                 );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    markupTotal =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+                } else {
+                    markupTotal =
+                        (Number(rule.markup_amount) || 0) * numPax * legs;
+                }
+            }
         }
 
-        if (rule) {
-            let markupTotal = 0;
-
-            if (rule.markup_type === 'percent') {
-                markupTotal =
-                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
-            } else {
-                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
-            }
-
+        if (markupTotal > 0) {
             const portalCost = Math.max(0, numAmt - markupTotal);
             thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
         }
@@ -257,11 +302,34 @@ const calculatePortalCost = () => {
 };
 
 watch(
-    [formType, provider, flightType, tripType, carrierCategory, pax, amount],
+    [
+        formType,
+        provider,
+        returnProvider,
+        hasDifferentReturnAirline,
+        flightType,
+        tripType,
+        carrierCategory,
+        pax,
+        amount,
+    ],
     () => {
         calculatePortalCost();
     },
 );
+
+watch(tripType, (newTrip) => {
+    if (newTrip !== 'round_trip') {
+        hasDifferentReturnAirline.value = false;
+        returnProvider.value = '';
+    }
+});
+
+watch(hasDifferentReturnAirline, (hasDiff) => {
+    if (!hasDiff) {
+        returnProvider.value = '';
+    }
+});
 
 watch(formType, (newType) => {
     if (
@@ -496,6 +564,27 @@ const activeMarkupRuleDescription = computed(() => {
                     m.airline.toLowerCase() ===
                         provider.value.trim().toLowerCase(),
             );
+
+            if (
+                tripType.value === 'round_trip' &&
+                hasDifferentReturnAirline.value &&
+                returnProvider.value.trim()
+            ) {
+                const ruleReturn = props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'local' &&
+                        m.airline.toLowerCase() ===
+                            returnProvider.value.trim().toLowerCase(),
+                );
+
+                const outAmt = Number(rule?.markup_amount) || 0;
+                const retAmt = Number(ruleReturn?.markup_amount) || 0;
+                const totalPerPax = outAmt + retAmt;
+                const totalEarnings = totalPerPax * numPax;
+
+                return `Mixed Roundtrip: Outbound (${rule?.airline || provider.value}: ₱${outAmt}) + Return (${ruleReturn?.airline || returnProvider.value}: ₱${retAmt}) = ₱${totalPerPax}/pax × ${numPax} = ₱${totalEarnings.toLocaleString()} DDN Markup`;
+            }
 
             if (rule) {
                 if (rule.markup_type === 'percent') {
@@ -1103,7 +1192,14 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="provider">Airline or provider</Label>
+                    <Label for="provider">
+                        {{
+                            tripType === 'round_trip' &&
+                            hasDifferentReturnAirline
+                                ? 'Outbound Airline or Provider'
+                                : 'Airline or Provider'
+                        }}
+                    </Label>
                     <Input
                         id="provider"
                         name="provider"
@@ -1123,6 +1219,64 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         />
                     </datalist>
                     <InputError :message="errors.provider" />
+                </div>
+
+                <!-- Different Airline for Return (Round-trip only) -->
+                <div
+                    v-if="tripType === 'round_trip'"
+                    class="flex items-center gap-2 pt-1 pb-1 md:col-span-2"
+                >
+                    <input
+                        id="has_different_return_airline"
+                        type="checkbox"
+                        v-model="hasDifferentReturnAirline"
+                        class="size-4 rounded border-input text-primary focus:ring-primary"
+                    />
+                    <Label
+                        for="has_different_return_airline"
+                        class="cursor-pointer text-xs font-medium text-foreground"
+                    >
+                        Different airline for return flight (e.g. Outbound PAL,
+                        Return Cebu Pacific)
+                    </Label>
+                </div>
+
+                <!-- Return Airline Input -->
+                <div
+                    v-if="
+                        tripType === 'round_trip' && hasDifferentReturnAirline
+                    "
+                    class="grid gap-2 md:col-span-2"
+                >
+                    <Label
+                        for="return_provider"
+                        class="flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400"
+                    >
+                        <span>Return Airline or Provider</span>
+                    </Label>
+                    <Input
+                        id="return_provider"
+                        name="return_provider"
+                        v-model="returnProvider"
+                        :placeholder="
+                            flightType === 'international'
+                                ? 'e.g. Singapore Airlines, Scoot'
+                                : 'e.g. Philippine Airlines'
+                        "
+                        list="return-airlines"
+                    />
+                    <datalist id="return-airlines">
+                        <option
+                            v-for="airline in airlineSuggestions"
+                            :key="airline"
+                            :value="airline"
+                        />
+                    </datalist>
+                    <p class="text-[11px] text-muted-foreground">
+                        Markup will be calculated independently for each leg
+                        (Outbound + Return) based on each carrier's rule.
+                    </p>
+                    <InputError :message="errors.return_provider" />
                 </div>
 
                 <div

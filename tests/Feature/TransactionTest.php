@@ -460,3 +460,54 @@ test('an authenticated user can record a ferry transaction with ddn calculation'
         'ddn_amount' => '800.00',
     ]);
 });
+
+test('an authenticated user can record a mixed-airline roundtrip transaction', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'local',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '12280.00',
+        'third_party_payment' => '10980.00',
+    ]));
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'airline',
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'local',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '12280.00',
+        'third_party_payment' => '10980.00',
+        'ddn_amount' => '1300.00',
+    ]);
+});
+
+test('return_provider is cleared when trip_type is one_way', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'pax' => 1,
+        'trip_type' => 'one_way',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '4500.00',
+    ]));
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'provider' => 'Cebu Pacific',
+        'return_provider' => null,
+    ]);
+});

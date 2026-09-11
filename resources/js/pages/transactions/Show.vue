@@ -329,7 +329,28 @@ defineOptions({
                                 Airline / Provider
                             </dt>
                             <dd class="mt-1 font-medium">
-                                {{ transaction.provider || '—' }}
+                                <template v-if="transaction.return_provider">
+                                    <span
+                                        class="font-semibold text-foreground"
+                                        >{{ transaction.provider || '—' }}</span
+                                    >
+                                    <span class="text-xs text-muted-foreground">
+                                        (Outbound)</span
+                                    >
+                                    <span class="mx-1.5 text-muted-foreground"
+                                        >/</span
+                                    >
+                                    <span
+                                        class="font-semibold text-foreground"
+                                        >{{ transaction.return_provider }}</span
+                                    >
+                                    <span class="text-xs text-muted-foreground">
+                                        (Return)</span
+                                    >
+                                </template>
+                                <template v-else>
+                                    {{ transaction.provider || '—' }}
+                                </template>
                             </dd>
                         </div>
                         <div v-if="transaction.service_details">
@@ -458,13 +479,20 @@ defineOptions({
                                 <span
                                     v-if="
                                         transaction.third_party_payment &&
-                                        Number(transaction.third_party_payment) > 0
+                                        Number(
+                                            transaction.third_party_payment,
+                                        ) > 0
                                     "
                                     class="text-blue-600 dark:text-blue-400"
                                 >
-                                    {{ formatPhp(transaction.third_party_payment) }}
+                                    {{
+                                        formatPhp(
+                                            transaction.third_party_payment,
+                                        )
+                                    }}
                                     ({{
-                                        transaction.disbursement_source === 'cash'
+                                        transaction.disbursement_source ===
+                                        'cash'
                                             ? 'Cash Drawer'
                                             : 'GCash Wallet'
                                     }})

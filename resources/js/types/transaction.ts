@@ -111,6 +111,7 @@ export type Transaction = {
     pax: number | null;
     trip_type?: TripType | null;
     provider: string | null;
+    return_provider?: string | null;
     flight_type: FlightType | null;
     carrier_category?: CarrierCategory | null;
     service_details: string | null;

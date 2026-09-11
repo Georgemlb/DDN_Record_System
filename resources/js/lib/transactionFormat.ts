@@ -57,9 +57,12 @@ export const getTransactionServiceDetail = (tx: Transaction): string => {
     switch (tx.type) {
         case 'airline': {
             const tripSuffix = tx.trip_type === 'round_trip' ? ', RT' : '';
+            const providerStr = tx.return_provider
+                ? `${tx.provider || '—'} / ${tx.return_provider}`
+                : tx.provider;
 
-            return tx.provider
-                ? `${tx.provider} (${tx.pax ?? 1} pax${tripSuffix})`
+            return providerStr
+                ? `${providerStr} (${tx.pax ?? 1} pax${tripSuffix})`
                 : `${tx.pax ?? 1} pax${tripSuffix}`;
         }
         case 'ferry': {
