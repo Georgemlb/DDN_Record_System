@@ -118,6 +118,7 @@ export type Transaction = {
     baggage_option_id: number | null;
     baggage_option?: BaggageOption | null;
     psa_document_type: PsaDocumentType | null;
+    copies?: number | null;
     online_assistance_type_id: number | null;
     online_assistance_type?: OnlineAssistanceType | null;
     amount: string | number;

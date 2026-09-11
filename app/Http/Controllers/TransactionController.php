@@ -436,6 +436,7 @@ class TransactionController extends Controller
             'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
             'notes' => $data['notes'] ?? null,
             'pax' => null,
+            'copies' => null,
             'trip_type' => null,
             'provider' => null,
             'return_provider' => null,
@@ -487,12 +488,13 @@ class TransactionController extends Controller
                 break;
 
             case Transaction::TYPE_PSA:
+                $copies = max(1, (int) ($data['copies'] ?? 1));
                 $rate = PsaRate::where('document_type', $data['psa_document_type'])
                     ->orWhere('document_type', strtoupper($data['psa_document_type']))
                     ->first();
                 if ($rate) {
-                    $amount = (float) $rate->price;
-                    $thirdParty = (float) $rate->officer_fee;
+                    $amount = round((float) $rate->price * $copies, 2);
+                    $thirdParty = round((float) $rate->officer_fee * $copies, 2);
                     $prepared['amount'] = $amount;
                     if ($status === Transaction::PAYMENT_STATUS_PAID) {
                         $prepared['amount_paid'] = $amount;
@@ -508,6 +510,7 @@ class TransactionController extends Controller
                     $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 }
                 $prepared['psa_document_type'] = $data['psa_document_type'];
+                $prepared['copies'] = $copies;
                 $prepared['third_party_payment'] = $thirdParty;
                 $prepared['disbursement_source'] = Transaction::DISBURSEMENT_SOURCE_CASH;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);

@@ -450,6 +450,14 @@ defineOptions({
                         </div>
                         <div>
                             <dt class="text-muted-foreground">
+                                Copies
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                {{ transaction.copies || 1 }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground">
                                 PSA Officer Payment
                             </dt>
                             <dd class="mt-1 font-medium text-destructive">

@@ -8,6 +8,8 @@ import {
     CheckCircle,
     Clock,
     Info,
+    Minus,
+    Plus,
     Ship,
     Smartphone,
     Wallet,
@@ -118,6 +120,7 @@ const baggageOptionId = ref<string>(
 const psaDocumentType = ref<PsaDocumentType | ''>(
     props.transaction?.psa_document_type ?? 'BC',
 );
+const copies = ref<number>(props.transaction?.copies ?? 1);
 const onlineAssistanceTypeId = ref<string>(
     props.transaction?.online_assistance_type_id
         ? String(props.transaction.online_assistance_type_id)
@@ -435,19 +438,32 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
     }
 };
 
-// Auto-fill amount and third party fee when PSA document type changes
-const applyPsaRate = (docType: string) => {
-    if (!docType || props.psaRates.length === 0) {
+const selectedPsaRate = computed(() => {
+    if (!psaDocumentType.value || props.psaRates.length === 0) return null;
+    return (
+        props.psaRates.find(
+            (r) =>
+                r.document_type.toLowerCase() ===
+                psaDocumentType.value.toLowerCase(),
+        ) || null
+    );
+});
+
+// Auto-fill amount and third party fee when PSA document type or copies change
+const applyPsaRate = (docType?: string) => {
+    const targetDoc = docType || psaDocumentType.value;
+    if (!targetDoc || props.psaRates.length === 0) {
         return;
     }
 
     const selected = props.psaRates.find(
-        (r) => r.document_type.toLowerCase() === docType.toLowerCase(),
+        (r) => r.document_type.toLowerCase() === targetDoc.toLowerCase(),
     );
 
     if (selected) {
-        amount.value = selected.price;
-        thirdPartyPayment.value = selected.officer_fee;
+        const count = Math.max(1, Number(copies.value) || 1);
+        amount.value = (Number(selected.price) * count).toFixed(2);
+        thirdPartyPayment.value = (Number(selected.officer_fee) * count).toFixed(2);
     }
 };
 
@@ -456,6 +472,31 @@ const handlePsaDocumentTypeChange = (value: unknown) => {
     psaDocumentType.value = docCode;
     applyPsaRate(docCode);
 };
+
+const incrementCopies = () => {
+    copies.value = Math.min(100, Math.max(1, (Number(copies.value) || 1) + 1));
+    applyPsaRate();
+};
+
+const decrementCopies = () => {
+    copies.value = Math.max(1, (Number(copies.value) || 1) - 1);
+    applyPsaRate();
+};
+
+const handleCopiesInput = () => {
+    if (copies.value < 1) {
+        copies.value = 1;
+    } else if (copies.value > 100) {
+        copies.value = 100;
+    }
+    applyPsaRate();
+};
+
+watch(copies, () => {
+    if (formType.value === 'psa') {
+        applyPsaRate();
+    }
+});
 
 // Automatically apply configured rates whenever formType or psaRates change
 watch(
@@ -771,6 +812,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             type="hidden"
             name="psa_document_type"
             :value="psaDocumentType"
+        />
+        <input
+            v-if="formType === 'psa'"
+            type="hidden"
+            name="copies"
+            :value="copies"
         />
         <input
             v-if="formType === 'psa'"
@@ -1733,45 +1780,83 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
             <!-- PSA ASSISTANCE -->
             <template v-if="formType === 'psa'">
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="psa_doc_select">PSA Document Type</Label>
-                    <Select
-                        :model-value="psaDocumentType"
-                        @update:model-value="handlePsaDocumentTypeChange"
-                    >
-                        <SelectTrigger id="psa_doc_select" class="w-full">
-                            <SelectValue
-                                placeholder="Select PSA Document Type"
+                <div class="grid gap-4 md:col-span-2 sm:grid-cols-3">
+                    <div class="space-y-2 sm:col-span-2">
+                        <Label for="psa_doc_select">PSA Document Type</Label>
+                        <Select
+                            :model-value="psaDocumentType"
+                            @update:model-value="handlePsaDocumentTypeChange"
+                        >
+                            <SelectTrigger id="psa_doc_select" class="w-full">
+                                <SelectValue
+                                    placeholder="Select PSA Document Type"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <template v-if="props.psaRates.length > 0">
+                                    <SelectItem
+                                        v-for="rate in props.psaRates"
+                                        :key="rate.id"
+                                        :value="rate.document_type"
+                                    >
+                                        {{ rate.document_type }} —
+                                        {{ rate.name }} ({{
+                                            formatPhp(rate.price)
+                                        }})
+                                    </SelectItem>
+                                </template>
+                                <template v-else>
+                                    <SelectItem
+                                        v-for="docType in psaDocumentTypes"
+                                        :key="docType"
+                                        :value="docType"
+                                    >
+                                        {{
+                                            psaDocumentTypeLabels[docType] ||
+                                            docType
+                                        }}
+                                    </SelectItem>
+                                </template>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="errors.psa_document_type" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="psa_copies">Number of Copies</Label>
+                        <div class="flex items-center space-x-1">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                class="h-9 w-9 shrink-0"
+                                :disabled="copies <= 1"
+                                @click="decrementCopies"
+                            >
+                                <Minus class="size-3.5" />
+                            </Button>
+                            <Input
+                                id="psa_copies"
+                                v-model.number="copies"
+                                type="number"
+                                min="1"
+                                max="100"
+                                class="h-9 text-center font-semibold"
+                                @input="handleCopiesInput"
                             />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <template v-if="props.psaRates.length > 0">
-                                <SelectItem
-                                    v-for="rate in props.psaRates"
-                                    :key="rate.id"
-                                    :value="rate.document_type"
-                                >
-                                    {{ rate.document_type }} —
-                                    {{ rate.name }} ({{
-                                        formatPhp(rate.price)
-                                    }})
-                                </SelectItem>
-                            </template>
-                            <template v-else>
-                                <SelectItem
-                                    v-for="docType in psaDocumentTypes"
-                                    :key="docType"
-                                    :value="docType"
-                                >
-                                    {{
-                                        psaDocumentTypeLabels[docType] ||
-                                        docType
-                                    }}
-                                </SelectItem>
-                            </template>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.psa_document_type" />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                class="h-9 w-9 shrink-0"
+                                :disabled="copies >= 100"
+                                @click="incrementCopies"
+                            >
+                                <Plus class="size-3.5" />
+                            </Button>
+                        </div>
+                        <InputError :message="errors.copies" />
+                    </div>
                 </div>
 
                 <!-- PSA Margin & Net Breakdown Preview (Price is automated from configuration) -->
@@ -1784,7 +1869,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <span>Configured PSA Fixed Price & Breakdown</span>
                         </div>
                         <span class="text-xs font-normal text-muted-foreground">
-                            Automatically set from configuration
+                            {{ copies }} {{ copies === 1 ? 'copy' : 'copies' }} &middot; Automatically calculated
                         </span>
                     </div>
                     <div
@@ -1797,6 +1882,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <p class="font-bold text-foreground">
                                 {{ formatPhp(numAmount) }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.price) }}
+                            </span>
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
@@ -1807,6 +1898,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             >
                                 -{{ formatPhp(numThirdParty) }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.officer_fee) }}
+                            </span>
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
@@ -1819,16 +1916,23 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                     formatPhp(computedTranslationOrPsaDdnAmount)
                                 }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(Number(selectedPsaRate.price) - Number(selectedPsaRate.officer_fee)) }}
+                            </span>
                         </div>
                     </div>
                     <p
                         class="mt-2 text-center text-[11px] text-muted-foreground"
                     >
                         Customer price and PSA officer payment are fixed
-                        according to branch configuration.
+                        according to branch configuration multiplied by number of copies.
                     </p>
                     <InputError :message="errors.amount" />
                     <InputError :message="errors.third_party_payment" />
+                    <InputError :message="errors.copies" />
                 </div>
             </template>
 

@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $service_details
  * @property int|null $baggage_option_id
  * @property string|null $psa_document_type
+ * @property int|null $copies
  * @property int|null $online_assistance_type_id
  * @property string $amount
  * @property string|null $third_party_payment
@@ -56,6 +57,7 @@ use Illuminate\Support\Carbon;
     'service_details',
     'baggage_option_id',
     'psa_document_type',
+    'copies',
     'online_assistance_type_id',
     'amount',
     'amount_paid',
@@ -273,6 +275,7 @@ class Transaction extends Model
         return [
             'transaction_date' => 'date:Y-m-d',
             'pax' => 'integer',
+            'copies' => 'integer',
             'amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
             'balance' => 'decimal:2',
