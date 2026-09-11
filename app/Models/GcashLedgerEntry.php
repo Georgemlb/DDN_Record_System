@@ -62,6 +62,8 @@ class GcashLedgerEntry extends Model
     // Manual balance adjustment / Anchor
     public const TYPE_ADJUSTMENT = 'adjustment';
 
+    public const LOW_BALANCE_THRESHOLD = 5000.00;
+
     public const TYPES = [
         self::TYPE_CUSTOMER_PAYMENT,
         self::TYPE_REMITTANCE_CASH_OUT,
@@ -247,8 +249,14 @@ class GcashLedgerEntry extends Model
             ->first();
 
         $thirdPartyCost = (float) ($transaction->third_party_payment ?? 0);
-        $isDisbursedViaGcash = $transaction->disbursement_source === Transaction::DISBURSEMENT_SOURCE_GCASH
-            || ($transaction->type === Transaction::TYPE_ONLINE_ASSISTANCE && $transaction->disbursement_source !== Transaction::DISBURSEMENT_SOURCE_CASH);
+        $assistanceType = $transaction->onlineAssistanceType;
+        $hasDisbursement = $transaction->type !== Transaction::TYPE_ONLINE_ASSISTANCE
+            || ($assistanceType ? (bool) $assistanceType->has_disbursement : true);
+
+        $isDisbursedViaGcash = $hasDisbursement && (
+            $transaction->disbursement_source === Transaction::DISBURSEMENT_SOURCE_GCASH
+            || ($transaction->type === Transaction::TYPE_ONLINE_ASSISTANCE && $transaction->disbursement_source !== Transaction::DISBURSEMENT_SOURCE_CASH && $transaction->disbursement_source !== Transaction::DISBURSEMENT_SOURCE_NONE)
+        );
 
         if ($thirdPartyCost > 0 && $isDisbursedViaGcash && ! $isRemittanceCashIn && ! $isRemittanceCashOut) {
             if (! $disbursementEntry) {
@@ -265,7 +273,9 @@ class GcashLedgerEntry extends Model
             $disbursementEntry->amount = $thirdPartyCost;
             $disbursementEntry->entry_date = $date;
             $disbursementEntry->reference_number = $transaction->reference_number;
-            $disbursementEntry->notes = "Government fee disbursement for {$transaction->customer_name} ({$transaction->service_details})";
+            $disbursementEntry->notes = $transaction->type === Transaction::TYPE_TRANSLATION
+                ? "Translator fee disbursement for {$transaction->customer_name}"
+                : "Government fee disbursement for {$transaction->customer_name}".($transaction->service_details ? " ({$transaction->service_details})" : '');
             $disbursementEntry->save();
         } else {
             if ($disbursementEntry) {

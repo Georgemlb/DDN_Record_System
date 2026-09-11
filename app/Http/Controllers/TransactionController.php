@@ -436,8 +436,10 @@ class TransactionController extends Controller
             'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
             'notes' => $data['notes'] ?? null,
             'pax' => null,
+            'copies' => null,
             'trip_type' => null,
             'provider' => null,
+            'return_provider' => null,
             'flight_type' => null,
             'carrier_category' => null,
             'service_details' => null,
@@ -455,7 +457,9 @@ class TransactionController extends Controller
                 $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 $prepared['pax'] = (int) $data['pax'];
                 $prepared['trip_type'] = $data['trip_type'] ?? Transaction::TRIP_TYPE_ONE_WAY;
+                $isRoundTrip = ($data['trip_type'] ?? null) === Transaction::TRIP_TYPE_ROUND_TRIP;
                 $prepared['provider'] = $data['provider'] ?? null;
+                $prepared['return_provider'] = $isRoundTrip ? ($data['return_provider'] ?? null) : null;
                 $prepared['flight_type'] = $data['flight_type'] ?? null;
                 $prepared['carrier_category'] = $data['carrier_category'] ?? null;
                 $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
@@ -484,12 +488,13 @@ class TransactionController extends Controller
                 break;
 
             case Transaction::TYPE_PSA:
+                $copies = max(1, (int) ($data['copies'] ?? 1));
                 $rate = PsaRate::where('document_type', $data['psa_document_type'])
                     ->orWhere('document_type', strtoupper($data['psa_document_type']))
                     ->first();
                 if ($rate) {
-                    $amount = (float) $rate->price;
-                    $thirdParty = (float) $rate->officer_fee;
+                    $amount = round((float) $rate->price * $copies, 2);
+                    $thirdParty = round((float) $rate->officer_fee * $copies, 2);
                     $prepared['amount'] = $amount;
                     if ($status === Transaction::PAYMENT_STATUS_PAID) {
                         $prepared['amount_paid'] = $amount;
@@ -505,18 +510,35 @@ class TransactionController extends Controller
                     $thirdParty = (float) ($data['third_party_payment'] ?? 0);
                 }
                 $prepared['psa_document_type'] = $data['psa_document_type'];
+                $prepared['copies'] = $copies;
                 $prepared['third_party_payment'] = $thirdParty;
-                $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_CASH;
+                $prepared['disbursement_source'] = Transaction::DISBURSEMENT_SOURCE_CASH;
                 $prepared['ddn_amount'] = round(max(0, $amount - $thirdParty), 2);
                 break;
 
             case Transaction::TYPE_ONLINE_ASSISTANCE:
-                $thirdParty = (float) ($data['third_party_payment'] ?? 0);
+                $assistanceType = ! empty($data['online_assistance_type_id'])
+                    ? OnlineAssistanceType::find($data['online_assistance_type_id'])
+                    : null;
+                $hasDisbursement = $assistanceType ? (bool) $assistanceType->has_disbursement : true;
+
+                if (! $hasDisbursement) {
+                    $thirdParty = 0.0;
+                } elseif (isset($data['third_party_payment']) && $data['third_party_payment'] !== '') {
+                    $thirdParty = (float) $data['third_party_payment'];
+                } elseif ($assistanceType && $assistanceType->disbursement_amount !== null) {
+                    $thirdParty = (float) $assistanceType->disbursement_amount;
+                } else {
+                    $thirdParty = 0.0;
+                }
+
                 $margin = max(0, $amount - $thirdParty);
                 $split = config('ddn.online_assistance_split', ['ddn' => 0.60, 'employee' => 0.40]);
                 $prepared['online_assistance_type_id'] = (int) $data['online_assistance_type_id'];
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
-                $prepared['disbursement_source'] = $data['disbursement_source'] ?? ($thirdParty > 0 ? Transaction::DISBURSEMENT_SOURCE_GCASH : Transaction::DISBURSEMENT_SOURCE_NONE);
+                $prepared['disbursement_source'] = $hasDisbursement
+                    ? ($data['disbursement_source'] ?? ($thirdParty > 0 ? Transaction::DISBURSEMENT_SOURCE_GCASH : Transaction::DISBURSEMENT_SOURCE_NONE))
+                    : Transaction::DISBURSEMENT_SOURCE_NONE;
                 $prepared['ddn_amount'] = round($margin * $split['ddn'], 2);
                 $prepared['employee_share'] = round($margin * $split['employee'], 2);
                 break;

@@ -135,6 +135,7 @@ const adjustmentForm = useForm({
     amount: '',
     entry_date: todayDate,
     notes: '',
+    from_drawer: false,
     is_balance_anchor: false,
     running_balance: '',
 });
@@ -142,6 +143,7 @@ const adjustmentForm = useForm({
 const openAdjustmentModal = () => {
     adjustmentForm.reset();
     adjustmentForm.entry_date = todayDate;
+    adjustmentForm.from_drawer = false;
     adjustmentDirection.value = 'credit';
     isAdjAnchor.value = false;
     isAdjustmentModalOpen.value = true;
@@ -161,6 +163,7 @@ const submitAdjustment = () => {
         .transform((data) => ({
             ...data,
             amount: signedAmount.toFixed(2),
+            from_drawer: adjustmentDirection.value === 'credit' ? data.from_drawer : false,
             is_balance_anchor: isAdjAnchor.value,
             running_balance:
                 isAdjAnchor.value && data.running_balance
@@ -285,22 +288,27 @@ const formatEntryDate = (dateStr: string | null | undefined) => {
 
 const getTypeLabel = (type: string) => {
     switch (type) {
-        case 'remittance_cash_in':
-            return 'Cash-In (Outflow)';
-        case 'remittance_cash_out':
-            return 'Cash-Out (Inflow)';
-        case 'online_assistance':
-            return 'Gov Fee';
+        case 'customer_payment':
         case 'direct_payment':
             return 'Customer Payment';
+        case 'remittance_cash_out':
+            return 'Cash-Out (+GCash)';
+        case 'remittance_cash_in':
+            return 'Cash-In (-GCash)';
+        case 'government_disbursement':
+        case 'online_assistance':
+            return 'Gov Disbursement';
+        case 'expense_payment':
         case 'direct_expense':
             return 'GCash Expense';
+        case 'portal_reload':
+            return 'Portal Reload';
         case 'cash_transfer':
             return 'Cash Transfer';
         case 'bank_transfer':
             return 'Bank Transfer';
         case 'adjustment':
-            return 'Adjustment';
+            return 'Adjustment / Top-Up';
         default:
             return type.replace(/_/g, ' ');
     }
@@ -308,12 +316,16 @@ const getTypeLabel = (type: string) => {
 
 const getTypeBadgeClass = (type: string, amount: string | number) => {
     switch (type) {
-        case 'remittance_cash_out':
+        case 'customer_payment':
         case 'direct_payment':
+        case 'remittance_cash_out':
             return 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300';
         case 'remittance_cash_in':
+        case 'government_disbursement':
         case 'online_assistance':
+        case 'expense_payment':
         case 'direct_expense':
+        case 'portal_reload':
             return 'bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300';
         case 'bank_transfer':
         case 'cash_transfer':
@@ -321,8 +333,8 @@ const getTypeBadgeClass = (type: string, amount: string | number) => {
         case 'adjustment':
         default:
             return Number(amount) >= 0
-                ? 'bg-purple-500/15 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300'
-                : 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300';
+                ? 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300'
+                : 'bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300';
     }
 };
 
@@ -332,6 +344,7 @@ const isInflow = (entry: GcashLedgerEntry) => {
     }
 
     return [
+        'customer_payment',
         'remittance_cash_out',
         'direct_payment',
         'cash_transfer',
@@ -971,6 +984,32 @@ const moveEntry = (entry: GcashLedgerEntry, direction: 'up' | 'down') => {
                                 <Minus class="size-4" />
                                 <span>Outflow / Debit (-)</span>
                             </Button>
+                        </div>
+                    </div>
+
+                    <!-- From Cash Drawer Option -->
+                    <div
+                        v-if="adjustmentDirection === 'credit'"
+                        class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3"
+                    >
+                        <div class="flex items-start gap-2.5">
+                            <input
+                                id="adj_from_drawer"
+                                v-model="adjustmentForm.from_drawer"
+                                type="checkbox"
+                                class="mt-0.5 size-4 rounded border-input text-primary shadow-xs focus:ring-primary"
+                            />
+                            <div class="space-y-0.5 text-xs">
+                                <Label
+                                    for="adj_from_drawer"
+                                    class="cursor-pointer font-semibold text-foreground"
+                                >
+                                    Funded from Cash Drawer (Top-Up)
+                                </Label>
+                                <p class="text-muted-foreground">
+                                    Records a physical cash withdrawal from the drawer (-Cash Drawer) to reload into office GCash (+GCash Wallet).
+                                </p>
+                            </div>
                         </div>
                     </div>
 

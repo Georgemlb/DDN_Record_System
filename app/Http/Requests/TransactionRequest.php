@@ -28,16 +28,15 @@ class TransactionRequest extends FormRequest
                 ->first();
 
             if ($rate) {
-                $merge = [];
+                $copies = max(1, (int) $this->input('copies', 1));
+                $merge = ['copies' => $copies];
                 if (! $this->has('amount') || $this->input('amount') === null || $this->input('amount') === '') {
-                    $merge['amount'] = $rate->price;
+                    $merge['amount'] = round((float) $rate->price * $copies, 2);
                 }
                 if (! $this->has('third_party_payment') || $this->input('third_party_payment') === null || $this->input('third_party_payment') === '') {
-                    $merge['third_party_payment'] = $rate->officer_fee;
+                    $merge['third_party_payment'] = round((float) $rate->officer_fee * $copies, 2);
                 }
-                if (! empty($merge)) {
-                    $this->merge($merge);
-                }
+                $this->merge($merge);
             }
         }
     }
@@ -78,6 +77,7 @@ class TransactionRequest extends FormRequest
             $rules['pax'] = ['required', 'integer', 'min:1'];
             $rules['trip_type'] = ['nullable', 'string', Rule::in(Transaction::TRIP_TYPES)];
             $rules['provider'] = ['nullable', 'string', 'max:255'];
+            $rules['return_provider'] = ['nullable', 'string', 'max:255'];
             $rules['flight_type'] = ['nullable', 'string', Rule::in(['local', 'international'])];
             $rules['carrier_category'] = ['nullable', 'string', Rule::in(Transaction::CARRIER_CATEGORIES)];
             $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];
@@ -93,6 +93,7 @@ class TransactionRequest extends FormRequest
             $rules['third_party_payment'] = ['required', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_PSA) {
             $rules['psa_document_type'] = ['required', 'string', 'max:50'];
+            $rules['copies'] = ['nullable', 'integer', 'min:1', 'max:100'];
             $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_ONLINE_ASSISTANCE) {
             $rules['online_assistance_type_id'] = ['required', 'integer', 'exists:online_assistance_types,id'];

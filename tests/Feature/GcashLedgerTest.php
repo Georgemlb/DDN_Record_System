@@ -5,6 +5,7 @@ use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
 use App\Models\OnlineAssistanceType;
+use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -238,4 +239,174 @@ test('daily settlement can reconcile gcash opening, actual, and discrepancy', fu
     expect($settlement->status)->toEqual(DailySettlement::STATUS_CLOSED)
         ->and((float) $settlement->actual_gcash)->toEqual(5000.00)
         ->and((float) $settlement->gcash_discrepancy)->toEqual(0.00);
+});
+
+test('online assistance without disbursement does not deduct government fee from gcash ledger', function () {
+    $user = User::factory()->create();
+
+    $type = OnlineAssistanceType::create([
+        'name' => 'Online Form Assistance',
+        'price' => 300.00,
+        'has_disbursement' => false,
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_ONLINE_ASSISTANCE,
+            'online_assistance_type_id' => $type->id,
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Maria Clara',
+            'amount' => 300.00,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    // 0 disbursement -> full 300 margin -> DDN: 180 (60%), Employee: 120 (40%)
+    $this->assertDatabaseHas('transactions', [
+        'type' => Transaction::TYPE_ONLINE_ASSISTANCE,
+        'customer_name' => 'Maria Clara',
+        'amount' => 300.00,
+        'third_party_payment' => null,
+        'ddn_amount' => 180.00,
+        'employee_share' => 120.00,
+    ]);
+
+    // Ensure NO government disbursement entry was created
+    $this->assertDatabaseMissing('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+    ]);
+});
+
+test('gcash adjustment funded from cash drawer creates cash drawer expense', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->post(route('gcash-ledger.adjustment'), [
+            'amount' => 500.00,
+            'entry_date' => '2026-09-09',
+            'notes' => 'Reload wallet from register float',
+            'from_drawer' => true,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    // Verify Expense created for cash drawer
+    $this->assertDatabaseHas('expenses', [
+        'title' => 'GCash Top-Up from Drawer',
+        'amount' => 500.00,
+        'payment_method' => 'cash',
+        'expense_date' => '2026-09-09',
+    ]);
+
+    // Verify GCash ledger entry created
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_ADJUSTMENT,
+        'amount' => 500.00,
+        'entry_date' => '2026-09-09',
+    ]);
+});
+
+test('psa transaction defaults disbursement to cash and does not deduct from gcash ledger', function () {
+    $user = User::factory()->create();
+
+    PsaRate::create([
+        'document_type' => 'BC',
+        'name' => 'Birth Certificate',
+        'price' => 320.00,
+        'officer_fee' => 260.00,
+    ]);
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_PSA,
+            'psa_document_type' => 'BC',
+            'transaction_date' => '2026-01-05',
+            'customer_name' => 'Tarroza Chasler Test',
+            'amount' => 320.00,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+            // Even if client accidentally sends gcash disbursement source:
+            'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_GCASH,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    // Verify transaction forced disbursement_source to cash
+    $this->assertDatabaseHas('transactions', [
+        'type' => Transaction::TYPE_PSA,
+        'customer_name' => 'Tarroza Chasler Test',
+        'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_CASH,
+        'third_party_payment' => 260.00,
+        'ddn_amount' => 60.00,
+    ]);
+
+    // Ensure NO government disbursement entry was created in GCash ledger
+    $this->assertDatabaseMissing('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+    ]);
+});
+
+test('translation transaction with cash disbursement does not deduct from gcash ledger', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_TRANSLATION,
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Translation Client Cash',
+            'amount' => 500.00,
+            'third_party_payment' => 200.00,
+            'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_CASH,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('transactions', [
+        'type' => Transaction::TYPE_TRANSLATION,
+        'customer_name' => 'Translation Client Cash',
+        'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_CASH,
+        'third_party_payment' => 200.00,
+        'ddn_amount' => 300.00,
+    ]);
+
+    $this->assertDatabaseMissing('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+    ]);
+});
+
+test('translation transaction with gcash disbursement records translator fee outflow in gcash ledger', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_TRANSLATION,
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Translation Client GCash',
+            'amount' => 500.00,
+            'third_party_payment' => 200.00,
+            'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_GCASH,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('transactions', [
+        'type' => Transaction::TYPE_TRANSLATION,
+        'customer_name' => 'Translation Client GCash',
+        'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_GCASH,
+        'third_party_payment' => 200.00,
+        'ddn_amount' => 300.00,
+    ]);
+
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+        'amount' => 200.00,
+        'notes' => 'Translator fee disbursement for Translation Client GCash',
+    ]);
 });

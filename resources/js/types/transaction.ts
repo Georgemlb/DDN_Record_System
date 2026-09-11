@@ -75,6 +75,8 @@ export type OnlineAssistanceType = {
     id: number;
     name: string;
     price: string | number;
+    has_disbursement?: boolean;
+    disbursement_amount?: string | number | null;
     is_active?: boolean;
     sort_order?: number;
 };
@@ -109,12 +111,14 @@ export type Transaction = {
     pax: number | null;
     trip_type?: TripType | null;
     provider: string | null;
+    return_provider?: string | null;
     flight_type: FlightType | null;
     carrier_category?: CarrierCategory | null;
     service_details: string | null;
     baggage_option_id: number | null;
     baggage_option?: BaggageOption | null;
     psa_document_type: PsaDocumentType | null;
+    copies?: number | null;
     online_assistance_type_id: number | null;
     online_assistance_type?: OnlineAssistanceType | null;
     amount: string | number;
@@ -123,7 +127,7 @@ export type Transaction = {
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
     third_party_payment: string | number | null;
-    disbursement_source?: 'cash' | 'gcash' | null;
+    disbursement_source?: 'cash' | 'gcash' | 'flight_portal' | 'none' | null;
     ddn_amount: string | number | null;
     employee_share: string | number | null;
     notes: string | null;

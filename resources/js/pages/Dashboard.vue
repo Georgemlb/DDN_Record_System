@@ -28,6 +28,7 @@ import {
 } from 'chart.js';
 import { computed } from 'vue';
 import { Doughnut, Line } from 'vue-chartjs';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -85,6 +86,11 @@ const props = defineProps<{
         exact_net_gcash: number;
     };
     portal?: {
+        balance: number;
+        is_low_balance: boolean;
+        low_balance_threshold: number;
+    };
+    gcash?: {
         balance: number;
         is_low_balance: boolean;
         low_balance_threshold: number;
@@ -406,27 +412,45 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     </div>
                 </article>
 
-                <!-- Exact GCash Balance -->
+                <!-- Live GCash Wallet Balance -->
                 <article
-                    class="rounded-xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-card to-card p-5 shadow-sm"
+                    :class="[
+                        'rounded-xl border p-5 shadow-sm transition-all',
+                        gcash?.is_low_balance
+                            ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-card to-card'
+                            : 'border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-card to-card',
+                    ]"
                 >
                     <div class="flex items-start justify-between">
                         <div>
-                            <p
-                                class="text-xs font-semibold tracking-wider text-blue-700 uppercase dark:text-blue-400"
-                            >
-                                Exact GCash Collected
-                            </p>
+                            <div class="flex items-center gap-1.5">
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-blue-700 uppercase dark:text-blue-400"
+                                >
+                                    GCash Wallet Balance
+                                </p>
+                                <span
+                                    v-if="gcash?.is_low_balance"
+                                    class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                                >
+                                    Low
+                                </span>
+                            </div>
                             <p
                                 class="mt-2 text-3xl font-bold tracking-tight text-foreground"
                             >
-                                {{ formatPhp(register.exact_net_gcash) }}
+                                {{ formatPhp(gcash?.balance ?? 0) }}
                             </p>
                         </div>
                         <span
-                            class="rounded-lg bg-blue-500/15 p-2.5 text-blue-600 dark:text-blue-400"
+                            :class="[
+                                'rounded-lg p-2.5',
+                                gcash?.is_low_balance
+                                    ? 'bg-amber-500/20 text-amber-600'
+                                    : 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+                            ]"
                         >
-                            <WalletCards class="size-6" />
+                            <GcashIcon class="size-6" />
                         </span>
                     </div>
                     <div
@@ -435,7 +459,7 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                         <div class="flex items-center justify-between">
                             <span class="flex items-center gap-1">
                                 <ArrowUpRight class="size-3.5 text-blue-500" />
-                                GCash Received:
+                                Today In:
                             </span>
                             <span class="font-medium text-foreground">
                                 +{{ formatPhp(register.gcash_in) }}
@@ -446,7 +470,7 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                                 <ArrowDownRight
                                     class="size-3.5 text-rose-500"
                                 />
-                                GCash Expenses:
+                                Today Out:
                             </span>
                             <span class="font-medium text-foreground">
                                 -{{ formatPhp(register.gcash_out) }}
@@ -673,34 +697,59 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     </div>
                 </article>
 
-                <!-- Exact Net GCash (Today) -->
+                <!-- GCash Wallet Balance -->
                 <article
-                    class="rounded-lg border border-blue-500/30 bg-blue-500/5 p-5"
+                    :class="[
+                        'rounded-lg border p-5 transition-all',
+                        gcash?.is_low_balance
+                            ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-transparent'
+                            : 'border-border bg-card',
+                    ]"
                 >
                     <div class="flex items-start justify-between">
                         <div>
-                            <p
-                                class="text-sm font-medium text-blue-700 dark:text-blue-400"
-                            >
-                                Today's Net GCash
-                            </p>
+                            <div class="flex items-center gap-1.5">
+                                <p
+                                    class="text-sm font-medium text-muted-foreground"
+                                >
+                                    GCash Wallet Balance
+                                </p>
+                                <span
+                                    v-if="gcash?.is_low_balance"
+                                    class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                                >
+                                    Low
+                                </span>
+                            </div>
                             <p
                                 class="mt-3 text-2xl font-semibold tracking-tight"
                             >
-                                {{ formatPhp(register.exact_net_gcash) }}
+                                {{ formatPhp(gcash?.balance ?? 0) }}
                             </p>
                         </div>
-                        <span
-                            class="rounded-md bg-blue-500/15 p-2 text-blue-600 dark:text-blue-400"
+                        <Link
+                            href="/gcash-ledger"
+                            :class="[
+                                'rounded-md p-2 transition-colors',
+                                gcash?.is_low_balance
+                                    ? 'bg-amber-500/20 text-amber-600 hover:bg-amber-500/30'
+                                    : 'bg-primary/10 text-primary hover:bg-primary/20',
+                            ]"
+                            title="Manage GCash Ledger"
                         >
-                            <WalletCards class="size-5" />
-                        </span>
+                            <GcashIcon class="size-5" />
+                        </Link>
                     </div>
                     <div
-                        class="mt-3 flex items-center justify-between border-t border-blue-500/15 pt-3 text-xs text-muted-foreground"
+                        class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
                     >
-                        <span>In: +{{ formatPhp(register.gcash_in) }}</span>
-                        <span>Out: -{{ formatPhp(register.gcash_out) }}</span>
+                        <span>Today In: +{{ formatPhp(register.gcash_in) }} / Out: -{{ formatPhp(register.gcash_out) }}</span>
+                        <Link
+                            href="/gcash-ledger"
+                            class="font-medium text-primary hover:underline"
+                        >
+                            Ledger &rarr;
+                        </Link>
                     </div>
                 </article>
 

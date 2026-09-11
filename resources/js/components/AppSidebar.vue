@@ -6,12 +6,12 @@ import {
     LayoutDashboard,
     ReceiptText,
     SlidersHorizontal,
-    Smartphone,
     Users,
     Wallet,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -81,7 +81,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         {
             title: 'GCash Ledger',
             href: gcashLedger(),
-            icon: Smartphone,
+            icon: GcashIcon,
         },
         {
             title: 'Reports',

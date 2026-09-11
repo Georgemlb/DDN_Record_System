@@ -8,11 +8,14 @@ import {
     CheckCircle,
     Clock,
     Info,
+    Minus,
+    Plus,
     Ship,
     Smartphone,
     Wallet,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -101,6 +104,10 @@ const provider = ref<string>(
     props.transaction?.provider ??
         (formType.value === 'ferry' ? 'All Ferries' : ''),
 );
+const returnProvider = ref<string>(props.transaction?.return_provider ?? '');
+const hasDifferentReturnAirline = ref<boolean>(
+    Boolean(props.transaction?.return_provider),
+);
 const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
@@ -113,6 +120,7 @@ const baggageOptionId = ref<string>(
 const psaDocumentType = ref<PsaDocumentType | ''>(
     props.transaction?.psa_document_type ?? 'BC',
 );
+const copies = ref<number>(props.transaction?.copies ?? 1);
 const onlineAssistanceTypeId = ref<string>(
     props.transaction?.online_assistance_type_id
         ? String(props.transaction.online_assistance_type_id)
@@ -128,8 +136,17 @@ const thirdPartyPayment = ref<number | string>(
 );
 const notes = ref<string>(props.transaction?.notes ?? '');
 
-const disbursementSource = ref<'gcash' | 'cash'>(
-    props.transaction?.disbursement_source === 'cash' ? 'cash' : 'gcash',
+const getInitialDisbursementSource = (): 'gcash' | 'cash' | 'none' => {
+    if (props.transaction?.disbursement_source === 'cash') return 'cash';
+    if (props.transaction?.disbursement_source === 'none') return 'none';
+    if (props.transaction?.disbursement_source === 'gcash') return 'gcash';
+    if (formType.value === 'psa' || formType.value === 'translation')
+        return 'cash';
+    return 'gcash';
+};
+
+const disbursementSource = ref<'gcash' | 'cash' | 'none'>(
+    getInitialDisbursementSource(),
 );
 
 const remittanceDirection = ref<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
@@ -171,22 +188,62 @@ const calculatePortalCost = () => {
     const legs = tripType.value === 'round_trip' ? 2 : 1;
 
     if (formType.value === 'airline') {
-        let rule: AirlineMarkup | undefined;
+        let markupTotal = 0;
 
         if (flightType.value === 'local') {
-            rule = props.airlineMarkups.find(
+            const ruleOutbound = props.airlineMarkups.find(
                 (m) =>
                     (m.service_type ?? 'flight') === 'flight' &&
                     m.flight_type === 'local' &&
                     m.airline.toLowerCase() ===
                         provider.value.trim().toLowerCase(),
             );
+
+            if (
+                tripType.value === 'round_trip' &&
+                hasDifferentReturnAirline.value &&
+                returnProvider.value.trim()
+            ) {
+                const ruleReturn = props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'local' &&
+                        m.airline.toLowerCase() ===
+                            returnProvider.value.trim().toLowerCase(),
+                );
+
+                const getLegMarkup = (rule?: AirlineMarkup) => {
+                    if (!rule) return 0;
+                    if (rule.markup_type === 'percent') {
+                        return (
+                            ((numAmt / 2) * (Number(rule.markup_amount) || 0)) /
+                            100
+                        );
+                    }
+                    return (Number(rule.markup_amount) || 0) * numPax;
+                };
+
+                const outboundMarkup = getLegMarkup(ruleOutbound);
+                const returnMarkup = getLegMarkup(ruleReturn);
+                markupTotal = outboundMarkup + returnMarkup;
+            } else if (ruleOutbound) {
+                if (ruleOutbound.markup_type === 'percent') {
+                    markupTotal =
+                        (numAmt * (Number(ruleOutbound.markup_amount) || 0)) /
+                        100;
+                } else {
+                    markupTotal =
+                        (Number(ruleOutbound.markup_amount) || 0) *
+                        numPax *
+                        legs;
+                }
+            }
         } else if (flightType.value === 'international') {
             const categoryName =
                 carrierCategory.value === 'full_service'
                     ? 'Full Service Carriers'
                     : 'Budget Carriers';
-            rule =
+            const rule =
                 props.airlineMarkups.find(
                     (m) =>
                         (m.service_type ?? 'flight') === 'flight' &&
@@ -200,18 +257,19 @@ const calculatePortalCost = () => {
                         m.airline.toLowerCase() ===
                             provider.value.trim().toLowerCase(),
                 );
+
+            if (rule) {
+                if (rule.markup_type === 'percent') {
+                    markupTotal =
+                        (numAmt * (Number(rule.markup_amount) || 0)) / 100;
+                } else {
+                    markupTotal =
+                        (Number(rule.markup_amount) || 0) * numPax * legs;
+                }
+            }
         }
 
-        if (rule) {
-            let markupTotal = 0;
-
-            if (rule.markup_type === 'percent') {
-                markupTotal =
-                    (numAmt * (Number(rule.markup_amount) || 0)) / 100;
-            } else {
-                markupTotal = (Number(rule.markup_amount) || 0) * numPax * legs;
-            }
-
+        if (markupTotal > 0) {
             const portalCost = Math.max(0, numAmt - markupTotal);
             thirdPartyPayment.value = Math.round(portalCost * 100) / 100;
         }
@@ -247,11 +305,34 @@ const calculatePortalCost = () => {
 };
 
 watch(
-    [formType, provider, flightType, tripType, carrierCategory, pax, amount],
+    [
+        formType,
+        provider,
+        returnProvider,
+        hasDifferentReturnAirline,
+        flightType,
+        tripType,
+        carrierCategory,
+        pax,
+        amount,
+    ],
     () => {
         calculatePortalCost();
     },
 );
+
+watch(tripType, (newTrip) => {
+    if (newTrip !== 'round_trip') {
+        hasDifferentReturnAirline.value = false;
+        returnProvider.value = '';
+    }
+});
+
+watch(hasDifferentReturnAirline, (hasDiff) => {
+    if (!hasDiff) {
+        returnProvider.value = '';
+    }
+});
 
 watch(formType, (newType) => {
     if (
@@ -312,6 +393,17 @@ const handleGcashChange = () => {
     }
 };
 
+// Check if selected online assistance type requires disbursement
+const selectedAssistanceHasDisbursement = computed(() => {
+    if (formType.value !== 'online_assistance') {
+        return true;
+    }
+    const selected = props.onlineAssistanceTypes.find(
+        (t) => String(t.id) === String(onlineAssistanceTypeId.value),
+    );
+    return selected ? (selected.has_disbursement ?? true) : true;
+});
+
 // Auto-fill amount when online assistance type changes (if creating or user selects new type)
 const handleOnlineAssistanceTypeChange = (value: unknown) => {
     onlineAssistanceTypeId.value = value ? String(value) : '';
@@ -323,27 +415,55 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
         amount.value = selected.price;
         const nameLower = selected.name.toLowerCase();
 
-        if (nameLower.includes('police')) {
+        if (selected.has_disbursement === false) {
+            thirdPartyPayment.value = 0;
+            disbursementSource.value = 'none';
+        } else if (
+            selected.disbursement_amount !== null &&
+            selected.disbursement_amount !== undefined &&
+            selected.disbursement_amount !== ''
+        ) {
+            thirdPartyPayment.value = Number(selected.disbursement_amount);
+            disbursementSource.value = 'gcash';
+        } else if (nameLower.includes('police')) {
             thirdPartyPayment.value = 180;
+            disbursementSource.value = 'gcash';
         } else if (nameLower.includes('nbi')) {
             thirdPartyPayment.value = 160;
+            disbursementSource.value = 'gcash';
+        } else {
+            thirdPartyPayment.value = 0;
+            disbursementSource.value = 'gcash';
         }
     }
 };
 
-// Auto-fill amount and third party fee when PSA document type changes
-const applyPsaRate = (docType: string) => {
-    if (!docType || props.psaRates.length === 0) {
+const selectedPsaRate = computed(() => {
+    if (!psaDocumentType.value || props.psaRates.length === 0) return null;
+    return (
+        props.psaRates.find(
+            (r) =>
+                r.document_type.toLowerCase() ===
+                psaDocumentType.value.toLowerCase(),
+        ) || null
+    );
+});
+
+// Auto-fill amount and third party fee when PSA document type or copies change
+const applyPsaRate = (docType?: string) => {
+    const targetDoc = docType || psaDocumentType.value;
+    if (!targetDoc || props.psaRates.length === 0) {
         return;
     }
 
     const selected = props.psaRates.find(
-        (r) => r.document_type.toLowerCase() === docType.toLowerCase(),
+        (r) => r.document_type.toLowerCase() === targetDoc.toLowerCase(),
     );
 
     if (selected) {
-        amount.value = selected.price;
-        thirdPartyPayment.value = selected.officer_fee;
+        const count = Math.max(1, Number(copies.value) || 1);
+        amount.value = (Number(selected.price) * count).toFixed(2);
+        thirdPartyPayment.value = (Number(selected.officer_fee) * count).toFixed(2);
     }
 };
 
@@ -353,15 +473,41 @@ const handlePsaDocumentTypeChange = (value: unknown) => {
     applyPsaRate(docCode);
 };
 
+const incrementCopies = () => {
+    copies.value = Math.min(100, Math.max(1, (Number(copies.value) || 1) + 1));
+    applyPsaRate();
+};
+
+const decrementCopies = () => {
+    copies.value = Math.max(1, (Number(copies.value) || 1) - 1);
+    applyPsaRate();
+};
+
+const handleCopiesInput = () => {
+    if (copies.value < 1) {
+        copies.value = 1;
+    } else if (copies.value > 100) {
+        copies.value = 100;
+    }
+    applyPsaRate();
+};
+
+watch(copies, () => {
+    if (formType.value === 'psa') {
+        applyPsaRate();
+    }
+});
+
 // Automatically apply configured rates whenever formType or psaRates change
 watch(
     formType,
     (newType) => {
         if (newType === 'online_assistance') {
-            if (!amount.value && onlineAssistanceTypeId.value) {
+            if (!props.transaction && onlineAssistanceTypeId.value) {
                 handleOnlineAssistanceTypeChange(onlineAssistanceTypeId.value);
             }
         } else if (newType === 'psa') {
+            disbursementSource.value = 'cash';
             if (!psaDocumentType.value && props.psaRates.length > 0) {
                 psaDocumentType.value = props.psaRates[0]
                     .document_type as PsaDocumentType;
@@ -369,6 +515,10 @@ watch(
 
             if (psaDocumentType.value) {
                 applyPsaRate(psaDocumentType.value);
+            }
+        } else if (newType === 'translation') {
+            if (!props.transaction?.disbursement_source) {
+                disbursementSource.value = 'cash';
             }
         }
     },
@@ -455,6 +605,27 @@ const activeMarkupRuleDescription = computed(() => {
                     m.airline.toLowerCase() ===
                         provider.value.trim().toLowerCase(),
             );
+
+            if (
+                tripType.value === 'round_trip' &&
+                hasDifferentReturnAirline.value &&
+                returnProvider.value.trim()
+            ) {
+                const ruleReturn = props.airlineMarkups.find(
+                    (m) =>
+                        (m.service_type ?? 'flight') === 'flight' &&
+                        m.flight_type === 'local' &&
+                        m.airline.toLowerCase() ===
+                            returnProvider.value.trim().toLowerCase(),
+                );
+
+                const outAmt = Number(rule?.markup_amount) || 0;
+                const retAmt = Number(ruleReturn?.markup_amount) || 0;
+                const totalPerPax = outAmt + retAmt;
+                const totalEarnings = totalPerPax * numPax;
+
+                return `Mixed Roundtrip: Outbound (${rule?.airline || provider.value}: ₱${outAmt}) + Return (${ruleReturn?.airline || returnProvider.value}: ₱${retAmt}) = ₱${totalPerPax}/pax × ${numPax} = ₱${totalEarnings.toLocaleString()} DDN Markup`;
+            }
 
             if (rule) {
                 if (rule.markup_type === 'percent') {
@@ -645,6 +816,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
         <input
             v-if="formType === 'psa'"
             type="hidden"
+            name="copies"
+            :value="copies"
+        />
+        <input
+            v-if="formType === 'psa'"
+            type="hidden"
             name="amount"
             :value="amount"
         />
@@ -668,14 +845,16 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             "
             type="hidden"
             name="disbursement_source"
-            :value="disbursementSource"
+            :value="
+                formType === 'psa'
+                    ? 'cash'
+                    : formType === 'online_assistance' &&
+                        !selectedAssistanceHasDisbursement
+                      ? 'none'
+                      : disbursementSource
+            "
         />
-        <input
-            v-if="formType === 'online_assistance'"
-            type="hidden"
-            name="third_party_payment"
-            :value="thirdPartyPayment"
-        />
+
         <input
             v-if="formType === 'remittance'"
             type="hidden"
@@ -1060,7 +1239,14 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="provider">Airline or provider</Label>
+                    <Label for="provider">
+                        {{
+                            tripType === 'round_trip' &&
+                            hasDifferentReturnAirline
+                                ? 'Outbound Airline or Provider'
+                                : 'Airline or Provider'
+                        }}
+                    </Label>
                     <Input
                         id="provider"
                         name="provider"
@@ -1080,6 +1266,64 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         />
                     </datalist>
                     <InputError :message="errors.provider" />
+                </div>
+
+                <!-- Different Airline for Return (Round-trip only) -->
+                <div
+                    v-if="tripType === 'round_trip'"
+                    class="flex items-center gap-2 pt-1 pb-1 md:col-span-2"
+                >
+                    <input
+                        id="has_different_return_airline"
+                        type="checkbox"
+                        v-model="hasDifferentReturnAirline"
+                        class="size-4 rounded border-input text-primary focus:ring-primary"
+                    />
+                    <Label
+                        for="has_different_return_airline"
+                        class="cursor-pointer text-xs font-medium text-foreground"
+                    >
+                        Different airline for return flight (e.g. Outbound PAL,
+                        Return Cebu Pacific)
+                    </Label>
+                </div>
+
+                <!-- Return Airline Input -->
+                <div
+                    v-if="
+                        tripType === 'round_trip' && hasDifferentReturnAirline
+                    "
+                    class="grid gap-2 md:col-span-2"
+                >
+                    <Label
+                        for="return_provider"
+                        class="flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400"
+                    >
+                        <span>Return Airline or Provider</span>
+                    </Label>
+                    <Input
+                        id="return_provider"
+                        name="return_provider"
+                        v-model="returnProvider"
+                        :placeholder="
+                            flightType === 'international'
+                                ? 'e.g. Singapore Airlines, Scoot'
+                                : 'e.g. Philippine Airlines'
+                        "
+                        list="return-airlines"
+                    />
+                    <datalist id="return-airlines">
+                        <option
+                            v-for="airline in airlineSuggestions"
+                            :key="airline"
+                            :value="airline"
+                        />
+                    </datalist>
+                    <p class="text-[11px] text-muted-foreground">
+                        Markup will be calculated independently for each leg
+                        (Outbound + Return) based on each carrier's rule.
+                    </p>
+                    <InputError :message="errors.return_provider" />
                 </div>
 
                 <div
@@ -1477,6 +1721,42 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.third_party_payment" />
                 </div>
 
+                <!-- Disbursement Source for Translation -->
+                <div class="grid gap-2 md:col-span-2">
+                    <Label
+                        for="translation_disbursement_source"
+                        class="flex items-center gap-1.5 font-medium"
+                    >
+                        <Wallet class="size-4 text-muted-foreground" />
+                        <span>Disbursement Source (Payment to Translator)</span>
+                    </Label>
+                    <Select v-model="disbursementSource">
+                        <SelectTrigger
+                            id="translation_disbursement_source"
+                            class="w-full"
+                        >
+                            <SelectValue
+                                placeholder="Select disbursement source"
+                            />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cash">
+                                Cash Drawer (Paid in cash from physical drawer)
+                            </SelectItem>
+                            <SelectItem value="gcash">
+                                GCash Wallet (Paid via GCash — recorded in GCash
+                                Ledger)
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p class="text-xs text-muted-foreground">
+                        Specify where the translator fee is disbursed from. If
+                        GCash is selected, it will automatically record a
+                        disbursement outflow in your live GCash Ledger.
+                    </p>
+                    <InputError :message="errors.disbursement_source" />
+                </div>
+
                 <!-- Auto Calculation Preview -->
                 <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
                     <div
@@ -1500,45 +1780,83 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
             <!-- PSA ASSISTANCE -->
             <template v-if="formType === 'psa'">
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="psa_doc_select">PSA Document Type</Label>
-                    <Select
-                        :model-value="psaDocumentType"
-                        @update:model-value="handlePsaDocumentTypeChange"
-                    >
-                        <SelectTrigger id="psa_doc_select" class="w-full">
-                            <SelectValue
-                                placeholder="Select PSA Document Type"
+                <div class="grid gap-4 md:col-span-2 sm:grid-cols-3">
+                    <div class="space-y-2 sm:col-span-2">
+                        <Label for="psa_doc_select">PSA Document Type</Label>
+                        <Select
+                            :model-value="psaDocumentType"
+                            @update:model-value="handlePsaDocumentTypeChange"
+                        >
+                            <SelectTrigger id="psa_doc_select" class="w-full">
+                                <SelectValue
+                                    placeholder="Select PSA Document Type"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <template v-if="props.psaRates.length > 0">
+                                    <SelectItem
+                                        v-for="rate in props.psaRates"
+                                        :key="rate.id"
+                                        :value="rate.document_type"
+                                    >
+                                        {{ rate.document_type }} —
+                                        {{ rate.name }} ({{
+                                            formatPhp(rate.price)
+                                        }})
+                                    </SelectItem>
+                                </template>
+                                <template v-else>
+                                    <SelectItem
+                                        v-for="docType in psaDocumentTypes"
+                                        :key="docType"
+                                        :value="docType"
+                                    >
+                                        {{
+                                            psaDocumentTypeLabels[docType] ||
+                                            docType
+                                        }}
+                                    </SelectItem>
+                                </template>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="errors.psa_document_type" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="psa_copies">Number of Copies</Label>
+                        <div class="flex items-center space-x-1">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                class="h-9 w-9 shrink-0"
+                                :disabled="copies <= 1"
+                                @click="decrementCopies"
+                            >
+                                <Minus class="size-3.5" />
+                            </Button>
+                            <Input
+                                id="psa_copies"
+                                v-model.number="copies"
+                                type="number"
+                                min="1"
+                                max="100"
+                                class="h-9 text-center font-semibold"
+                                @input="handleCopiesInput"
                             />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <template v-if="props.psaRates.length > 0">
-                                <SelectItem
-                                    v-for="rate in props.psaRates"
-                                    :key="rate.id"
-                                    :value="rate.document_type"
-                                >
-                                    {{ rate.document_type }} —
-                                    {{ rate.name }} ({{
-                                        formatPhp(rate.price)
-                                    }})
-                                </SelectItem>
-                            </template>
-                            <template v-else>
-                                <SelectItem
-                                    v-for="docType in psaDocumentTypes"
-                                    :key="docType"
-                                    :value="docType"
-                                >
-                                    {{
-                                        psaDocumentTypeLabels[docType] ||
-                                        docType
-                                    }}
-                                </SelectItem>
-                            </template>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.psa_document_type" />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                class="h-9 w-9 shrink-0"
+                                :disabled="copies >= 100"
+                                @click="incrementCopies"
+                            >
+                                <Plus class="size-3.5" />
+                            </Button>
+                        </div>
+                        <InputError :message="errors.copies" />
+                    </div>
                 </div>
 
                 <!-- PSA Margin & Net Breakdown Preview (Price is automated from configuration) -->
@@ -1551,7 +1869,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <span>Configured PSA Fixed Price & Breakdown</span>
                         </div>
                         <span class="text-xs font-normal text-muted-foreground">
-                            Automatically set from configuration
+                            {{ copies }} {{ copies === 1 ? 'copy' : 'copies' }} &middot; Automatically calculated
                         </span>
                     </div>
                     <div
@@ -1564,6 +1882,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <p class="font-bold text-foreground">
                                 {{ formatPhp(numAmount) }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.price) }}
+                            </span>
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
@@ -1574,6 +1898,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             >
                                 -{{ formatPhp(numThirdParty) }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.officer_fee) }}
+                            </span>
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
@@ -1586,16 +1916,23 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                     formatPhp(computedTranslationOrPsaDdnAmount)
                                 }}
                             </p>
+                            <span
+                                v-if="copies > 1 && selectedPsaRate"
+                                class="mt-0.5 block text-[10px] text-muted-foreground"
+                            >
+                                {{ copies }} &times; {{ formatPhp(Number(selectedPsaRate.price) - Number(selectedPsaRate.officer_fee)) }}
+                            </span>
                         </div>
                     </div>
                     <p
                         class="mt-2 text-center text-[11px] text-muted-foreground"
                     >
                         Customer price and PSA officer payment are fixed
-                        according to branch configuration.
+                        according to branch configuration multiplied by number of copies.
                     </p>
                     <InputError :message="errors.amount" />
                     <InputError :message="errors.third_party_payment" />
+                    <InputError :message="errors.copies" />
                 </div>
             </template>
 
@@ -1624,6 +1961,26 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 {{ typeOption.name }} ({{
                                     formatPhp(typeOption.price)
                                 }})
+                                <template
+                                    v-if="
+                                        typeOption.has_disbursement &&
+                                        typeOption.disbursement_amount
+                                    "
+                                >
+                                    — Fee:
+                                    {{
+                                        formatPhp(
+                                            typeOption.disbursement_amount,
+                                        )
+                                    }}
+                                </template>
+                                <template
+                                    v-else-if="
+                                        typeOption.has_disbursement === false
+                                    "
+                                >
+                                    — (No Disb.)
+                                </template>
                             </SelectItem>
                         </SelectContent>
                     </Select>
@@ -1649,71 +2006,46 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.amount" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="third_party_payment"
-                        >Government / Third-Party Fee (PHP)</Label
+                <!-- Government Fee / GCash Disbursement Input -->
+                <div
+                    v-if="selectedAssistanceHasDisbursement"
+                    class="grid gap-2"
+                >
+                    <Label
+                        for="online_third_party_payment"
+                        class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400"
                     >
+                        <GcashIcon class="size-4" />
+                        <span>Government Fee (Paid via GCash)</span>
+                    </Label>
                     <Input
-                        id="third_party_payment"
+                        id="online_third_party_payment"
                         name="third_party_payment"
                         type="number"
                         min="0"
                         step="0.01"
                         inputmode="decimal"
                         v-model="thirdPartyPayment"
-                        placeholder="0.00 (e.g. 180.00 for Police Clearance)"
+                        required
+                        placeholder="0.00"
                     />
-                    <p class="text-xs text-muted-foreground">
-                        Official fee paid to agency (Police, NBI, DFA, etc.).
+                    <p class="text-[11px] text-muted-foreground">
+                        Amount to be automatically deducted from your live GCash
+                        Ledger upon submission.
                     </p>
                     <InputError :message="errors.third_party_payment" />
                 </div>
-
-                <!-- Disbursement Source Selector (GCash vs Cash) -->
-                <div class="grid gap-2 md:col-span-2">
-                    <Label>Government Fee Disbursed From</Label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            @click="disbursementSource = 'gcash'"
-                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                            :class="
-                                disbursementSource === 'gcash'
-                                    ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <Smartphone
-                                class="size-3.5 text-blue-600 dark:text-blue-400"
-                            />
-                            <span
-                                >GCash Wallet (Auto-deducted from Ledger)</span
-                            >
-                        </button>
-                        <button
-                            type="button"
-                            @click="disbursementSource = 'cash'"
-                            class="flex items-center justify-center gap-2 rounded-md border p-2.5 text-xs font-medium transition-all"
-                            :class="
-                                disbursementSource === 'cash'
-                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <Wallet
-                                class="size-3.5 text-emerald-600 dark:text-emerald-400"
-                            />
-                            <span>Cash Drawer (Drawer Cash Outflow)</span>
-                        </button>
-                    </div>
-                    <p
-                        v-if="
-                            numThirdParty > 0 && disbursementSource === 'gcash'
-                        "
-                        class="text-[11px] text-blue-600 dark:text-blue-400"
-                    >
-                        ⚡ {{ formatPhp(numThirdParty) }} will be automatically
-                        deducted from your live GCash Ledger wallet balance.
+                <div
+                    v-else
+                    class="rounded-lg border border-muted bg-muted/30 p-3 text-xs text-muted-foreground md:col-span-2"
+                >
+                    <p class="font-medium text-foreground">
+                        ℹ️ Pure Online Assistance Service
+                    </p>
+                    <p class="mt-0.5">
+                        No government fee disbursement required. 100% of
+                        customer payment is retained for agency and employee
+                        split.
                     </p>
                 </div>
 
@@ -1734,6 +2066,10 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </div>
 
                     <div
+                        v-if="
+                            selectedAssistanceHasDisbursement &&
+                            numThirdParty > 0
+                        "
                         class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
                     >
                         <div class="rounded border bg-background p-2">
@@ -1746,7 +2082,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         </div>
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
-                                >Gov / Portal Fee</span
+                                >Gov / GCash Fee</span
                             >
                             <p
                                 class="font-semibold text-blue-600 dark:text-blue-400"
@@ -1757,6 +2093,29 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         <div class="rounded border bg-background p-2">
                             <span class="text-muted-foreground"
                                 >Net Margin</span
+                            >
+                            <p
+                                class="font-semibold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(computedOnlineNetMargin) }}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        v-else
+                        class="mt-3 grid grid-cols-2 gap-2 text-center text-xs"
+                    >
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Customer Paid</span
+                            >
+                            <p class="font-bold text-foreground">
+                                {{ formatPhp(numAmount) }}
+                            </p>
+                        </div>
+                        <div class="rounded border bg-background p-2">
+                            <span class="text-muted-foreground"
+                                >Net Service Margin</span
                             >
                             <p
                                 class="font-semibold text-emerald-600 dark:text-emerald-400"
@@ -1790,8 +2149,12 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
                     >
                         <Info class="size-3.5 shrink-0" />
-                        Shares are computed from the net margin (Customer
-                        Payment minus Government Fee).
+                        <span>{{
+                            selectedAssistanceHasDisbursement &&
+                            numThirdParty > 0
+                                ? 'Shares are computed from net margin (Customer Payment minus Government Fee).'
+                                : '100% of customer payment is split 60% Office / 40% Employee.'
+                        }}</span>
                     </p>
                 </div>
             </template>

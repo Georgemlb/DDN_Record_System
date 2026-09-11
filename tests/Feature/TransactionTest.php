@@ -152,6 +152,74 @@ test('an authenticated user can record an online assistance transaction with 60/
     ]);
 });
 
+test('an authenticated user can record an online assistance transaction without disbursement', function () {
+    $user = User::factory()->create();
+    $type = OnlineAssistanceType::create([
+        'name' => 'Registration Only',
+        'price' => '500.00',
+        'has_disbursement' => false,
+        'disbursement_amount' => null,
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'online_assistance',
+        'payment_method' => 'cash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'Zero Disb Client',
+        'online_assistance_type_id' => $type->id,
+        'amount' => '500.00',
+        'third_party_payment' => '100.00',
+        'disbursement_source' => 'cash',
+    ]);
+
+    $transaction = Transaction::where('customer_name', 'Zero Disb Client')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'online_assistance',
+        'amount' => '500.00',
+        'third_party_payment' => null,
+        'disbursement_source' => 'none',
+        'ddn_amount' => '300.00',
+        'employee_share' => '200.00',
+    ]);
+});
+
+test('an online assistance transaction with disbursement auto-defaults to configured disbursement_amount', function () {
+    $user = User::factory()->create();
+    $type = OnlineAssistanceType::create([
+        'name' => 'Police Clearance Online',
+        'price' => '400.00',
+        'has_disbursement' => true,
+        'disbursement_amount' => '180.00',
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => 'online_assistance',
+        'payment_method' => 'cash',
+        'transaction_date' => '2026-09-01',
+        'customer_name' => 'Police Clearance Client',
+        'online_assistance_type_id' => $type->id,
+        'amount' => '400.00',
+    ]);
+
+    $transaction = Transaction::where('customer_name', 'Police Clearance Client')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'online_assistance',
+        'amount' => '400.00',
+        'third_party_payment' => '180.00',
+        'disbursement_source' => 'gcash',
+        'ddn_amount' => '132.00',
+        'employee_share' => '88.00',
+    ]);
+});
+
 test('an authenticated user can record a printing transaction', function () {
     $user = User::factory()->create();
 
@@ -390,5 +458,56 @@ test('an authenticated user can record a ferry transaction with ddn calculation'
         'amount' => '2400.00',
         'third_party_payment' => '1600.00',
         'ddn_amount' => '800.00',
+    ]);
+});
+
+test('an authenticated user can record a mixed-airline roundtrip transaction', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'local',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '12280.00',
+        'third_party_payment' => '10980.00',
+    ]));
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'type' => 'airline',
+        'pax' => 2,
+        'trip_type' => 'round_trip',
+        'flight_type' => 'local',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '12280.00',
+        'third_party_payment' => '10980.00',
+        'ddn_amount' => '1300.00',
+    ]);
+});
+
+test('return_provider is cleared when trip_type is one_way', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
+        'pax' => 1,
+        'trip_type' => 'one_way',
+        'provider' => 'Cebu Pacific',
+        'return_provider' => 'Philippine Airlines',
+        'amount' => '4500.00',
+    ]));
+
+    $transaction = Transaction::query()->latest('id')->first();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    $this->assertDatabaseHas('transactions', [
+        'id' => $transaction->id,
+        'provider' => 'Cebu Pacific',
+        'return_provider' => null,
     ]);
 });

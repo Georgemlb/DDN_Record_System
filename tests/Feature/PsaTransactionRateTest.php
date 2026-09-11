@@ -126,3 +126,60 @@ test('admin updating psa rate dynamically updates newly recorded transactions', 
         ->and((float) $transaction->third_party_payment)->toEqual(270.00)
         ->and((float) $transaction->ddn_amount)->toEqual(80.00);
 });
+
+test('creating a psa transaction with multiple copies automatically multiplies price, officer fee, and net income', function () {
+    $staff = User::factory()->staff()->create();
+
+    $response = $this->actingAs($staff)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PSA,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Donya Victorina',
+        'psa_document_type' => 'BC',
+        'copies' => 2,
+    ]);
+
+    $transaction = Transaction::query()->where('customer_name', 'Donya Victorina')->firstOrFail();
+
+    $response->assertRedirect(route('transactions.show', $transaction));
+    expect($transaction->copies)->toEqual(2)
+        ->and((float) $transaction->amount)->toEqual(640.00) // 2 * 320
+        ->and((float) $transaction->third_party_payment)->toEqual(520.00) // 2 * 260
+        ->and((float) $transaction->ddn_amount)->toEqual(120.00) // 2 * 60
+        ->and((float) $transaction->balance)->toEqual(0.00)
+        ->and($transaction->payment_status)->toEqual(Transaction::PAYMENT_STATUS_PAID);
+});
+
+test('updating an existing psa transaction copies updates amount and third party payment accordingly', function () {
+    $staff = User::factory()->staff()->create();
+
+    $this->actingAs($staff)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PSA,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Paulita Gomez',
+        'psa_document_type' => 'CENOMAR',
+        'copies' => 1,
+    ]);
+
+    $transaction = Transaction::query()->where('customer_name', 'Paulita Gomez')->firstOrFail();
+    expect($transaction->copies)->toEqual(1)
+        ->and((float) $transaction->amount)->toEqual(400.00);
+
+    $updateResponse = $this->actingAs($staff)->put(route('transactions.update', $transaction), [
+        'type' => Transaction::TYPE_PSA,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Paulita Gomez',
+        'psa_document_type' => 'CENOMAR',
+        'copies' => 3,
+    ]);
+
+    $updateResponse->assertRedirect(route('transactions.show', $transaction));
+    $transaction->refresh();
+
+    expect($transaction->copies)->toEqual(3)
+        ->and((float) $transaction->amount)->toEqual(1200.00) // 3 * 400
+        ->and((float) $transaction->third_party_payment)->toEqual(930.00) // 3 * 310
+        ->and((float) $transaction->ddn_amount)->toEqual(270.00); // 3 * 90
+});

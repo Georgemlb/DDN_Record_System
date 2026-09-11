@@ -112,13 +112,15 @@ test('an authenticated user cannot delete a baggage option if used in transactio
     $this->assertDatabaseHas('baggage_options', ['id' => $option->id]);
 });
 
-test('an authenticated user can create, update, and delete an online assistance type', function () {
+test('an authenticated user can create, update, and delete an online assistance type with disbursement details', function () {
     $user = User::factory()->create();
 
-    // Create
+    // Create with disbursement and disbursement_amount
     $response = $this->actingAs($user)->post('/configurations/online-assistance-types', [
         'name' => 'Passport Appointment',
         'price' => '500.00',
+        'has_disbursement' => true,
+        'disbursement_amount' => '160.00',
         'is_active' => true,
         'sort_order' => 5,
     ]);
@@ -126,14 +128,18 @@ test('an authenticated user can create, update, and delete an online assistance 
     $response->assertRedirect('/configurations?tab=online-assistance');
     $this->assertDatabaseHas('online_assistance_types', [
         'name' => 'Passport Appointment',
+        'has_disbursement' => true,
+        'disbursement_amount' => '160.00',
     ]);
 
     $type = OnlineAssistanceType::where('name', 'Passport Appointment')->first();
 
-    // Update
+    // Update to no disbursement (disbursement_amount should automatically be cleared)
     $updateResponse = $this->actingAs($user)->put("/configurations/online-assistance-types/{$type->id}", [
         'name' => 'Passport Expedited Appointment',
         'price' => '750.00',
+        'has_disbursement' => false,
+        'disbursement_amount' => '160.00', // Should become null because has_disbursement is false
         'is_active' => true,
         'sort_order' => 5,
     ]);
@@ -142,12 +148,31 @@ test('an authenticated user can create, update, and delete an online assistance 
     $this->assertDatabaseHas('online_assistance_types', [
         'id' => $type->id,
         'name' => 'Passport Expedited Appointment',
+        'has_disbursement' => false,
+        'disbursement_amount' => null,
     ]);
 
     // Delete
     $deleteResponse = $this->actingAs($user)->delete("/configurations/online-assistance-types/{$type->id}");
     $deleteResponse->assertRedirect('/configurations?tab=online-assistance');
     $this->assertDatabaseMissing('online_assistance_types', ['id' => $type->id]);
+});
+
+test('creating an online assistance type without disbursement defaults has_disbursement to false', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post('/configurations/online-assistance-types', [
+        'name' => 'Birth Certificate Assistance',
+        'price' => '200.00',
+        'is_active' => true,
+    ]);
+
+    $response->assertRedirect('/configurations?tab=online-assistance');
+    $this->assertDatabaseHas('online_assistance_types', [
+        'name' => 'Birth Certificate Assistance',
+        'has_disbursement' => false,
+        'disbursement_amount' => null,
+    ]);
 });
 
 test('an authenticated user cannot delete an online assistance type if used in transactions', function () {
