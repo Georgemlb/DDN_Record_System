@@ -645,3 +645,33 @@ test('daily settlement calculates metrics correctly for gcash overpayment with c
     // DDN earnings should include transaction amount + change fee = 370
     expect((float) $metrics['total_ddn_earnings'])->toBe(370.00);
 });
+
+test('daily settlement accounts for employee share as cash out on cash transactions', function () {
+    $date = '2026-09-13';
+
+    // Online Assistance transaction: 250 cash, 150 DDN, 100 employee share
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_ONLINE_ASSISTANCE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => $date,
+        'customer_name' => 'Assisted Client',
+        'amount' => 250.00,
+        'amount_paid' => 250.00,
+        'ddn_amount' => 150.00,
+        'employee_share' => 100.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+    ]);
+
+    $metrics = DailySettlement::calculateMetricsForDate($date);
+
+    // Cash In should be 250
+    expect((float) $metrics['cash_in'])->toBe(250.00);
+    // Cash Out should reflect the 100 employee cut taken from drawer
+    expect((float) $metrics['cash_out'])->toBe(100.00);
+    // Total expenses should include the 100 employee cut
+    expect((float) $metrics['total_expenses'])->toBe(100.00);
+    // Total sales is 250
+    expect((float) $metrics['total_sales'])->toBe(250.00);
+    // DDN earnings is 150
+    expect((float) $metrics['total_ddn_earnings'])->toBe(150.00);
+});
