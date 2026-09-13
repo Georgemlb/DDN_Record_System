@@ -131,6 +131,53 @@ const onlineAssistanceTypeId = ref<string>(
 const amount = ref<number | string>(props.transaction?.amount ?? '');
 const cashAmount = ref<number | string>(props.transaction?.cash_amount ?? '');
 const gcashAmount = ref<number | string>(props.transaction?.gcash_amount ?? '');
+const gcashTendered = ref<number | string>(
+    props.transaction?.gcash_tendered ?? '',
+);
+const cashChange = ref<number | string>(
+    props.transaction?.cash_change ?? '0.00',
+);
+const changeFee = ref<number | string>(props.transaction?.change_fee ?? '0.00');
+const hasGcashOverpayment = ref<boolean>(
+    Boolean(
+        props.transaction?.gcash_tendered &&
+        Number(props.transaction.gcash_tendered) > 0,
+    ),
+);
+
+const gcashDueForChange = computed(() => {
+    if (paymentMethod.value === 'split') {
+        return Number(gcashAmount.value) || 0;
+    }
+    if (paymentStatus.value === 'partial') {
+        return Number(amountPaid.value) || 0;
+    }
+    return Number(amount.value) || 0;
+});
+
+const calculatedCashChange = computed(() => {
+    if (!hasGcashOverpayment.value || !gcashTendered.value) {
+        return 0;
+    }
+    const tendered = Number(gcashTendered.value) || 0;
+    const due = gcashDueForChange.value;
+    const fee = Number(changeFee.value) || 0;
+    const change = tendered - due - fee;
+    return Math.max(0, Math.round(change * 100) / 100);
+});
+
+watch(
+    [hasGcashOverpayment, gcashTendered, changeFee, gcashDueForChange],
+    () => {
+        if (hasGcashOverpayment.value) {
+            cashChange.value = calculatedCashChange.value.toFixed(2);
+        } else {
+            gcashTendered.value = '';
+            cashChange.value = '0.00';
+            changeFee.value = '0.00';
+        }
+    },
+);
 const thirdPartyPayment = ref<number | string>(
     props.transaction?.third_party_payment ?? '0.00',
 );
@@ -463,7 +510,9 @@ const applyPsaRate = (docType?: string) => {
     if (selected) {
         const count = Math.max(1, Number(copies.value) || 1);
         amount.value = (Number(selected.price) * count).toFixed(2);
-        thirdPartyPayment.value = (Number(selected.officer_fee) * count).toFixed(2);
+        thirdPartyPayment.value = (
+            Number(selected.officer_fee) * count
+        ).toFixed(2);
     }
 };
 
@@ -782,6 +831,24 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                       ? 0
                       : amountPaid || 0
             "
+        />
+        <input
+            v-if="hasGcashOverpayment && gcashTendered"
+            type="hidden"
+            name="gcash_tendered"
+            :value="gcashTendered"
+        />
+        <input
+            v-if="hasGcashOverpayment && Number(cashChange) > 0"
+            type="hidden"
+            name="cash_change"
+            :value="cashChange"
+        />
+        <input
+            v-if="hasGcashOverpayment && Number(changeFee) > 0"
+            type="hidden"
+            name="change_fee"
+            :value="changeFee"
         />
         <input
             v-if="formType === 'airline'"
@@ -1140,6 +1207,118 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     <InputError :message="errors.gcash_amount" />
                 </div>
             </template>
+
+            <!-- GCASH OVERPAYMENT & CASH CHANGE -->
+            <div
+                v-if="paymentMethod === 'gcash' || paymentMethod === 'split'"
+                class="space-y-3 rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 md:col-span-2"
+            >
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <Smartphone
+                            class="size-4 text-blue-600 dark:text-blue-400"
+                        />
+                        <span class="text-sm font-medium"
+                            >Customer GCash Overpayment & Cash Change</span
+                        >
+                    </div>
+                    <label
+                        class="flex cursor-pointer items-center gap-2 text-xs font-medium"
+                    >
+                        <input
+                            type="checkbox"
+                            v-model="hasGcashOverpayment"
+                            class="size-4 rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                        />
+                        <span>Enable Change</span>
+                    </label>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Use when a customer sends extra money to your GCash wallet
+                    and requests the difference in cash from the drawer.
+                </p>
+
+                <div
+                    v-if="hasGcashOverpayment"
+                    class="space-y-3 border-t border-blue-500/10 pt-2"
+                >
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <Label
+                                for="gcash_tendered_input"
+                                class="text-xs font-medium"
+                            >
+                                Total GCash Sent / Tendered (₱)
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="gcash_tendered_input"
+                                type="number"
+                                step="0.01"
+                                :min="gcashDueForChange"
+                                v-model="gcashTendered"
+                                placeholder="e.g. 1000.00"
+                                required
+                            />
+                            <p class="text-[11px] text-muted-foreground">
+                                Minimum required for bill:
+                                <span class="font-medium text-foreground">{{
+                                    formatPhp(gcashDueForChange)
+                                }}</span>
+                            </p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label
+                                for="change_fee_input"
+                                class="text-xs font-medium"
+                            >
+                                Optional Cash-Out Fee (₱)
+                            </Label>
+                            <Input
+                                id="change_fee_input"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                v-model="changeFee"
+                                placeholder="0.00"
+                            />
+                            <p class="text-[11px] text-muted-foreground">
+                                Convenience fee kept by DDN (adds to earnings)
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background/80 p-3 text-xs"
+                    >
+                        <div>
+                            <span class="text-muted-foreground"
+                                >Cash Change to Dispense:</span
+                            >
+                            <div
+                                class="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(calculatedCashChange) }}
+                            </div>
+                        </div>
+                        <div
+                            class="text-right text-[11px] text-muted-foreground"
+                        >
+                            <div>
+                                GCash Inflow: +{{
+                                    formatPhp(Number(gcashTendered) || 0)
+                                }}
+                            </div>
+                            <div>
+                                Drawer Outflow: -{{
+                                    formatPhp(calculatedCashChange)
+                                }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- ============================================== -->
             <!-- 5. TYPE-SPECIFIC FIELDS                        -->
@@ -1780,7 +1959,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
             <!-- PSA ASSISTANCE -->
             <template v-if="formType === 'psa'">
-                <div class="grid gap-4 md:col-span-2 sm:grid-cols-3">
+                <div class="grid gap-4 sm:grid-cols-3 md:col-span-2">
                     <div class="space-y-2 sm:col-span-2">
                         <Label for="psa_doc_select">PSA Document Type</Label>
                         <Select
@@ -1869,7 +2048,9 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                             <span>Configured PSA Fixed Price & Breakdown</span>
                         </div>
                         <span class="text-xs font-normal text-muted-foreground">
-                            {{ copies }} {{ copies === 1 ? 'copy' : 'copies' }} &middot; Automatically calculated
+                            {{ copies }}
+                            {{ copies === 1 ? 'copy' : 'copies' }} &middot;
+                            Automatically calculated
                         </span>
                     </div>
                     <div
@@ -1886,7 +2067,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 v-if="copies > 1 && selectedPsaRate"
                                 class="mt-0.5 block text-[10px] text-muted-foreground"
                             >
-                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.price) }}
+                                {{ copies }} &times;
+                                {{ formatPhp(selectedPsaRate.price) }}
                             </span>
                         </div>
                         <div class="rounded border bg-background p-2">
@@ -1902,7 +2084,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 v-if="copies > 1 && selectedPsaRate"
                                 class="mt-0.5 block text-[10px] text-muted-foreground"
                             >
-                                {{ copies }} &times; {{ formatPhp(selectedPsaRate.officer_fee) }}
+                                {{ copies }} &times;
+                                {{ formatPhp(selectedPsaRate.officer_fee) }}
                             </span>
                         </div>
                         <div class="rounded border bg-background p-2">
@@ -1920,7 +2103,13 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                                 v-if="copies > 1 && selectedPsaRate"
                                 class="mt-0.5 block text-[10px] text-muted-foreground"
                             >
-                                {{ copies }} &times; {{ formatPhp(Number(selectedPsaRate.price) - Number(selectedPsaRate.officer_fee)) }}
+                                {{ copies }} &times;
+                                {{
+                                    formatPhp(
+                                        Number(selectedPsaRate.price) -
+                                            Number(selectedPsaRate.officer_fee),
+                                    )
+                                }}
                             </span>
                         </div>
                     </div>
@@ -1928,7 +2117,8 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         class="mt-2 text-center text-[11px] text-muted-foreground"
                     >
                         Customer price and PSA officer payment are fixed
-                        according to branch configuration multiplied by number of copies.
+                        according to branch configuration multiplied by number
+                        of copies.
                     </p>
                     <InputError :message="errors.amount" />
                     <InputError :message="errors.third_party_payment" />

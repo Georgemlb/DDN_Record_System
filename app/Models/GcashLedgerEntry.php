@@ -196,9 +196,9 @@ class GcashLedgerEntry extends Model
         // 1. Check for GCash Payment Inflow from Customer
         $gcashCollected = 0.00;
         if ($transaction->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-            $gcashCollected = (float) $transaction->amount;
+            $gcashCollected = (float) ($transaction->gcash_tendered ?: $transaction->amount);
         } elseif ($transaction->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-            $gcashCollected = (float) ($transaction->gcash_amount ?? 0);
+            $gcashCollected = (float) ($transaction->gcash_tendered ?: ($transaction->gcash_amount ?? 0));
         }
 
         // Remittance Cash-Out: customer sent GCash to agency (+GCash)
@@ -234,7 +234,9 @@ class GcashLedgerEntry extends Model
             $paymentEntry->reference_number = $transaction->reference_number;
             $paymentEntry->notes = $isRemittanceCashOut
                 ? "GCash Cash-Out from {$transaction->customer_name}"
-                : "Payment from {$transaction->customer_name} ({$transaction->service_details})";
+                : ((float) ($transaction->cash_change ?? 0) > 0
+                    ? "Payment from {$transaction->customer_name} (₱".number_format((float) $transaction->cash_change, 2).' cash change)'
+                    : "Payment from {$transaction->customer_name} ({$transaction->service_details})");
             $paymentEntry->save();
         } else {
             if ($paymentEntry) {

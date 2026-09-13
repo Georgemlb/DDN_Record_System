@@ -15,6 +15,8 @@ uses(TestCase::class, RefreshDatabase::class);
 test('guests are redirected to the login page when accessing reports', function () {
     $this->get(route('reports.index'))->assertRedirect(route('login'));
     $this->post(route('reports.settlements.start'))->assertRedirect(route('login'));
+    $this->get(route('reports.settlements.preview'))->assertRedirect(route('login'));
+    $this->post(route('reports.settlements.store-past'))->assertRedirect(route('login'));
     $this->get(route('reports.export'))->assertRedirect(route('login'));
 });
 
@@ -389,4 +391,257 @@ test('updating a settlement validates inputs', function () {
     ]);
 
     $response->assertSessionHasErrors(['opening_cash', 'status']);
+});
+
+test('user can preview past settlement metrics and opening balance suggestions', function () {
+    $user = User::factory()->create();
+    $priorDate = '2026-09-01';
+    $targetDate = '2026-09-05';
+    Carbon::setTestNow(Carbon::parse('2026-09-10'));
+
+    // Create a prior closed settlement to verify suggested opening balances
+    DailySettlement::query()->create([
+        'settlement_date' => $priorDate,
+        'user_id' => $user->id,
+        'closed_by_user_id' => $user->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 1000.00,
+        'cash_in' => 500.00,
+        'cash_out' => 100.00,
+        'expected_cash' => 1400.00,
+        'actual_cash' => 1450.00,
+        'opening_gcash' => 2000.00,
+        'actual_gcash' => 2300.00,
+        'closed_at' => now(),
+    ]);
+
+    // Create transaction on target date
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => $targetDate,
+        'customer_name' => 'Past Customer',
+        'amount' => 750.00,
+        'ddn_amount' => 750.00,
+    ]);
+
+    // Create expense on target date
+    $cat = ExpenseCategory::query()->create(['name' => 'Utilities']);
+    Expense::query()->create([
+        'expense_category_id' => $cat->id,
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'expense_date' => $targetDate,
+        'title' => 'Courier',
+        'amount' => 150.00,
+    ]);
+
+    $response = $this->actingAs($user)->get(route('reports.settlements.preview', ['date' => $targetDate]));
+    $response->assertOk();
+
+    $data = $response->json();
+    expect($data['exists'])->toBeFalse();
+    expect($data['suggested_opening_cash'])->toBe(1450);
+    expect($data['suggested_opening_gcash'])->toBe(2300);
+    expect((float) $data['metrics']['cash_in'])->toBe(750.00);
+    expect((float) $data['metrics']['cash_out'])->toBe(150.00);
+});
+
+test('preview returns exists true if settlement already exists for date', function () {
+    $user = User::factory()->create();
+    $date = '2026-09-05';
+    Carbon::setTestNow(Carbon::parse('2026-09-10'));
+
+    DailySettlement::query()->create([
+        'settlement_date' => $date,
+        'user_id' => $user->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 1000.00,
+        'cash_in' => 0,
+        'cash_out' => 0,
+        'expected_cash' => 1000.00,
+        'actual_cash' => 1000.00,
+    ]);
+
+    $response = $this->actingAs($user)->get(route('reports.settlements.preview', ['date' => $date]));
+    $response->assertOk();
+    expect($response->json('exists'))->toBeTrue();
+});
+
+test('user can record a past settlement directly as closed with computed discrepancies', function () {
+    $user = User::factory()->create();
+    $targetDate = '2026-09-04';
+    Carbon::setTestNow(Carbon::parse('2026-09-10'));
+
+    // Transaction on target date
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => $targetDate,
+        'customer_name' => 'Past Walk-in',
+        'amount' => 800.00,
+        'ddn_amount' => 800.00,
+    ]);
+
+    // Expense on target date
+    $cat = ExpenseCategory::query()->create(['name' => 'Misc']);
+    Expense::query()->create([
+        'expense_category_id' => $cat->id,
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'expense_date' => $targetDate,
+        'title' => 'Tape',
+        'amount' => 100.00,
+    ]);
+
+    $response = $this->actingAs($user)->post(route('reports.settlements.store-past'), [
+        'settlement_date' => $targetDate,
+        'opening_cash' => 1000.00,
+        'opening_gcash' => 500.00,
+        'actual_cash' => 1650.00, // Expected: 1000 + 800 - 100 = 1700 => -50 shortage
+        'actual_gcash' => 500.00, // Expected: 500 + 0 - 0 = 500 => 0 discrepancy
+        'notes' => 'Settled retrospective day with minor cash shortage.',
+    ]);
+
+    $response->assertRedirect();
+
+    $settlement = DailySettlement::query()->whereDate('settlement_date', $targetDate)->first();
+    expect($settlement)->not->toBeNull();
+    expect($settlement->status)->toBe(DailySettlement::STATUS_CLOSED);
+    expect($settlement->user_id)->toBe($user->id);
+    expect($settlement->closed_by_user_id)->toBe($user->id);
+    expect($settlement->closed_at)->not->toBeNull();
+    expect((float) $settlement->opening_cash)->toBe(1000.00);
+    expect((float) $settlement->cash_in)->toBe(800.00);
+    expect((float) $settlement->cash_out)->toBe(100.00);
+    expect((float) $settlement->expected_cash)->toBe(1700.00);
+    expect((float) $settlement->actual_cash)->toBe(1650.00);
+    expect((float) $settlement->discrepancy)->toBe(-50.00);
+    expect((float) $settlement->opening_gcash)->toBe(500.00);
+    expect((float) $settlement->expected_gcash)->toBe(500.00);
+    expect((float) $settlement->actual_gcash)->toBe(500.00);
+    expect((float) $settlement->gcash_discrepancy)->toBe(0.00);
+    expect($settlement->notes)->toBe('Settled retrospective day with minor cash shortage.');
+});
+
+test('recording past settlement validates inputs and rejects future dates and duplicates', function () {
+    $user = User::factory()->create();
+    Carbon::setTestNow(Carbon::parse('2026-09-10'));
+
+    // Reject future date
+    $responseFuture = $this->actingAs($user)->post(route('reports.settlements.store-past'), [
+        'settlement_date' => '2026-09-15',
+        'opening_cash' => 500.00,
+        'actual_cash' => 500.00,
+    ]);
+    $responseFuture->assertSessionHasErrors('settlement_date');
+
+    // Create existing settlement
+    DailySettlement::query()->create([
+        'settlement_date' => '2026-09-08',
+        'user_id' => $user->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 500.00,
+        'cash_in' => 0,
+        'cash_out' => 0,
+        'expected_cash' => 500.00,
+        'actual_cash' => 500.00,
+    ]);
+
+    // Reject duplicate date
+    $responseDuplicate = $this->actingAs($user)->post(route('reports.settlements.store-past'), [
+        'settlement_date' => '2026-09-08',
+        'opening_cash' => 500.00,
+        'actual_cash' => 500.00,
+    ]);
+    $responseDuplicate->assertSessionHasErrors('settlement_date');
+});
+
+test('admin can delete a settlement record permanently and free the settlement date', function () {
+    $admin = User::factory()->create();
+    $date = '2026-09-05';
+
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => $date,
+        'user_id' => $admin->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 1000.00,
+        'cash_in' => 500.00,
+        'cash_out' => 100.00,
+        'expected_cash' => 1400.00,
+        'actual_cash' => 1400.00,
+    ]);
+
+    $response = $this->from(route('reports.index'))
+        ->actingAs($admin)
+        ->delete(route('reports.settlements.destroy', $settlement));
+
+    $response->assertRedirect(route('reports.index'));
+    $this->assertDatabaseMissing('daily_settlements', [
+        'id' => $settlement->id,
+    ]);
+
+    // Verify date is freed and can be re-settled without unique constraint violation
+    $recreateResponse = $this->actingAs($admin)->post(route('reports.settlements.store-past'), [
+        'settlement_date' => $date,
+        'opening_cash' => 1000.00,
+        'actual_cash' => 1000.00,
+    ]);
+    $recreateResponse->assertRedirect();
+    $this->assertDatabaseHas('daily_settlements', [
+        'settlement_date' => $date,
+    ]);
+});
+
+test('staff user cannot delete a settlement record', function () {
+    $admin = User::factory()->create();
+    $staff = User::factory()->staff()->create();
+    $date = '2026-09-05';
+
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => $date,
+        'user_id' => $admin->id,
+        'status' => DailySettlement::STATUS_CLOSED,
+        'opening_cash' => 1000.00,
+        'cash_in' => 0,
+        'cash_out' => 0,
+        'expected_cash' => 1000.00,
+        'actual_cash' => 1000.00,
+    ]);
+
+    $this->actingAs($staff)
+        ->delete(route('reports.settlements.destroy', $settlement))
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('daily_settlements', [
+        'id' => $settlement->id,
+    ]);
+});
+
+test('daily settlement calculates metrics correctly for gcash overpayment with cash change and fee', function () {
+    $date = '2026-09-12';
+
+    // A transaction of 350 PHP paid via GCash, customer sent 1,000 GCash, received 630 Cash change, 20 fee
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'transaction_date' => $date,
+        'customer_name' => 'Overpaying Customer',
+        'amount' => 350.00,
+        'amount_paid' => 350.00,
+        'ddn_amount' => 350.00,
+        'gcash_tendered' => 1000.00,
+        'cash_change' => 630.00,
+        'change_fee' => 20.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+    ]);
+
+    $metrics = DailySettlement::calculateMetricsForDate($date);
+
+    // GCash total should reflect the full 1,000 inflow
+    expect((float) $metrics['total_gcash'])->toBe(1000.00);
+    // Cash out should reflect the 630 cash dispensed to customer
+    expect((float) $metrics['cash_out'])->toBe(630.00);
+    // Total sales should include transaction amount + change fee = 370
+    expect((float) $metrics['total_sales'])->toBe(370.00);
+    // DDN earnings should include transaction amount + change fee = 370
+    expect((float) $metrics['total_ddn_earnings'])->toBe(370.00);
 });

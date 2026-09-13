@@ -43,6 +43,9 @@ export type TransactionPayment = {
     payment_method: PaymentMethod;
     cash_amount?: string | number | null;
     gcash_amount?: string | number | null;
+    gcash_tendered?: string | number | null;
+    cash_change?: string | number | null;
+    change_fee?: string | number | null;
     payment_date: string;
     notes?: string | null;
     created_at?: string;
@@ -126,6 +129,9 @@ export type Transaction = {
     balance: string | number;
     cash_amount: string | number | null;
     gcash_amount: string | number | null;
+    gcash_tendered?: string | number | null;
+    cash_change?: string | number | null;
+    change_fee?: string | number | null;
     third_party_payment: string | number | null;
     disbursement_source?: 'cash' | 'gcash' | 'flight_portal' | 'none' | null;
     ddn_amount: string | number | null;

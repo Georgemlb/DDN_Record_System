@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
-import { Banknote, CheckCircle } from '@lucide/vue';
-import { computed, watch } from 'vue';
+import { Banknote, CheckCircle, Smartphone } from '@lucide/vue';
+import { computed, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,9 +46,50 @@ const form = useForm({
     payment_method: 'cash' as PaymentMethod,
     cash_amount: '' as string | number,
     gcash_amount: '' as string | number,
+    gcash_tendered: '' as string | number,
+    cash_change: '' as string | number,
+    change_fee: '' as string | number,
     payment_date: getTodayDateString(),
     notes: 'Balance collection on pickup',
 });
+
+const hasGcashOverpayment = ref<boolean>(false);
+
+const gcashDueForChange = computed(() => {
+    if (form.payment_method === 'split') {
+        return Number(form.gcash_amount) || 0;
+    }
+    return Number(form.amount) || 0;
+});
+
+const calculatedCashChange = computed(() => {
+    if (!hasGcashOverpayment.value || !form.gcash_tendered) {
+        return 0;
+    }
+    const tendered = Number(form.gcash_tendered) || 0;
+    const due = gcashDueForChange.value;
+    const fee = Number(form.change_fee) || 0;
+    const change = tendered - due - fee;
+    return Math.max(0, Math.round(change * 100) / 100);
+});
+
+watch(
+    [
+        hasGcashOverpayment,
+        () => form.gcash_tendered,
+        () => form.change_fee,
+        gcashDueForChange,
+    ],
+    () => {
+        if (hasGcashOverpayment.value) {
+            form.cash_change = calculatedCashChange.value.toFixed(2);
+        } else {
+            form.gcash_tendered = '';
+            form.cash_change = '';
+            form.change_fee = '';
+        }
+    },
+);
 
 // Reset form when modal opens with transaction
 watch(
@@ -59,6 +100,10 @@ watch(
             form.payment_method = 'cash';
             form.cash_amount = '';
             form.gcash_amount = '';
+            form.gcash_tendered = '';
+            form.cash_change = '';
+            form.change_fee = '';
+            hasGcashOverpayment.value = false;
             form.payment_date = getTodayDateString();
             form.notes = 'Balance collection on pickup';
             form.clearErrors();
@@ -229,6 +274,120 @@ const submitPayment = () => {
                             </div>
                         </div>
                     </template>
+
+                    <!-- GCash Overpayment & Cash Change -->
+                    <div
+                        v-if="
+                            form.payment_method === 'gcash' ||
+                            form.payment_method === 'split'
+                        "
+                        class="space-y-2 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3"
+                    >
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5">
+                                <Smartphone
+                                    class="size-4 text-blue-600 dark:text-blue-400"
+                                />
+                                <span class="text-xs font-medium"
+                                    >Customer GCash Overpayment</span
+                                >
+                            </div>
+                            <label
+                                class="flex cursor-pointer items-center gap-1.5 text-xs font-medium"
+                            >
+                                <input
+                                    type="checkbox"
+                                    v-model="hasGcashOverpayment"
+                                    class="size-3.5 rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                                />
+                                <span>Enable</span>
+                            </label>
+                        </div>
+                        <p class="text-[11px] text-muted-foreground">
+                            Customer pays extra in GCash and receives the change
+                            in cash.
+                        </p>
+
+                        <div
+                            v-if="hasGcashOverpayment"
+                            class="space-y-2.5 border-t border-blue-500/10 pt-2"
+                        >
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="grid gap-1">
+                                    <Label
+                                        for="modal_gcash_tendered"
+                                        class="text-xs"
+                                    >
+                                        GCash Tendered (₱)
+                                        <span class="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        id="modal_gcash_tendered"
+                                        type="number"
+                                        step="0.01"
+                                        :min="gcashDueForChange"
+                                        v-model="form.gcash_tendered"
+                                        placeholder="e.g. 1000.00"
+                                        required
+                                    />
+                                    <InputError
+                                        :message="form.errors.gcash_tendered"
+                                    />
+                                </div>
+                                <div class="grid gap-1">
+                                    <Label
+                                        for="modal_change_fee"
+                                        class="text-xs"
+                                        >Cash-Out Fee (₱)</Label
+                                    >
+                                    <Input
+                                        id="modal_change_fee"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        v-model="form.change_fee"
+                                        placeholder="0.00"
+                                    />
+                                    <InputError
+                                        :message="form.errors.change_fee"
+                                    />
+                                </div>
+                            </div>
+
+                            <div
+                                class="flex items-center justify-between rounded border bg-background/80 p-2 text-xs"
+                            >
+                                <div>
+                                    <span
+                                        class="text-[11px] text-muted-foreground"
+                                        >Cash Change:</span
+                                    >
+                                    <div
+                                        class="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400"
+                                    >
+                                        {{ formatPhp(calculatedCashChange) }}
+                                    </div>
+                                </div>
+                                <div
+                                    class="text-right text-[10px] text-muted-foreground"
+                                >
+                                    <div>
+                                        GCash In: +{{
+                                            formatPhp(
+                                                Number(form.gcash_tendered) ||
+                                                    0,
+                                            )
+                                        }}
+                                    </div>
+                                    <div>
+                                        Cash Out: -{{
+                                            formatPhp(calculatedCashChange)
+                                        }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Payment Date -->
                     <div class="grid gap-1.5">

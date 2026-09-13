@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\DailySettlement;
+use App\Models\GcashLedgerEntry;
 use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\BaggageOptionSeeder;
@@ -135,4 +136,84 @@ test('customer model aggregates total spent and outstanding balance', function (
     expect((int) $customerWithAggregates->transactions_count)->toBe(1);
     expect((float) $customerWithAggregates->total_spent)->toBe(400.00);
     expect((float) $customerWithAggregates->outstanding_balance)->toBe(600.00);
+});
+
+test('transaction can be created with gcash overpayment and cash change', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Overpaying Client',
+        'amount' => '350.00',
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        'amount_paid' => '350.00',
+        'gcash_tendered' => '1000.00',
+        'cash_change' => '650.00',
+        'change_fee' => '0.00',
+    ]);
+
+    $response->assertRedirect();
+
+    $transaction = Transaction::where('customer_name', 'Overpaying Client')->first();
+    expect($transaction)->not->toBeNull();
+    expect((float) $transaction->amount)->toBe(350.00);
+    expect((float) $transaction->gcash_tendered)->toBe(1000.00);
+    expect((float) $transaction->cash_change)->toBe(650.00);
+    expect((float) $transaction->change_fee)->toBe(0.00);
+
+    // Initial payment inherits overpayment attributes
+    $payment = $transaction->payments->first();
+    expect($payment)->not->toBeNull();
+    expect((float) $payment->gcash_tendered)->toBe(1000.00);
+    expect((float) $payment->cash_change)->toBe(650.00);
+    expect((float) $payment->change_fee)->toBe(0.00);
+
+    // GCash ledger entry has 1000 inflow
+    $ledger = GcashLedgerEntry::where('transaction_id', $transaction->id)->first();
+    expect($ledger)->not->toBeNull();
+    expect((float) $ledger->amount)->toBe(1000.00);
+});
+
+test('collecting balance supports gcash overpayment with cash change and fee', function () {
+    $user = User::factory()->create();
+
+    $transaction = Transaction::create([
+        'user_id' => $user->id,
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Partial Client',
+        'amount' => 1500.00,
+        'ddn_amount' => 1500.00,
+        'amount_paid' => 500.00,
+        'balance' => 1000.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+    ]);
+
+    // Collect the remaining 1,000 balance via GCash, but client sends 1,500, takes 480 cash change, 20 fee
+    $response = $this->actingAs($user)->post(route('transactions.payments.store', $transaction->id), [
+        'amount' => '1000.00',
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-09',
+        'gcash_tendered' => '1500.00',
+        'cash_change' => '480.00',
+        'change_fee' => '20.00',
+        'notes' => 'Balance collected via GCash with cash change',
+    ]);
+
+    $response->assertRedirect();
+
+    $transaction->refresh();
+    expect((float) $transaction->balance)->toBe(0.00);
+    expect((float) $transaction->amount_paid)->toBe(1500.00);
+    expect((float) $transaction->ddn_amount)->toBe(1500.00);
+
+    $payment = $transaction->payments()->latest('id')->first();
+    expect($payment)->not->toBeNull();
+    expect((float) $payment->amount)->toBe(1000.00);
+    expect((float) $payment->gcash_tendered)->toBe(1500.00);
+    expect((float) $payment->cash_change)->toBe(480.00);
+    expect((float) $payment->change_fee)->toBe(20.00);
 });

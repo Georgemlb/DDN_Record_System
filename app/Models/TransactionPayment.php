@@ -29,6 +29,9 @@ use Illuminate\Support\Carbon;
     'payment_method',
     'cash_amount',
     'gcash_amount',
+    'gcash_tendered',
+    'cash_change',
+    'change_fee',
     'payment_date',
     'notes',
 ])]
@@ -46,6 +49,9 @@ class TransactionPayment extends Model
             'amount' => 'decimal:2',
             'cash_amount' => 'decimal:2',
             'gcash_amount' => 'decimal:2',
+            'gcash_tendered' => 'decimal:2',
+            'cash_change' => 'decimal:2',
+            'change_fee' => 'decimal:2',
         ];
     }
 

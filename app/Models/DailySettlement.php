@@ -147,10 +147,15 @@ class DailySettlement extends Model
             $totalDdnEarnings += $ddn;
         }
 
+        $cashOut = 0.0;
+        $expenseGcash = 0.0;
+        $totalBankTransfer = 0.0;
+        $totalExpenses = 0.0;
+
         // Cash In and GCash In are calculated from payments collected on this date
         $payments = TransactionPayment::query()
             ->whereDate('payment_date', $dateString)
-            ->get(['transaction_id', 'payment_method', 'amount', 'cash_amount', 'gcash_amount']);
+            ->get(['transaction_id', 'payment_method', 'amount', 'cash_amount', 'gcash_amount', 'gcash_tendered', 'cash_change', 'change_fee']);
 
         $cashIn = 0.0;
         $totalGcash = 0.0;
@@ -165,10 +170,25 @@ class DailySettlement extends Model
             if ($payment->payment_method === Transaction::PAYMENT_METHOD_CASH) {
                 $cashIn += $amt;
             } elseif ($payment->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $totalGcash += $amt;
+                $gcashInflow = $payment->gcash_tendered !== null && (float) $payment->gcash_tendered > 0
+                    ? (float) $payment->gcash_tendered
+                    : $amt;
+                $totalGcash += $gcashInflow;
             } elseif ($payment->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
                 $cashIn += (float) ($payment->cash_amount ?? 0);
-                $totalGcash += (float) ($payment->gcash_amount ?? 0);
+                $gcashInflow = $payment->gcash_tendered !== null && (float) $payment->gcash_tendered > 0
+                    ? (float) $payment->gcash_tendered
+                    : (float) ($payment->gcash_amount ?? 0);
+                $totalGcash += $gcashInflow;
+            }
+
+            if ((float) ($payment->cash_change ?? 0) > 0) {
+                $cashOut += (float) $payment->cash_change;
+            }
+
+            if ((float) ($payment->change_fee ?? 0) > 0) {
+                $totalSales += (float) $payment->change_fee;
+                $totalDdnEarnings += (float) $payment->change_fee;
             }
         }
 
@@ -177,35 +197,43 @@ class DailySettlement extends Model
             ->whereDate('transaction_date', $dateString)
             ->whereNotIn('id', array_unique($processedTransactionIds))
             ->whereDoesntHave('payments')
-            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'amount_paid', 'payment_status']);
+            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'gcash_tendered', 'cash_change', 'change_fee', 'amount_paid', 'payment_status']);
 
         foreach ($fallbackTransactions as $tx) {
             $amountToCount = $tx->amount_paid !== null && (float) $tx->amount_paid > 0
                 ? (float) $tx->amount_paid
                 : ($tx->payment_status === Transaction::PAYMENT_STATUS_UNPAID ? 0.0 : (float) $tx->amount);
 
-            if ($amountToCount <= 0) {
-                continue;
+            if ($amountToCount > 0) {
+                if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
+                    $cashIn += $amountToCount;
+                } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
+                    $gcashInflow = $tx->gcash_tendered !== null && (float) $tx->gcash_tendered > 0
+                        ? (float) $tx->gcash_tendered
+                        : $amountToCount;
+                    $totalGcash += $gcashInflow;
+                } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                    $cashIn += (float) ($tx->cash_amount ?? 0);
+                    $gcashInflow = $tx->gcash_tendered !== null && (float) $tx->gcash_tendered > 0
+                        ? (float) $tx->gcash_tendered
+                        : (float) ($tx->gcash_amount ?? 0);
+                    $totalGcash += $gcashInflow;
+                }
             }
 
-            if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
-                $cashIn += $amountToCount;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $totalGcash += $amountToCount;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-                $cashIn += (float) ($tx->cash_amount ?? 0);
-                $totalGcash += (float) ($tx->gcash_amount ?? 0);
+            if ((float) ($tx->cash_change ?? 0) > 0) {
+                $cashOut += (float) $tx->cash_change;
+            }
+
+            if ((float) ($tx->change_fee ?? 0) > 0) {
+                $totalSales += (float) $tx->change_fee;
+                $totalDdnEarnings += (float) $tx->change_fee;
             }
         }
 
         $expenses = Expense::query()
             ->whereDate('expense_date', $dateString)
             ->get(['payment_method', 'amount']);
-
-        $cashOut = 0.0;
-        $expenseGcash = 0.0;
-        $totalBankTransfer = 0.0;
-        $totalExpenses = 0.0;
 
         foreach ($expenses as $exp) {
             $amount = (float) $exp->amount;
