@@ -189,6 +189,9 @@ class TransactionController extends Controller
                 'payment_method' => $payload['payment_method'],
                 'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
                 'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                'cash_change' => $payload['cash_change'] ?? 0,
+                'change_fee' => $payload['change_fee'] ?? 0,
                 'payment_date' => $payload['transaction_date'],
                 'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
             ]);
@@ -305,6 +308,9 @@ class TransactionController extends Controller
             'payment_date' => ['required', 'date'],
             'cash_amount' => ['nullable', 'numeric', 'min:0'],
             'gcash_amount' => ['nullable', 'numeric', 'min:0'],
+            'gcash_tendered' => ['nullable', 'numeric', 'min:0'],
+            'cash_change' => ['nullable', 'numeric', 'min:0'],
+            'change_fee' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -324,6 +330,9 @@ class TransactionController extends Controller
             'payment_method' => $validated['payment_method'],
             'cash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['cash_amount'] ?? 0) : null,
             'gcash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['gcash_amount'] ?? 0) : null,
+            'gcash_tendered' => ! empty($validated['gcash_tendered']) ? (float) $validated['gcash_tendered'] : null,
+            'cash_change' => ! empty($validated['cash_change']) ? (float) $validated['cash_change'] : 0,
+            'change_fee' => ! empty($validated['change_fee']) ? (float) $validated['change_fee'] : 0,
             'payment_date' => $validated['payment_date'],
             'notes' => $validated['notes'] ?? 'Balance collection on pickup',
         ]);
@@ -434,6 +443,9 @@ class TransactionController extends Controller
             'balance' => $balance,
             'cash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['cash_amount'] ?? 0) : null,
             'gcash_amount' => $data['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($data['gcash_amount'] ?? 0) : null,
+            'gcash_tendered' => ! empty($data['gcash_tendered']) ? (float) $data['gcash_tendered'] : null,
+            'cash_change' => ! empty($data['cash_change']) ? (float) $data['cash_change'] : 0.00,
+            'change_fee' => ! empty($data['change_fee']) ? (float) $data['change_fee'] : 0.00,
             'notes' => $data['notes'] ?? null,
             'pax' => null,
             'copies' => null,

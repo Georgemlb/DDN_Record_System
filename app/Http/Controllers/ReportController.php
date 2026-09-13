@@ -362,6 +362,22 @@ class ReportController extends Controller
     }
 
     /**
+     * Permanently delete a daily cash settlement record.
+     */
+    public function destroy(DailySettlement $settlement): RedirectResponse
+    {
+        $date = $settlement->settlement_date ? Carbon::parse($settlement->settlement_date)->format('M d, Y') : 'Selected';
+        $settlement->forceDelete();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => "Daily cash settlement for {$date} deleted successfully.",
+        ]);
+
+        return back();
+    }
+
+    /**
      * Retrieve slip data for viewing and printing.
      */
     public function showSlip(DailySettlement $settlement): array

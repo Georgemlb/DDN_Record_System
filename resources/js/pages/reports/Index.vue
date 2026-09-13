@@ -18,6 +18,7 @@ import {
     RefreshCw,
     RotateCcw,
     Smartphone,
+    Trash2,
     TrendingDown,
     TrendingUp,
     Wallet,
@@ -503,6 +504,29 @@ const confirmReopen = () => {
             },
         },
     );
+};
+
+// Delete Settlement Modal
+const isDeleteModalOpen = ref(false);
+const settlementToDelete = ref<DailySettlement | null>(null);
+
+const openDeleteModal = (settlement: DailySettlement) => {
+    settlementToDelete.value = settlement;
+    isDeleteModalOpen.value = true;
+};
+
+const confirmDelete = () => {
+    if (!settlementToDelete.value) {
+        return;
+    }
+
+    router.delete(`/reports/settlements/${settlementToDelete.value.id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            isDeleteModalOpen.value = false;
+            settlementToDelete.value = null;
+        },
+    });
 };
 
 // Slip Viewer & Printer Modal
@@ -1654,6 +1678,15 @@ const calculateExpenseSharePct = (amount: number): string => {
                                                     class="mr-1 size-3.5"
                                                 />
                                                 Reopen
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                class="h-8 px-2 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
+                                                @click="openDeleteModal(item)"
+                                            >
+                                                <Trash2 class="mr-1 size-3.5" />
+                                                Delete
                                             </Button>
                                         </div>
                                     </td>
@@ -3189,6 +3222,59 @@ const calculateExpenseSharePct = (amount: number): string => {
                     </Button>
                     <Button type="button" @click="confirmReopen">
                         Yes, Reopen Register
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <!-- ============================================== -->
+        <!-- MODAL: DELETE SETTLEMENT CONFIRMATION           -->
+        <!-- ============================================== -->
+        <Dialog v-model:open="isDeleteModalOpen">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Delete Settlement Record</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to permanently delete the
+                        settlement record for
+                        <span class="font-semibold text-foreground">
+                            {{
+                                settlementToDelete
+                                    ? formatTransactionDate(
+                                          settlementToDelete.settlement_date,
+                                      )
+                                    : ''
+                            }} </span
+                        >?
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div
+                    class="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive"
+                >
+                    <AlertCircle class="mt-0.5 size-4 shrink-0" />
+                    <span>
+                        This action cannot be undone. The date will become
+                        unsettled, allowing a new settlement to be opened or
+                        recorded. Underlying transactions and expenses remain
+                        completely safe.
+                    </span>
+                </div>
+
+                <DialogFooter class="mt-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="isDeleteModalOpen = false"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        @click="confirmDelete"
+                    >
+                        Delete Settlement
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -61,7 +61,9 @@ class TransactionRequest extends FormRequest
             'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
             'amount_paid' => ['nullable', 'numeric', 'min:0', 'lte:amount'],
             'disbursement_source' => ['nullable', 'string', Rule::in(Transaction::DISBURSEMENT_SOURCES)],
-            'notes' => ['nullable', 'string', 'max:2000'],
+            'gcash_tendered' => ['nullable', 'numeric', 'min:0'],
+            'cash_change' => ['nullable', 'numeric', 'min:0'],
+            'change_fee' => ['nullable', 'numeric', 'min:0'],
         ];
 
         if ($this->input('payment_status') === Transaction::PAYMENT_STATUS_PARTIAL) {

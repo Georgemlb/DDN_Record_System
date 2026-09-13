@@ -65,6 +65,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('reports/settlements/{settlement}', [ReportController::class, 'update'])->name('reports.settlements.update');
         Route::put('reports/settlements/{settlement}/close', [ReportController::class, 'closeDay'])->name('reports.settlements.close');
         Route::put('reports/settlements/{settlement}/reopen', [ReportController::class, 'reopen'])->name('reports.settlements.reopen');
+        Route::delete('reports/settlements/{settlement}', [ReportController::class, 'destroy'])->name('reports.settlements.destroy');
         Route::get('reports/settlements/{settlement}', [ReportController::class, 'showSlip'])->name('reports.settlements.show');
     });
 
