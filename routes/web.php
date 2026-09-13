@@ -59,7 +59,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('can:view-reports')->group(function () {
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('reports/export', [ReportController::class, 'exportCsv'])->name('reports.export');
+        Route::get('reports/settlements/preview', [ReportController::class, 'previewPastSettlement'])->name('reports.settlements.preview');
         Route::post('reports/settlements', [ReportController::class, 'startDay'])->name('reports.settlements.start');
+        Route::post('reports/settlements/past', [ReportController::class, 'storePastSettlement'])->name('reports.settlements.store-past');
         Route::put('reports/settlements/{settlement}', [ReportController::class, 'update'])->name('reports.settlements.update');
         Route::put('reports/settlements/{settlement}/close', [ReportController::class, 'closeDay'])->name('reports.settlements.close');
         Route::put('reports/settlements/{settlement}/reopen', [ReportController::class, 'reopen'])->name('reports.settlements.reopen');

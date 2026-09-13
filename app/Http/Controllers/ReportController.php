@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\Transaction;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -125,6 +126,111 @@ class ReportController extends Controller
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => 'Daily cash register opened with ₱'.number_format($openingCash, 2).' float.',
+        ]);
+
+        return back();
+    }
+
+    /**
+     * Preview metrics and suggested opening floats for a past date.
+     */
+    public function previewPastSettlement(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date', 'before_or_equal:today'],
+        ]);
+
+        $date = Carbon::parse($validated['date'])->toDateString();
+
+        $exists = DailySettlement::query()->whereDate('settlement_date', $date)->exists();
+        if ($exists) {
+            return response()->json([
+                'exists' => true,
+            ]);
+        }
+
+        $metrics = DailySettlement::calculateMetricsForDate($date);
+
+        $suggestedOpeningCash = (float) (DailySettlement::query()
+            ->where('status', DailySettlement::STATUS_CLOSED)
+            ->whereDate('settlement_date', '<', $date)
+            ->orderByDesc('settlement_date')
+            ->value('actual_cash') ?? 0);
+
+        $suggestedOpeningGcash = (float) (DailySettlement::query()
+            ->where('status', DailySettlement::STATUS_CLOSED)
+            ->whereDate('settlement_date', '<', $date)
+            ->whereNotNull('actual_gcash')
+            ->orderByDesc('settlement_date')
+            ->value('actual_gcash') ?? 0);
+
+        return response()->json([
+            'exists' => false,
+            'metrics' => $metrics,
+            'suggested_opening_cash' => $suggestedOpeningCash,
+            'suggested_opening_gcash' => $suggestedOpeningGcash,
+        ]);
+    }
+
+    /**
+     * Record a past daily cash settlement directly as closed.
+     */
+    public function storePastSettlement(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'settlement_date' => ['required', 'date', 'before_or_equal:today', 'unique:daily_settlements,settlement_date'],
+            'opening_cash' => ['required', 'numeric', 'min:0'],
+            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
+            'actual_cash' => ['required', 'numeric', 'min:0'],
+            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $date = Carbon::parse($validated['settlement_date'])->toDateString();
+        $openingCash = (float) $validated['opening_cash'];
+        $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
+        $actualCash = (float) $validated['actual_cash'];
+        $actualGcash = isset($validated['actual_gcash']) && $validated['actual_gcash'] !== '' && $validated['actual_gcash'] !== null
+            ? (float) $validated['actual_gcash']
+            : null;
+
+        $metrics = DailySettlement::calculateMetricsForDate($date);
+
+        $expectedCash = round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2);
+        $discrepancy = round($actualCash - $expectedCash, 2);
+
+        $expectedGcash = round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2);
+        $gcashDiscrepancy = $actualGcash !== null ? round($actualGcash - $expectedGcash, 2) : null;
+
+        DailySettlement::query()->create([
+            'settlement_date' => $date,
+            'user_id' => auth()->id(),
+            'closed_by_user_id' => auth()->id(),
+            'status' => DailySettlement::STATUS_CLOSED,
+            'opening_cash' => $openingCash,
+            'cash_in' => $metrics['cash_in'],
+            'cash_out' => $metrics['cash_out'],
+            'expected_cash' => $expectedCash,
+            'actual_cash' => $actualCash,
+            'discrepancy' => $discrepancy,
+            'opening_gcash' => $openingGcash,
+            'gcash_in' => $metrics['gcash_in'],
+            'gcash_out' => $metrics['gcash_out'],
+            'expected_gcash' => $expectedGcash,
+            'actual_gcash' => $actualGcash,
+            'gcash_discrepancy' => $gcashDiscrepancy,
+            'total_gcash' => $metrics['total_gcash'],
+            'total_bank_transfer' => $metrics['total_bank_transfer'],
+            'total_sales' => $metrics['total_sales'],
+            'total_ddn_earnings' => $metrics['total_ddn_earnings'],
+            'notes' => $validated['notes'] ?? null,
+            'opened_at' => Carbon::parse($date)->startOfDay(),
+            'closed_at' => now(),
+        ]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Past daily cash settlement for '.Carbon::parse($date)->format('M d, Y').' recorded successfully.',
         ]);
 
         return back();

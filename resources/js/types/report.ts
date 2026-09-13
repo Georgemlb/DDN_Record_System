@@ -50,6 +50,13 @@ export type SettlementDraftMetrics = {
     total_ddn_earnings: number;
 };
 
+export type PastSettlementPreview = {
+    exists: boolean;
+    metrics?: SettlementDraftMetrics;
+    suggested_opening_cash?: number;
+    suggested_opening_gcash?: number;
+};
+
 export type FinancialSummary = {
     total_sales: number;
     total_ddn: number;
