@@ -390,7 +390,7 @@ class ReportController extends Controller
 
         $transactions = Transaction::query()
             ->whereDate('transaction_date', $date)
-            ->get(['id', 'reference_number', 'customer_name', 'type', 'payment_method', 'amount', 'ddn_amount']);
+            ->get(['id', 'reference_number', 'customer_name', 'type', 'payment_method', 'amount', 'ddn_amount', 'employee_share']);
 
         $expenses = Expense::query()
             ->whereDate('expense_date', $date)

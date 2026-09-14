@@ -281,6 +281,42 @@ class DailySettlement extends Model
         $cashOut += $netPsaDisbursements;
         $totalExpenses += $netPsaDisbursements;
 
+        // Employee share payouts paid out in cash from drawer
+        $employeeShareCashDisbursements = 0.0;
+        $employeeShareTransactions = Transaction::query()
+            ->whereDate('transaction_date', $dateString)
+            ->whereNotNull('employee_share')
+            ->where('employee_share', '>', 0)
+            ->get(['payment_method', 'cash_amount', 'employee_share']);
+
+        foreach ($employeeShareTransactions as $esTx) {
+            $share = (float) $esTx->employee_share;
+            if ($esTx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
+                $employeeShareCashDisbursements += $share;
+            } elseif ($esTx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashPaid = (float) ($esTx->cash_amount ?? 0);
+                $employeeShareCashDisbursements += min($cashPaid, $share);
+            }
+        }
+
+        // Avoid double-counting if an explicit employee cut/commission expense was already recorded on this date
+        $existingEmployeeCashExpenses = (float) Expense::query()
+            ->whereDate('expense_date', $dateString)
+            ->where('payment_method', Expense::PAYMENT_METHOD_CASH)
+            ->where(function ($q) {
+                $q->where('title', 'like', '%Employee%')
+                    ->orWhere('title', 'like', '%Commission%')
+                    ->orWhere('title', 'like', '%Cut%')
+                    ->orWhereHas('category', function ($catQ) {
+                        $catQ->where('name', 'like', '%Commission%');
+                    });
+            })
+            ->sum('amount');
+
+        $netEmployeeDisbursements = max(0.0, $employeeShareCashDisbursements - $existingEmployeeCashExpenses);
+        $cashOut += $netEmployeeDisbursements;
+        $totalExpenses += $netEmployeeDisbursements;
+
         // Personal expense reimbursements received on this date
         $reimbursements = Expense::query()
             ->where('is_personal', true)
