@@ -177,18 +177,23 @@ const fetchPastPreview = async (date: string) => {
     if (!date) {
         pastPreviewMetrics.value = null;
         pastDateAlreadyExists.value = false;
+
         return;
     }
 
     isLoadingPastPreview.value = true;
+
     try {
         const response = await fetch(
             `/reports/settlements/preview?date=${date}`,
         );
+
         if (!response.ok) {
             throw new Error('Failed to load preview for date');
         }
+
         const data: PastSettlementPreview = await response.json();
+
         if (data.exists) {
             pastDateAlreadyExists.value = true;
             pastPreviewMetrics.value = null;
@@ -241,6 +246,7 @@ const pastExpectedCash = computed(() => {
     const opening = Number(pastForm.opening_cash) || 0;
     const cashIn = pastPreviewMetrics.value?.cash_in ?? 0;
     const cashOut = pastPreviewMetrics.value?.cash_out ?? 0;
+
     return opening + cashIn - cashOut;
 });
 
@@ -248,6 +254,7 @@ const pastExpectedGcash = computed(() => {
     const opening = Number(pastForm.opening_gcash) || 0;
     const gcashIn = pastPreviewMetrics.value?.gcash_in ?? 0;
     const gcashOut = pastPreviewMetrics.value?.gcash_out ?? 0;
+
     return opening + gcashIn - gcashOut;
 });
 
@@ -259,6 +266,7 @@ const livePastDiscrepancy = computed(() => {
     ) {
         return null;
     }
+
     return Number(pastForm.actual_cash) - pastExpectedCash.value;
 });
 
@@ -270,6 +278,7 @@ const livePastGcashDiscrepancy = computed(() => {
     ) {
         return null;
     }
+
     return Number(pastForm.actual_gcash) - pastExpectedGcash.value;
 });
 

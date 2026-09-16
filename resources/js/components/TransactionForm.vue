@@ -141,9 +141,11 @@ const gcashDueForChange = computed(() => {
     if (paymentMethod.value === 'split') {
         return Number(gcashAmount.value) || 0;
     }
+
     if (paymentStatus.value === 'partial') {
         return Number(amountPaid.value) || 0;
     }
+
     return Number(amount.value) || 0;
 });
 
@@ -151,10 +153,12 @@ const calculatedCashChange = computed(() => {
     if (!hasGcashOverpayment.value || !gcashTendered.value) {
         return 0;
     }
+
     const tendered = Number(gcashTendered.value) || 0;
     const due = gcashDueForChange.value;
     const fee = Number(changeFee.value) || 0;
     const change = tendered - due - fee;
+
     return Math.max(0, Math.round(change * 100) / 100);
 });
 
@@ -176,11 +180,22 @@ const thirdPartyPayment = ref<number | string>(
 const notes = ref<string>(props.transaction?.notes ?? '');
 
 const getInitialDisbursementSource = (): 'gcash' | 'cash' | 'none' => {
-    if (props.transaction?.disbursement_source === 'cash') return 'cash';
-    if (props.transaction?.disbursement_source === 'none') return 'none';
-    if (props.transaction?.disbursement_source === 'gcash') return 'gcash';
-    if (formType.value === 'psa' || formType.value === 'translation')
-        return 'cash';
+    if (props.transaction?.disbursement_source === 'cash') {
+return 'cash';
+}
+
+    if (props.transaction?.disbursement_source === 'none') {
+return 'none';
+}
+
+    if (props.transaction?.disbursement_source === 'gcash') {
+return 'gcash';
+}
+
+    if (formType.value === 'psa' || formType.value === 'translation') {
+return 'cash';
+}
+
     return 'gcash';
 };
 
@@ -252,13 +267,17 @@ const calculatePortalCost = () => {
                 );
 
                 const getLegMarkup = (rule?: AirlineMarkup) => {
-                    if (!rule) return 0;
+                    if (!rule) {
+return 0;
+}
+
                     if (rule.markup_type === 'percent') {
                         return (
                             ((numAmt / 2) * (Number(rule.markup_amount) || 0)) /
                             100
                         );
                     }
+
                     return (Number(rule.markup_amount) || 0) * numPax;
                 };
 
@@ -437,9 +456,11 @@ const selectedAssistanceHasDisbursement = computed(() => {
     if (formType.value !== 'online_assistance') {
         return true;
     }
+
     const selected = props.onlineAssistanceTypes.find(
         (t) => String(t.id) === String(onlineAssistanceTypeId.value),
     );
+
     return selected ? (selected.has_disbursement ?? true) : true;
 });
 
@@ -478,7 +499,10 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 };
 
 const selectedPsaRate = computed(() => {
-    if (!psaDocumentType.value || props.psaRates.length === 0) return null;
+    if (!psaDocumentType.value || props.psaRates.length === 0) {
+return null;
+}
+
     return (
         props.psaRates.find(
             (r) =>
@@ -491,6 +515,7 @@ const selectedPsaRate = computed(() => {
 // Auto-fill amount and third party fee when PSA document type or copies change
 const applyPsaRate = (docType?: string) => {
     const targetDoc = docType || psaDocumentType.value;
+
     if (!targetDoc || props.psaRates.length === 0) {
         return;
     }
@@ -530,6 +555,7 @@ const handleCopiesInput = () => {
     } else if (copies.value > 100) {
         copies.value = 100;
     }
+
     applyPsaRate();
 };
 
@@ -549,6 +575,7 @@ watch(
             }
         } else if (newType === 'psa') {
             disbursementSource.value = 'cash';
+
             if (!psaDocumentType.value && props.psaRates.length > 0) {
                 psaDocumentType.value = props.psaRates[0]
                     .document_type as PsaDocumentType;

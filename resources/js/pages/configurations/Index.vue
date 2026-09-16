@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
-    AlertCircle,
     FileText,
     Headphones,
     Pencil,
@@ -11,6 +10,7 @@ import {
     Trash,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import GcashIcon from '@/components/icons/GcashIcon.vue';
 import { formatPhp } from '@/lib/transactionFormat';
 import type { ExpenseCategory } from '@/types/expense';
 import type {
@@ -206,6 +205,7 @@ const modalAssistanceMargin = computed(() => {
     const disb = hasDisb
         ? Number(assistanceForm.disbursement_amount) || 0
         : 0;
+
     return Math.max(0, price - disb);
 });
 
@@ -214,6 +214,7 @@ function getAssistanceNetShares(item: OnlineAssistanceType) {
     const hasDisb = Boolean(item.has_disbursement);
     const disb = hasDisb ? Number(item.disbursement_amount || 0) : 0;
     const margin = Math.max(0, price - disb);
+
     return {
         margin,
         ddn: margin * 0.6,

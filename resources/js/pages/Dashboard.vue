@@ -12,7 +12,6 @@ import {
     ReceiptText,
     TrendingUp,
     Wallet,
-    WalletCards,
 } from '@lucide/vue';
 import {
     ArcElement,
