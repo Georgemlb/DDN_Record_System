@@ -444,7 +444,9 @@ class ReportController extends Controller
             fputcsv($handle, ['Metric', 'Amount (PHP)']);
             fputcsv($handle, ['Total Sales (Gross Payments)', number_format($report['summary']['total_sales'], 2, '.', '')]);
             fputcsv($handle, ['Total DDN Share (Net Commission)', number_format($report['summary']['total_ddn'], 2, '.', '')]);
-            fputcsv($handle, ['Total Operational Expenses', number_format($report['summary']['total_expenses'], 2, '.', '')]);
+            fputcsv($handle, ['Operating Expenses', number_format($report['summary']['operating_expenses'] ?? $report['summary']['total_expenses'], 2, '.', '')]);
+            fputcsv($handle, ['Portal Capital Reloads', number_format($report['summary']['portal_reloads'] ?? 0, 2, '.', '')]);
+            fputcsv($handle, ['Total Disbursements', number_format($report['summary']['total_expenses'], 2, '.', '')]);
             fputcsv($handle, ['Net Operating Income', number_format($report['summary']['net_profit'], 2, '.', '')]);
             fputcsv($handle, ['Cash Collections', number_format($report['summary']['cash_sales'], 2, '.', '')]);
             fputcsv($handle, ['GCash Collections', number_format($report['summary']['gcash_sales'], 2, '.', '')]);
@@ -532,6 +534,7 @@ class ReportController extends Controller
             ->get(['expense_category_id', 'payment_method', 'amount']);
 
         $totalExpenses = 0.0;
+        $portalReloadExpenses = 0.0;
         $cashExpenses = 0.0;
         $gcashExpenses = 0.0;
         $bankExpenses = 0.0;
@@ -542,6 +545,11 @@ class ReportController extends Controller
             $amount = (float) $exp->amount;
             $totalExpenses += $amount;
 
+            $catName = $exp->category?->name ?? 'Uncategorized';
+            if ($catName === 'Flight Portal Reload') {
+                $portalReloadExpenses += $amount;
+            }
+
             if ($exp->payment_method === Expense::PAYMENT_METHOD_CASH) {
                 $cashExpenses += $amount;
             } elseif ($exp->payment_method === Expense::PAYMENT_METHOD_GCASH) {
@@ -550,13 +558,14 @@ class ReportController extends Controller
                 $bankExpenses += $amount;
             }
 
-            $catName = $exp->category?->name ?? 'Uncategorized';
             if (! isset($categoriesGrouped[$catName])) {
                 $categoriesGrouped[$catName] = ['category' => $catName, 'count' => 0, 'total' => 0.0];
             }
             $categoriesGrouped[$catName]['count']++;
             $categoriesGrouped[$catName]['total'] += $amount;
         }
+
+        $operatingExpenses = round(max(0, $totalExpenses - $portalReloadExpenses), 2);
 
         usort($categoriesGrouped, fn ($a, $b) => $b['total'] <=> $a['total']);
 
@@ -575,7 +584,9 @@ class ReportController extends Controller
                 'total_sales' => round($totalSales, 2),
                 'total_ddn' => round($totalDdn, 2),
                 'total_expenses' => round($totalExpenses, 2),
-                'net_profit' => round($totalDdn - $totalExpenses, 2),
+                'operating_expenses' => $operatingExpenses,
+                'portal_reloads' => round($portalReloadExpenses, 2),
+                'net_profit' => round($totalDdn - $operatingExpenses, 2),
                 'cash_sales' => round($cashSales, 2),
                 'gcash_sales' => round($gcashSales, 2),
                 'cash_expenses' => round($cashExpenses, 2),

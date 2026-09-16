@@ -5,7 +5,6 @@ use App\Models\DailySettlement;
 use App\Models\GcashLedgerEntry;
 use App\Models\Transaction;
 use App\Models\User;
-use Database\Seeders\BaggageOptionSeeder;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -15,7 +14,6 @@ uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
     $this->seed([
-        BaggageOptionSeeder::class,
         OnlineAssistanceTypeSeeder::class,
     ]);
 });

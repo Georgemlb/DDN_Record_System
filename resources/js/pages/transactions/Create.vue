@@ -5,7 +5,6 @@ import TransactionForm from '@/components/TransactionForm.vue';
 import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
-    BaggageOption,
     Customer,
     DdnSplitConfig,
     OnlineAssistanceType,
@@ -14,7 +13,6 @@ import type {
 } from '@/types/transaction';
 
 defineProps<{
-    baggageOptions?: BaggageOption[];
     onlineAssistanceTypes?: OnlineAssistanceType[];
     airlineMarkups?: AirlineMarkup[];
     psaDocumentTypes?: PsaDocumentType[];
@@ -54,7 +52,6 @@ defineOptions({
                 :action="TransactionController.store().url"
                 method="post"
                 submit-label="Save transaction"
-                :baggage-options="baggageOptions"
                 :online-assistance-types="onlineAssistanceTypes"
                 :airline-markups="airlineMarkups"
                 :psa-document-types="psaDocumentTypes"

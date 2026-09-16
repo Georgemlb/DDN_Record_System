@@ -1,10 +1,8 @@
 <?php
 
-use App\Models\BaggageOption;
 use App\Models\OnlineAssistanceType;
 use App\Models\Transaction;
 use App\Models\User;
-use Database\Seeders\BaggageOptionSeeder;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -14,7 +12,6 @@ uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
     $this->seed([
-        BaggageOptionSeeder::class,
         OnlineAssistanceTypeSeeder::class,
     ]);
 });
@@ -54,11 +51,8 @@ test('an authenticated user can view recorded transactions', function () {
 
 test('an authenticated user can record an airline transaction', function () {
     $user = User::factory()->create();
-    $baggage = BaggageOption::query()->first();
 
-    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData([
-        'baggage_option_id' => $baggage->id,
-    ]));
+    $response = $this->actingAs($user)->post(route('transactions.store'), transactionData());
 
     $transaction = Transaction::query()->sole();
 
@@ -69,7 +63,6 @@ test('an authenticated user can record an airline transaction', function () {
         'customer_name' => 'Person 1',
         'pax' => 1,
         'provider' => 'Cebu Pacific',
-        'baggage_option_id' => $baggage->id,
         'amount' => '4500.00',
         'ddn_amount' => '4500.00',
     ]);

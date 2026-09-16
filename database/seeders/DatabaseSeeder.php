@@ -30,7 +30,6 @@ class DatabaseSeeder extends Seeder
         );
 
         $this->call([
-            BaggageOptionSeeder::class,
             OnlineAssistanceTypeSeeder::class,
             ExpenseCategorySeeder::class,
             PsaRateSeeder::class,

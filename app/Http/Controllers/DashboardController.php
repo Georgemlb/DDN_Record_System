@@ -63,7 +63,7 @@ class DashboardController extends Controller
 
         // Recent Transactions (latest 5)
         $recentTransactions = Transaction::query()
-            ->with(['baggageOption', 'onlineAssistanceType', 'customer'])
+            ->with(['onlineAssistanceType', 'customer'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
             ->limit(5)
@@ -151,7 +151,14 @@ class DashboardController extends Controller
             ->whereBetween('expense_date', [$startDate, $endDate]);
 
         $totalExpenses = (float) (clone $expenseQuery)->sum('amount');
-        $netProfit = round($totalDdn - $totalExpenses, 2);
+
+        // Portal reload expenses are working capital / fund transfers, not operating expenses
+        $portalReloadExpenses = (float) (clone $expenseQuery)
+            ->whereHas('category', fn ($q) => $q->where('name', 'Flight Portal Reload'))
+            ->sum('amount');
+
+        $operatingExpenses = round(max(0, $totalExpenses - $portalReloadExpenses), 2);
+        $netProfit = round($totalDdn - $operatingExpenses, 2);
 
         // Sales Trend (per day)
         $salesTrend = (clone $transactionQuery)
@@ -165,8 +172,9 @@ class DashboardController extends Controller
                 'total_ddn' => (float) $row->total_ddn,
             ]);
 
-        // Expenses by Category
+        // Expenses by Category (operating expenses only, excluding portal reloads)
         $expensesByCategory = (clone $expenseQuery)
+            ->whereDoesntHave('category', fn ($q) => $q->where('name', 'Flight Portal Reload'))
             ->with('category')
             ->selectRaw('expense_category_id, SUM(amount) as total')
             ->groupBy('expense_category_id')
@@ -185,6 +193,8 @@ class DashboardController extends Controller
                 'total_sales' => $totalSales,
                 'total_ddn' => $totalDdn,
                 'total_expenses' => $totalExpenses,
+                'operating_expenses' => $operatingExpenses,
+                'portal_reloads' => $portalReloadExpenses,
                 'net_profit' => $netProfit,
                 'total_cash' => round($totalPeriodCash, 2),
                 'total_gcash' => round($totalPeriodGcash, 2),

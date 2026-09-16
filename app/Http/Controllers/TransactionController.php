@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TransactionRequest;
 use App\Models\AirlineMarkup;
-use App\Models\BaggageOption;
 use App\Models\Customer;
 use App\Models\DailySettlement;
 use App\Models\FlightPortalDeposit;
@@ -26,7 +25,7 @@ class TransactionController extends Controller
      */
     public function index(): Response
     {
-        $query = Transaction::query()->with(['baggageOption', 'onlineAssistanceType', 'user', 'customer']);
+        $query = Transaction::query()->with(['onlineAssistanceType', 'user', 'customer']);
 
         // Status / Trash filtering
         $status = request('status', 'active');
@@ -143,7 +142,6 @@ class TransactionController extends Controller
         return Inertia::render('transactions/Create', [
             'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
             'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
-            'baggageOptions' => BaggageOption::query()->active()->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
@@ -211,7 +209,7 @@ class TransactionController extends Controller
      */
     public function show(Transaction $transaction): Response
     {
-        $transaction->load(['baggageOption', 'onlineAssistanceType', 'user', 'customer', 'payments.user']);
+        $transaction->load(['onlineAssistanceType', 'user', 'customer', 'payments.user']);
 
         return Inertia::render('transactions/Show', [
             'transaction' => $transaction,
@@ -225,14 +223,7 @@ class TransactionController extends Controller
     {
         Gate::authorize('update', $transaction);
 
-        $transaction->load(['baggageOption', 'onlineAssistanceType', 'customer']);
-
-        $baggageOptions = BaggageOption::query()->active()->get();
-        if ($transaction->baggageOption && ! $transaction->baggageOption->is_active) {
-            $inactiveOption = clone $transaction->baggageOption;
-            $inactiveOption->label .= ' (Inactive)';
-            $baggageOptions->push($inactiveOption);
-        }
+        $transaction->load(['onlineAssistanceType', 'customer']);
 
         $onlineAssistanceTypes = OnlineAssistanceType::query()->active()->get();
         if ($transaction->onlineAssistanceType && ! $transaction->onlineAssistanceType->is_active) {
@@ -245,7 +236,6 @@ class TransactionController extends Controller
             'transaction' => $transaction,
             'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
             'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
-            'baggageOptions' => $baggageOptions,
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
@@ -455,7 +445,6 @@ class TransactionController extends Controller
             'flight_type' => null,
             'carrier_category' => null,
             'service_details' => null,
-            'baggage_option_id' => null,
             'psa_document_type' => null,
             'online_assistance_type_id' => null,
             'third_party_payment' => null,
@@ -474,7 +463,6 @@ class TransactionController extends Controller
                 $prepared['return_provider'] = $isRoundTrip ? ($data['return_provider'] ?? null) : null;
                 $prepared['flight_type'] = $data['flight_type'] ?? null;
                 $prepared['carrier_category'] = $data['carrier_category'] ?? null;
-                $prepared['baggage_option_id'] = ! empty($data['baggage_option_id']) ? (int) $data['baggage_option_id'] : null;
                 $prepared['service_details'] = $data['service_details'] ?? null;
                 $prepared['third_party_payment'] = $thirdParty > 0 ? $thirdParty : null;
                 $prepared['disbursement_source'] = $data['disbursement_source'] ?? Transaction::DISBURSEMENT_SOURCE_FLIGHT_PORTAL;

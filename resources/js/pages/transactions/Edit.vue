@@ -5,7 +5,6 @@ import TransactionForm from '@/components/TransactionForm.vue';
 import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
-    BaggageOption,
     Customer,
     DdnSplitConfig,
     OnlineAssistanceType,
@@ -16,7 +15,6 @@ import type {
 
 const props = defineProps<{
     transaction: Transaction;
-    baggageOptions?: BaggageOption[];
     onlineAssistanceTypes?: OnlineAssistanceType[];
     airlineMarkups?: AirlineMarkup[];
     psaDocumentTypes?: PsaDocumentType[];
@@ -61,7 +59,6 @@ defineOptions({
                 method="put"
                 submit-label="Save changes"
                 :transaction="props.transaction"
-                :baggage-options="baggageOptions"
                 :online-assistance-types="onlineAssistanceTypes"
                 :airline-markups="airlineMarkups"
                 :psa-document-types="psaDocumentTypes"

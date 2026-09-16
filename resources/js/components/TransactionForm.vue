@@ -31,7 +31,6 @@ import { formatPhp, getTodayDateString } from '@/lib/transactionFormat';
 import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
-    BaggageOption,
     CarrierCategory,
     Customer,
     DdnSplitConfig,
@@ -52,7 +51,6 @@ const props = withDefaults(
         method: 'post' | 'put';
         submitLabel: string;
         transaction?: Transaction;
-        baggageOptions?: BaggageOption[];
         onlineAssistanceTypes?: OnlineAssistanceType[];
         airlineMarkups?: AirlineMarkup[];
         psaDocumentTypes?: PsaDocumentType[];
@@ -63,7 +61,6 @@ const props = withDefaults(
         initialCustomers?: Customer[];
     }>(),
     {
-        baggageOptions: () => [],
         onlineAssistanceTypes: () => [],
         airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
@@ -112,11 +109,6 @@ const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
 const serviceDetails = ref<string>(props.transaction?.service_details ?? '');
-const baggageOptionId = ref<string>(
-    props.transaction?.baggage_option_id
-        ? String(props.transaction.baggage_option_id)
-        : 'none',
-);
 const psaDocumentType = ref<PsaDocumentType | ''>(
     props.transaction?.psa_document_type ?? 'BC',
 );
@@ -589,25 +581,6 @@ watch(
     { immediate: true, deep: true },
 );
 
-const filteredBaggageOptions = computed(() => {
-    const currentProvider = provider.value.trim().toLowerCase();
-
-    return props.baggageOptions.filter((option) => {
-        // Always include currently selected option
-        if (String(option.id) === baggageOptionId.value) {
-            return true;
-        }
-
-        // Include universal options
-        if (!option.airline) {
-            return true;
-        }
-
-        // Include airline specific options
-        return option.airline.toLowerCase() === currentProvider;
-    });
-});
-
 const airlineSuggestions = computed(() => {
     const configuredAirlines = props.airlineMarkups
         .filter(
@@ -616,9 +589,6 @@ const airlineSuggestions = computed(() => {
                 m.flight_type === 'local',
         )
         .map((m) => m.airline.trim());
-    const baggageAirlines = props.baggageOptions
-        .map((opt) => opt.airline?.trim())
-        .filter((airline): airline is string => Boolean(airline));
     const defaultAirlines = [
         'Cebu Pacific',
         'Philippine Airlines',
@@ -631,7 +601,6 @@ const airlineSuggestions = computed(() => {
         new Set([
             ...defaultAirlines,
             ...configuredAirlines,
-            ...baggageAirlines,
         ]),
     );
 });
@@ -867,12 +836,6 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             type="hidden"
             name="carrier_category"
             :value="carrierCategory"
-        />
-        <input
-            v-if="formType === 'airline'"
-            type="hidden"
-            name="baggage_option_id"
-            :value="baggageOptionId === 'none' ? '' : baggageOptionId"
         />
         <input
             v-if="formType === 'psa'"
@@ -1521,39 +1484,6 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="e.g. Manila to Cebu (MNL-CEB)"
                     />
                     <InputError :message="errors.service_details" />
-                </div>
-
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="baggage_option_select"
-                        >Additional Baggage</Label
-                    >
-                    <Select v-model="baggageOptionId">
-                        <SelectTrigger
-                            id="baggage_option_select"
-                            class="w-full"
-                        >
-                            <SelectValue
-                                placeholder="Select baggage option (Optional)"
-                            />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">
-                                None / Default
-                            </SelectItem>
-                            <SelectItem
-                                v-for="option in filteredBaggageOptions"
-                                :key="option.id"
-                                :value="String(option.id)"
-                            >
-                                [{{
-                                    option.airline
-                                        ? option.airline
-                                        : 'Universal'
-                                }}] {{ option.label }}
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.baggage_option_id" />
                 </div>
 
                 <div class="grid gap-2">
