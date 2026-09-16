@@ -59,6 +59,7 @@ const gcashDueForChange = computed(() => {
     if (form.payment_method === 'split') {
         return Number(form.gcash_amount) || 0;
     }
+
     return Number(form.amount) || 0;
 });
 
@@ -66,10 +67,12 @@ const calculatedCashChange = computed(() => {
     if (!hasGcashOverpayment.value || !form.gcash_tendered) {
         return 0;
     }
+
     const tendered = Number(form.gcash_tendered) || 0;
     const due = gcashDueForChange.value;
     const fee = Number(form.change_fee) || 0;
     const change = tendered - due - fee;
+
     return Math.max(0, Math.round(change * 100) / 100);
 });
 

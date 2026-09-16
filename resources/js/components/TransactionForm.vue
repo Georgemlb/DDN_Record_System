@@ -31,7 +31,6 @@ import { formatPhp, getTodayDateString } from '@/lib/transactionFormat';
 import { index } from '@/routes/transactions';
 import type {
     AirlineMarkup,
-    BaggageOption,
     CarrierCategory,
     Customer,
     DdnSplitConfig,
@@ -52,7 +51,6 @@ const props = withDefaults(
         method: 'post' | 'put';
         submitLabel: string;
         transaction?: Transaction;
-        baggageOptions?: BaggageOption[];
         onlineAssistanceTypes?: OnlineAssistanceType[];
         airlineMarkups?: AirlineMarkup[];
         psaDocumentTypes?: PsaDocumentType[];
@@ -63,7 +61,6 @@ const props = withDefaults(
         initialCustomers?: Customer[];
     }>(),
     {
-        baggageOptions: () => [],
         onlineAssistanceTypes: () => [],
         airlineMarkups: () => [],
         psaDocumentTypes: () => ['BC', 'MC', 'DC', 'Cenomar'],
@@ -112,11 +109,6 @@ const flightType = ref<FlightType | ''>(
     props.transaction?.flight_type ?? 'local',
 );
 const serviceDetails = ref<string>(props.transaction?.service_details ?? '');
-const baggageOptionId = ref<string>(
-    props.transaction?.baggage_option_id
-        ? String(props.transaction.baggage_option_id)
-        : 'none',
-);
 const psaDocumentType = ref<PsaDocumentType | ''>(
     props.transaction?.psa_document_type ?? 'BC',
 );
@@ -149,9 +141,11 @@ const gcashDueForChange = computed(() => {
     if (paymentMethod.value === 'split') {
         return Number(gcashAmount.value) || 0;
     }
+
     if (paymentStatus.value === 'partial') {
         return Number(amountPaid.value) || 0;
     }
+
     return Number(amount.value) || 0;
 });
 
@@ -159,10 +153,12 @@ const calculatedCashChange = computed(() => {
     if (!hasGcashOverpayment.value || !gcashTendered.value) {
         return 0;
     }
+
     const tendered = Number(gcashTendered.value) || 0;
     const due = gcashDueForChange.value;
     const fee = Number(changeFee.value) || 0;
     const change = tendered - due - fee;
+
     return Math.max(0, Math.round(change * 100) / 100);
 });
 
@@ -184,11 +180,22 @@ const thirdPartyPayment = ref<number | string>(
 const notes = ref<string>(props.transaction?.notes ?? '');
 
 const getInitialDisbursementSource = (): 'gcash' | 'cash' | 'none' => {
-    if (props.transaction?.disbursement_source === 'cash') return 'cash';
-    if (props.transaction?.disbursement_source === 'none') return 'none';
-    if (props.transaction?.disbursement_source === 'gcash') return 'gcash';
-    if (formType.value === 'psa' || formType.value === 'translation')
-        return 'cash';
+    if (props.transaction?.disbursement_source === 'cash') {
+return 'cash';
+}
+
+    if (props.transaction?.disbursement_source === 'none') {
+return 'none';
+}
+
+    if (props.transaction?.disbursement_source === 'gcash') {
+return 'gcash';
+}
+
+    if (formType.value === 'psa' || formType.value === 'translation') {
+return 'cash';
+}
+
     return 'gcash';
 };
 
@@ -260,13 +267,17 @@ const calculatePortalCost = () => {
                 );
 
                 const getLegMarkup = (rule?: AirlineMarkup) => {
-                    if (!rule) return 0;
+                    if (!rule) {
+return 0;
+}
+
                     if (rule.markup_type === 'percent') {
                         return (
                             ((numAmt / 2) * (Number(rule.markup_amount) || 0)) /
                             100
                         );
                     }
+
                     return (Number(rule.markup_amount) || 0) * numPax;
                 };
 
@@ -445,9 +456,11 @@ const selectedAssistanceHasDisbursement = computed(() => {
     if (formType.value !== 'online_assistance') {
         return true;
     }
+
     const selected = props.onlineAssistanceTypes.find(
         (t) => String(t.id) === String(onlineAssistanceTypeId.value),
     );
+
     return selected ? (selected.has_disbursement ?? true) : true;
 });
 
@@ -486,7 +499,10 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 };
 
 const selectedPsaRate = computed(() => {
-    if (!psaDocumentType.value || props.psaRates.length === 0) return null;
+    if (!psaDocumentType.value || props.psaRates.length === 0) {
+return null;
+}
+
     return (
         props.psaRates.find(
             (r) =>
@@ -499,6 +515,7 @@ const selectedPsaRate = computed(() => {
 // Auto-fill amount and third party fee when PSA document type or copies change
 const applyPsaRate = (docType?: string) => {
     const targetDoc = docType || psaDocumentType.value;
+
     if (!targetDoc || props.psaRates.length === 0) {
         return;
     }
@@ -538,6 +555,7 @@ const handleCopiesInput = () => {
     } else if (copies.value > 100) {
         copies.value = 100;
     }
+
     applyPsaRate();
 };
 
@@ -557,6 +575,7 @@ watch(
             }
         } else if (newType === 'psa') {
             disbursementSource.value = 'cash';
+
             if (!psaDocumentType.value && props.psaRates.length > 0) {
                 psaDocumentType.value = props.psaRates[0]
                     .document_type as PsaDocumentType;
@@ -589,25 +608,6 @@ watch(
     { immediate: true, deep: true },
 );
 
-const filteredBaggageOptions = computed(() => {
-    const currentProvider = provider.value.trim().toLowerCase();
-
-    return props.baggageOptions.filter((option) => {
-        // Always include currently selected option
-        if (String(option.id) === baggageOptionId.value) {
-            return true;
-        }
-
-        // Include universal options
-        if (!option.airline) {
-            return true;
-        }
-
-        // Include airline specific options
-        return option.airline.toLowerCase() === currentProvider;
-    });
-});
-
 const airlineSuggestions = computed(() => {
     const configuredAirlines = props.airlineMarkups
         .filter(
@@ -616,9 +616,6 @@ const airlineSuggestions = computed(() => {
                 m.flight_type === 'local',
         )
         .map((m) => m.airline.trim());
-    const baggageAirlines = props.baggageOptions
-        .map((opt) => opt.airline?.trim())
-        .filter((airline): airline is string => Boolean(airline));
     const defaultAirlines = [
         'Cebu Pacific',
         'Philippine Airlines',
@@ -631,7 +628,6 @@ const airlineSuggestions = computed(() => {
         new Set([
             ...defaultAirlines,
             ...configuredAirlines,
-            ...baggageAirlines,
         ]),
     );
 });
@@ -867,12 +863,6 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             type="hidden"
             name="carrier_category"
             :value="carrierCategory"
-        />
-        <input
-            v-if="formType === 'airline'"
-            type="hidden"
-            name="baggage_option_id"
-            :value="baggageOptionId === 'none' ? '' : baggageOptionId"
         />
         <input
             v-if="formType === 'psa'"
@@ -1521,39 +1511,6 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         placeholder="e.g. Manila to Cebu (MNL-CEB)"
                     />
                     <InputError :message="errors.service_details" />
-                </div>
-
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="baggage_option_select"
-                        >Additional Baggage</Label
-                    >
-                    <Select v-model="baggageOptionId">
-                        <SelectTrigger
-                            id="baggage_option_select"
-                            class="w-full"
-                        >
-                            <SelectValue
-                                placeholder="Select baggage option (Optional)"
-                            />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">
-                                None / Default
-                            </SelectItem>
-                            <SelectItem
-                                v-for="option in filteredBaggageOptions"
-                                :key="option.id"
-                                :value="String(option.id)"
-                            >
-                                [{{
-                                    option.airline
-                                        ? option.airline
-                                        : 'Universal'
-                                }}] {{ option.label }}
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.baggage_option_id" />
                 </div>
 
                 <div class="grid gap-2">

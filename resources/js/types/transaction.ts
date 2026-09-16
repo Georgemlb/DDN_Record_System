@@ -55,15 +55,6 @@ export type TransactionPayment = {
     } | null;
 };
 
-export type BaggageOption = {
-    id: number;
-    airline?: string | null;
-    label: string;
-    weight_kg: number;
-    is_active?: boolean;
-    sort_order?: number;
-};
-
 export type AirlineMarkup = {
     id: number;
     service_type: ServiceType;
@@ -118,8 +109,6 @@ export type Transaction = {
     flight_type: FlightType | null;
     carrier_category?: CarrierCategory | null;
     service_details: string | null;
-    baggage_option_id: number | null;
-    baggage_option?: BaggageOption | null;
     psa_document_type: PsaDocumentType | null;
     copies?: number | null;
     online_assistance_type_id: number | null;

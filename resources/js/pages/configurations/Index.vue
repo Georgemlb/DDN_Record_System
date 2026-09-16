@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
-    AlertCircle,
     FileText,
     Headphones,
-    Luggage,
     Pencil,
     Plus,
     Tag,
@@ -12,6 +10,7 @@ import {
     Trash,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import GcashIcon from '@/components/icons/GcashIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,27 +25,23 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import GcashIcon from '@/components/icons/GcashIcon.vue';
 import { formatPhp } from '@/lib/transactionFormat';
 import type { ExpenseCategory } from '@/types/expense';
 import type {
     AirlineMarkup,
-    BaggageOption,
     OnlineAssistanceType,
     PsaRate,
 } from '@/types/transaction';
 
 const props = defineProps<{
-    baggageOptions: BaggageOption[];
     airlineMarkups: AirlineMarkup[];
     onlineAssistanceTypes: OnlineAssistanceType[];
     expenseCategories: ExpenseCategory[];
     psaRates: PsaRate[];
     currentTab:
-        | 'baggage'
+        | 'airline-markups'
         | 'online-assistance'
         | 'expense-categories'
-        | 'airline-markups'
         | 'psa-rates';
 }>();
 
@@ -65,21 +60,14 @@ defineOptions({
 // Tabs Navigation
 // --------------------------------------------------------
 type TabKey =
-    | 'baggage'
     | 'airline-markups'
     | 'online-assistance'
     | 'expense-categories'
     | 'psa-rates';
 
-const activeTab = ref<TabKey>(props.currentTab || 'baggage');
+const activeTab = ref<TabKey>(props.currentTab || 'airline-markups');
 
 const tabs = [
-    {
-        key: 'baggage' as TabKey,
-        label: 'Baggage Options',
-        icon: Luggage,
-        count: () => props.baggageOptions.length,
-    },
     {
         key: 'airline-markups' as TabKey,
         label: 'Ticketing Markups',
@@ -164,72 +152,6 @@ const executeDelete = () => {
 };
 
 // --------------------------------------------------------
-// Baggage Modal & Form
-// --------------------------------------------------------
-const isBaggageModalOpen = ref(false);
-const editingBaggageId = ref<number | null>(null);
-
-const baggageForm = useForm({
-    airline: '',
-    label: '',
-    weight_kg: 20,
-    sort_order: 0,
-    is_active: true,
-});
-
-const hasDuplicateBaggageWarning = computed(() => {
-    const airline = baggageForm.airline.trim().toLowerCase();
-    const weight = Number(baggageForm.weight_kg);
-
-    return props.baggageOptions.some((opt) => {
-        if (editingBaggageId.value && opt.id === editingBaggageId.value) {
-            return false;
-        }
-
-        const optAirline = (opt.airline ?? '').trim().toLowerCase();
-
-        return optAirline === airline && opt.weight_kg === weight;
-    });
-});
-
-const openCreateBaggage = () => {
-    editingBaggageId.value = null;
-    baggageForm.reset();
-    baggageForm.clearErrors();
-    isBaggageModalOpen.value = true;
-};
-
-const openEditBaggage = (option: BaggageOption) => {
-    editingBaggageId.value = option.id;
-    baggageForm.clearErrors();
-    baggageForm.airline = option.airline ?? '';
-    baggageForm.label = option.label;
-    baggageForm.weight_kg = option.weight_kg;
-    baggageForm.sort_order = option.sort_order ?? 0;
-    baggageForm.is_active = option.is_active ?? true;
-    isBaggageModalOpen.value = true;
-};
-
-const submitBaggage = () => {
-    if (editingBaggageId.value) {
-        baggageForm.put(
-            `/configurations/baggage-options/${editingBaggageId.value}`,
-            {
-                onSuccess: () => {
-                    isBaggageModalOpen.value = false;
-                },
-            },
-        );
-    } else {
-        baggageForm.post('/configurations/baggage-options', {
-            onSuccess: () => {
-                isBaggageModalOpen.value = false;
-            },
-        });
-    }
-};
-
-// --------------------------------------------------------
 // Online Assistance Modal & Form
 // --------------------------------------------------------
 const isAssistanceModalOpen = ref(false);
@@ -283,6 +205,7 @@ const modalAssistanceMargin = computed(() => {
     const disb = hasDisb
         ? Number(assistanceForm.disbursement_amount) || 0
         : 0;
+
     return Math.max(0, price - disb);
 });
 
@@ -291,6 +214,7 @@ function getAssistanceNetShares(item: OnlineAssistanceType) {
     const hasDisb = Boolean(item.has_disbursement);
     const disb = hasDisb ? Number(item.disbursement_amount || 0) : 0;
     const margin = Math.max(0, price - disb);
+
     return {
         margin,
         ddn: margin * 0.6,
@@ -588,137 +512,6 @@ const submitPsa = () => {
                     </Badge>
                 </button>
             </div>
-        </section>
-
-        <!-- ============================================== -->
-        <!-- TAB 1: BAGGAGE OPTIONS                         -->
-        <!-- ============================================== -->
-        <section v-if="activeTab === 'baggage'" class="space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h2 class="text-lg font-semibold tracking-tight">
-                        Baggage Options
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        Configure weight tiers and default pricing per airline
-                        or universal.
-                    </p>
-                </div>
-                <Button @click="openCreateBaggage">
-                    <Plus class="mr-1.5 size-4" /> Add Option
-                </Button>
-            </div>
-
-            <Card>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr
-                                class="border-b bg-muted/50 text-left text-muted-foreground"
-                            >
-                                <th class="w-16 p-4 text-center font-medium">
-                                    Order
-                                </th>
-                                <th class="p-4 font-medium">Airline</th>
-                                <th class="p-4 font-medium">Label</th>
-                                <th class="p-4 text-right font-medium">
-                                    Weight
-                                </th>
-                                <th class="p-4 text-center font-medium">
-                                    Status
-                                </th>
-                                <th class="p-4 text-right font-medium">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-if="baggageOptions.length === 0">
-                                <td
-                                    colspan="7"
-                                    class="p-8 text-center text-muted-foreground"
-                                >
-                                    No baggage options configured yet.
-                                </td>
-                            </tr>
-                            <tr
-                                v-for="option in baggageOptions"
-                                :key="option.id"
-                                class="border-b transition-colors hover:bg-muted/50"
-                            >
-                                <td
-                                    class="p-4 text-center align-middle font-mono text-xs text-muted-foreground"
-                                >
-                                    #{{ option.sort_order ?? 0 }}
-                                </td>
-                                <td class="p-4 align-middle">
-                                    <span
-                                        v-if="option.airline"
-                                        class="font-medium text-foreground"
-                                    >
-                                        {{ option.airline }}
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="text-muted-foreground italic"
-                                    >
-                                        Universal (All Airlines)
-                                    </span>
-                                </td>
-                                <td class="p-4 align-middle font-medium">
-                                    {{ option.label }}
-                                </td>
-                                <td class="p-4 text-right align-middle">
-                                    {{ option.weight_kg }} KG
-                                </td>
-                                <td class="p-4 text-center align-middle">
-                                    <Badge
-                                        :variant="
-                                            option.is_active
-                                                ? 'default'
-                                                : 'secondary'
-                                        "
-                                    >
-                                        {{
-                                            option.is_active
-                                                ? 'Active'
-                                                : 'Inactive'
-                                        }}
-                                    </Badge>
-                                </td>
-                                <td class="p-4 text-right align-middle">
-                                    <div class="flex justify-end gap-1">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            title="Edit"
-                                            @click="openEditBaggage(option)"
-                                        >
-                                            <Pencil class="size-4" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            title="Delete"
-                                            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            @click="
-                                                confirmDelete(
-                                                    option.id,
-                                                    option.label,
-                                                    '/configurations/baggage-options',
-                                                    'This baggage option will be permanently removed if it is not associated with existing transactions.',
-                                                )
-                                            "
-                                        >
-                                            <Trash class="size-4" />
-                                        </Button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
         </section>
 
         <!-- ============================================== -->
@@ -1348,156 +1141,6 @@ const submitPsa = () => {
                 </div>
             </Card>
         </section>
-
-        <!-- ============================================== -->
-        <!-- MODAL: BAGGAGE OPTION (CREATE / EDIT)          -->
-        <!-- ============================================== -->
-        <Dialog v-model:open="isBaggageModalOpen">
-            <DialogContent class="sm:max-w-md">
-                <form @submit.prevent="submitBaggage">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {{
-                                editingBaggageId
-                                    ? 'Edit Baggage Option'
-                                    : 'Add Baggage Option'
-                            }}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {{
-                                editingBaggageId
-                                    ? 'Update details for this baggage allowance tier.'
-                                    : 'Add a new baggage allowance tier for airline bookings.'
-                            }}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div class="grid gap-4 py-4">
-                        <div class="space-y-1.5">
-                            <Label for="baggage-airline"
-                                >Airline (Optional)</Label
-                            >
-                            <Input
-                                id="baggage-airline"
-                                v-model="baggageForm.airline"
-                                placeholder="e.g. Cebu Pacific (Leave empty for all)"
-                            />
-                            <p class="text-xs text-muted-foreground">
-                                Leave blank to make this option available for
-                                all airlines.
-                            </p>
-                            <div
-                                v-if="baggageForm.errors.airline"
-                                class="text-xs text-destructive"
-                            >
-                                {{ baggageForm.errors.airline }}
-                            </div>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <Label for="baggage-label">Label</Label>
-                            <Input
-                                id="baggage-label"
-                                v-model="baggageForm.label"
-                                placeholder="e.g. +20 KG"
-                                required
-                            />
-                            <div
-                                v-if="baggageForm.errors.label"
-                                class="text-xs text-destructive"
-                            >
-                                {{ baggageForm.errors.label }}
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="space-y-1.5">
-                                <Label for="baggage-weight">Weight (KG)</Label>
-                                <Input
-                                    id="baggage-weight"
-                                    type="number"
-                                    min="0"
-                                    v-model="baggageForm.weight_kg"
-                                    required
-                                />
-                                <div
-                                    v-if="baggageForm.errors.weight_kg"
-                                    class="text-xs text-destructive"
-                                >
-                                    {{ baggageForm.errors.weight_kg }}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="hasDuplicateBaggageWarning"
-                            class="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400"
-                        >
-                            <AlertCircle class="size-4 shrink-0" />
-                            <span>
-                                Note: A baggage option for
-                                {{
-                                    baggageForm.airline
-                                        ? baggageForm.airline
-                                        : 'Universal'
-                                }}
-                                with {{ baggageForm.weight_kg }} KG already
-                                exists.
-                            </span>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <Label for="baggage-sort">Sort Order</Label>
-                            <Input
-                                id="baggage-sort"
-                                type="number"
-                                v-model="baggageForm.sort_order"
-                            />
-                            <div
-                                v-if="baggageForm.errors.sort_order"
-                                class="text-xs text-destructive"
-                            >
-                                {{ baggageForm.errors.sort_order }}
-                            </div>
-                        </div>
-
-                        <div class="flex items-center space-x-2 pt-1">
-                            <Checkbox
-                                id="baggage-active"
-                                :checked="baggageForm.is_active"
-                                @update:checked="baggageForm.is_active = $event"
-                            />
-                            <Label
-                                for="baggage-active"
-                                class="cursor-pointer font-normal"
-                            >
-                                Active (Visible in transaction forms)
-                            </Label>
-                        </div>
-                    </div>
-
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            @click="isBaggageModalOpen = false"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            :disabled="baggageForm.processing"
-                        >
-                            {{
-                                editingBaggageId
-                                    ? 'Save Changes'
-                                    : 'Create Option'
-                            }}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
 
         <!-- ============================================== -->
         <!-- MODAL: TICKETING MARKUP (CREATE / EDIT)        -->

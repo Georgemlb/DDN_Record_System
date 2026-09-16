@@ -12,7 +12,6 @@ import {
     ReceiptText,
     TrendingUp,
     Wallet,
-    WalletCards,
 } from '@lucide/vue';
 import {
     ArcElement,
@@ -79,6 +78,8 @@ const props = defineProps<{
         total_sales: number;
         total_ddn: number;
         total_expenses: number;
+        operating_expenses?: number;
+        portal_reloads?: number;
         net_profit: number;
         total_cash: number;
         total_gcash: number;
@@ -612,19 +613,19 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     </p>
                 </article>
 
-                <!-- Total Expenses -->
+                <!-- Operating Expenses -->
                 <article class="rounded-lg border bg-card p-5">
                     <div class="flex items-start justify-between">
                         <div>
                             <p
                                 class="text-sm font-medium text-muted-foreground"
                             >
-                                Total Expenses
+                                Operating Expenses
                             </p>
                             <p
                                 class="mt-3 text-2xl font-semibold tracking-tight"
                             >
-                                {{ formatPhp(kpis.total_expenses) }}
+                                {{ formatPhp(kpis.operating_expenses ?? kpis.total_expenses) }}
                             </p>
                         </div>
                         <span
@@ -633,9 +634,18 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                             <ReceiptText class="size-5" />
                         </span>
                     </div>
-                    <p class="mt-3 border-t pt-3 text-xs text-muted-foreground">
-                        All recorded business expenses
-                    </p>
+                    <div
+                        class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
+                    >
+                        <span>Operating overhead</span>
+                        <span
+                            v-if="kpis.portal_reloads && kpis.portal_reloads > 0"
+                            class="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                            :title="`Portal reloads: ${formatPhp(kpis.portal_reloads)}`"
+                        >
+                            +{{ formatPhp(kpis.portal_reloads) }} portal reloads
+                        </span>
+                    </div>
                 </article>
 
                 <!-- Net Profit -->
@@ -647,7 +657,7 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                             <p
                                 class="text-sm font-medium text-primary-foreground/75"
                             >
-                                Net Profit
+                                Net Operating Profit
                             </p>
                             <p class="mt-3 text-2xl font-bold tracking-tight">
                                 {{ formatPhp(kpis.net_profit) }}
@@ -662,7 +672,7 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     <p
                         class="mt-3 border-t border-primary-foreground/15 pt-3 text-xs text-primary-foreground/70"
                     >
-                        DDN Earnings minus Total Expenses
+                        DDN Earnings minus Operating Expenses
                     </p>
                 </article>
 
@@ -842,10 +852,10 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                 <Card class="lg:col-span-2">
                     <CardHeader>
                         <CardTitle class="text-base"
-                            >Expenses by Category</CardTitle
+                            >Operating Expenses by Category</CardTitle
                         >
                         <p class="text-sm text-muted-foreground">
-                            Breakdown for the period
+                            Operational overhead breakdown (excluding portal capital transfers)
                         </p>
                     </CardHeader>
                     <CardContent>

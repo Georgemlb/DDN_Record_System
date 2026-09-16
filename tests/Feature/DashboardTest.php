@@ -266,3 +266,66 @@ test('staff user sees counter register dashboard with live cash in box and exact
             ->missing('kpis')
         );
 });
+
+test('it excludes flight portal reload expenses from operating expenses and net profit', function () {
+    $user = User::factory()->create();
+    $now = Carbon::create(2026, 9, 15, 12, 0, 0);
+    Carbon::setTestNow($now);
+
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_AIRLINE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Airline Customer',
+        'pax' => 1,
+        'amount' => 6000.00,
+        'third_party_payment' => 5000.00,
+        'ddn_amount' => 1000.00,
+    ]);
+
+    $officeCat = ExpenseCategory::query()->create([
+        'name' => 'Office Rent',
+        'is_active' => true,
+    ]);
+
+    $portalReloadCat = ExpenseCategory::query()->create([
+        'name' => 'Flight Portal Reload',
+        'is_active' => true,
+    ]);
+
+    // Operating expense
+    Expense::query()->create([
+        'title' => 'Monthly Rent',
+        'expense_category_id' => $officeCat->id,
+        'amount' => 300.00,
+        'expense_date' => '2026-09-11',
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+    ]);
+
+    // Portal top up fund transfer
+    Expense::query()->create([
+        'title' => 'Portal Reload 50k',
+        'expense_category_id' => $portalReloadCat->id,
+        'amount' => 50000.00,
+        'expense_date' => '2026-09-11',
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Dashboard')
+            ->where('kpis.total_sales', 6000)
+            ->where('kpis.total_ddn', 1000)
+            ->where('kpis.total_expenses', 50300)
+            ->where('kpis.operating_expenses', 300)
+            ->where('kpis.portal_reloads', 50000)
+            ->where('kpis.net_profit', 700)
+            ->has('expensesByCategory', 1)
+            ->where('expensesByCategory.0.category', 'Office Rent')
+        );
+
+    Carbon::setTestNow();
+});
+

@@ -361,25 +361,6 @@ defineOptions({
                                 {{ transaction.service_details }}
                             </dd>
                         </div>
-                        <div>
-                            <dt class="text-muted-foreground">
-                                Additional Baggage
-                            </dt>
-                            <dd class="mt-1 font-medium">
-                                <span v-if="transaction.baggage_option">
-                                    <template
-                                        v-if="
-                                            transaction.baggage_option.airline
-                                        "
-                                    >
-                                        {{ transaction.baggage_option.airline }}
-                                        —
-                                    </template>
-                                    {{ transaction.baggage_option.label }}
-                                </span>
-                                <span v-else>None</span>
-                            </dd>
-                        </div>
                     </template>
 
                     <!-- Ferry Details -->

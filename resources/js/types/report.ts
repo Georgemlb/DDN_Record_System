@@ -61,6 +61,8 @@ export type FinancialSummary = {
     total_sales: number;
     total_ddn: number;
     total_expenses: number;
+    operating_expenses?: number;
+    portal_reloads?: number;
     net_profit: number;
     cash_sales: number;
     gcash_sales: number;

@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\AirlineMarkup;
-use App\Models\BaggageOption;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\OnlineAssistanceType;
@@ -9,7 +8,6 @@ use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\AirlineMarkupSeeder;
-use Database\Seeders\BaggageOptionSeeder;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
 use Database\Seeders\PsaRateSeeder;
@@ -21,7 +19,6 @@ uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
     $this->seed([
-        BaggageOptionSeeder::class,
         OnlineAssistanceTypeSeeder::class,
         ExpenseCategorySeeder::class,
         PsaRateSeeder::class,
@@ -41,75 +38,12 @@ test('an authenticated user can view configurations page with all master data', 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('configurations/Index')
-            ->has('baggageOptions')
             ->has('onlineAssistanceTypes')
             ->has('expenseCategories')
             ->has('psaRates')
             ->has('airlineMarkups')
             ->where('currentTab', 'online-assistance')
         );
-});
-
-test('an authenticated user can create, update, and delete a baggage option', function () {
-    $user = User::factory()->create();
-
-    // Create
-    $response = $this->actingAs($user)->post('/configurations/baggage-options', [
-        'airline' => 'Philippine Airlines',
-        'label' => '+25 KG',
-        'weight_kg' => 25,
-        'is_active' => true,
-        'sort_order' => 10,
-    ]);
-
-    $response->assertRedirect('/configurations?tab=baggage');
-    $this->assertDatabaseHas('baggage_options', [
-        'airline' => 'Philippine Airlines',
-        'label' => '+25 KG',
-        'weight_kg' => 25,
-    ]);
-
-    $option = BaggageOption::where('label', '+25 KG')->first();
-
-    // Update
-    $updateResponse = $this->actingAs($user)->put("/configurations/baggage-options/{$option->id}", [
-        'airline' => 'Philippine Airlines',
-        'label' => '+25 KG Extra',
-        'weight_kg' => 25,
-        'is_active' => false,
-        'sort_order' => 11,
-    ]);
-
-    $updateResponse->assertRedirect('/configurations?tab=baggage');
-    $this->assertDatabaseHas('baggage_options', [
-        'id' => $option->id,
-        'label' => '+25 KG Extra',
-        'is_active' => false,
-    ]);
-
-    // Delete (unused)
-    $deleteResponse = $this->actingAs($user)->delete("/configurations/baggage-options/{$option->id}");
-    $deleteResponse->assertRedirect('/configurations?tab=baggage');
-    $this->assertDatabaseMissing('baggage_options', ['id' => $option->id]);
-});
-
-test('an authenticated user cannot delete a baggage option if used in transactions', function () {
-    $user = User::factory()->create();
-    $option = BaggageOption::first();
-
-    Transaction::create([
-        'type' => Transaction::TYPE_AIRLINE,
-        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
-        'transaction_date' => '2026-08-28',
-        'customer_name' => 'Person 1',
-        'pax' => 1,
-        'amount' => '4500.00',
-        'baggage_option_id' => $option->id,
-    ]);
-
-    $response = $this->actingAs($user)->delete("/configurations/baggage-options/{$option->id}");
-    $response->assertRedirect('/configurations?tab=baggage');
-    $this->assertDatabaseHas('baggage_options', ['id' => $option->id]);
 });
 
 test('an authenticated user can create, update, and delete an online assistance type with disbursement details', function () {
@@ -253,10 +187,6 @@ test('legacy settings configuration routes redirect to configurations with tab q
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->get('/settings/baggage-options')
-        ->assertRedirect('/configurations?tab=baggage');
-
-    $this->actingAs($user)
         ->get('/settings/online-assistance-types')
         ->assertRedirect('/configurations?tab=online-assistance');
 
@@ -280,20 +210,6 @@ test('an authenticated user cannot create online assistance type with duplicate 
 
 test('submitting null or empty sort_order defaults safely to 0 across configuration entities', function () {
     $user = User::factory()->create();
-
-    // Baggage Option with null sort_order
-    $this->actingAs($user)->post('/configurations/baggage-options', [
-        'airline' => 'Test Air',
-        'label' => '+15 KG Test',
-        'weight_kg' => 15,
-        'price' => '800.00',
-        'sort_order' => null,
-    ])->assertRedirect('/configurations?tab=baggage');
-
-    $this->assertDatabaseHas('baggage_options', [
-        'label' => '+15 KG Test',
-        'sort_order' => 0,
-    ]);
 
     // Online Assistance Type with null sort_order
     $this->actingAs($user)->post('/configurations/online-assistance-types', [

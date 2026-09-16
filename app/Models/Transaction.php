@@ -37,7 +37,6 @@ use Illuminate\Support\Carbon;
  * @property string $amount_paid
  * @property string $balance
  * @property string $payment_status
- * @property BaggageOption|null $baggageOption
  * @property OnlineAssistanceType|null $onlineAssistanceType
  * @property User|null $user
  * @property Customer|null $customer
@@ -55,7 +54,6 @@ use Illuminate\Support\Carbon;
     'provider',
     'return_provider',
     'service_details',
-    'baggage_option_id',
     'psa_document_type',
     'copies',
     'online_assistance_type_id',
@@ -310,14 +308,6 @@ class Transaction extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(TransactionPayment::class);
-    }
-
-    /**
-     * @return BelongsTo<BaggageOption, $this>
-     */
-    public function baggageOption(): BelongsTo
-    {
-        return $this->belongsTo(BaggageOption::class);
     }
 
     public function onlineAssistanceType(): BelongsTo

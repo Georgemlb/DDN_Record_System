@@ -82,7 +82,6 @@ class TransactionRequest extends FormRequest
             $rules['return_provider'] = ['nullable', 'string', 'max:255'];
             $rules['flight_type'] = ['nullable', 'string', Rule::in(['local', 'international'])];
             $rules['carrier_category'] = ['nullable', 'string', Rule::in(Transaction::CARRIER_CATEGORIES)];
-            $rules['baggage_option_id'] = ['nullable', 'integer', 'exists:baggage_options,id'];
             $rules['service_details'] = ['nullable', 'string', 'max:1000'];
             $rules['third_party_payment'] = ['nullable', 'numeric', 'decimal:0,2', 'min:0', 'lte:amount'];
         } elseif ($type === Transaction::TYPE_FERRY) {

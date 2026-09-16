@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\AirlineMarkup;
-use App\Models\BaggageOption;
 use App\Models\ExpenseCategory;
 use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
@@ -15,15 +14,14 @@ class ConfigurationController extends Controller
 {
     public function index(Request $request): Response
     {
-        $allowedTabs = ['baggage', 'online-assistance', 'expense-categories', 'airline-markups', 'psa-rates'];
-        $tab = $request->query('tab', 'baggage');
+        $allowedTabs = ['airline-markups', 'online-assistance', 'expense-categories', 'psa-rates'];
+        $tab = $request->query('tab', 'airline-markups');
 
         if (! in_array($tab, $allowedTabs, true)) {
-            $tab = 'baggage';
+            $tab = 'airline-markups';
         }
 
         return Inertia::render('configurations/Index', [
-            'baggageOptions' => BaggageOption::orderBy('sort_order')->orderBy('weight_kg')->get(),
             'onlineAssistanceTypes' => OnlineAssistanceType::orderBy('sort_order')->orderBy('name')->get(),
             'expenseCategories' => ExpenseCategory::orderBy('sort_order')->orderBy('name')->get(),
             'airlineMarkups' => AirlineMarkup::orderBy('service_type')->orderBy('airline')->orderBy('flight_type')->get(),
