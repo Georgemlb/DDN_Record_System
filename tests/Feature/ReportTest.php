@@ -260,6 +260,87 @@ test('financial report calculates accurate metrics and breakdowns for date range
         );
 });
 
+test('financial report accounts for split payments and excludes personal expenses', function () {
+    $user = User::factory()->create();
+    $now = Carbon::create(2026, 9, 15, 12, 0, 0);
+    Carbon::setTestNow($now);
+
+    // Split payment transaction: 5,000 total (2,000 Cash + 3,000 GCash)
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_AIRLINE,
+        'payment_method' => Transaction::PAYMENT_METHOD_SPLIT,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Split Pay Customer',
+        'amount' => 5000.00,
+        'cash_amount' => 2000.00,
+        'gcash_amount' => 3000.00,
+        'ddn_amount' => 1500.00,
+    ]);
+
+    // Ferry transaction
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_FERRY,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-11',
+        'customer_name' => 'Ferry Passenger',
+        'amount' => 1200.00,
+        'ddn_amount' => 300.00,
+    ]);
+
+    // Remittance transaction
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_REMITTANCE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-12',
+        'customer_name' => 'Remittance Sender',
+        'amount' => 1000.00,
+        'ddn_amount' => 50.00,
+    ]);
+
+    $businessCat = ExpenseCategory::query()->create(['name' => 'Office Rent']);
+    $personalCat = ExpenseCategory::query()->create(['name' => 'Personal Errand']);
+
+    // Business expense
+    Expense::query()->create([
+        'expense_category_id' => $businessCat->id,
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'expense_date' => '2026-09-11',
+        'title' => 'Office Lease',
+        'amount' => 500.00,
+        'is_personal' => false,
+    ]);
+
+    // Personal expense (should be excluded)
+    Expense::query()->create([
+        'expense_category_id' => $personalCat->id,
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'expense_date' => '2026-09-11',
+        'title' => 'Personal dinner',
+        'amount' => 800.00,
+        'is_personal' => true,
+        'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('reports.index', ['period' => 'this_month']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('reports/Index')
+            ->where('financialReports.summary.total_sales', 7200) // 5000 + 1200 + 1000
+            ->where('financialReports.summary.total_ddn', 1850) // 1500 + 300 + 50
+            ->where('financialReports.summary.cash_sales', 4200) // 2000 (split) + 1200 (ferry) + 1000 (remittance)
+            ->where('financialReports.summary.gcash_sales', 3000) // 3000 (split)
+            ->where('financialReports.summary.total_expenses', 500) // Excludes 800 personal
+            ->where('financialReports.summary.operating_expenses', 500)
+            ->where('financialReports.summary.net_profit', 1350) // 1850 - 500
+            ->has('financialReports.servicesBreakdown', 7) // All 7 service types
+            ->has('financialReports.expensesBreakdown', 1) // Only Office Rent
+            ->where('financialReports.expensesBreakdown.0.category', 'Office Rent')
+        );
+
+    Carbon::setTestNow();
+});
+
 test('user can export financial report as CSV', function () {
     $user = User::factory()->create();
     $now = Carbon::create(2026, 9, 15, 12, 0, 0);
@@ -288,6 +369,8 @@ test('user can export financial report as CSV', function () {
     expect($csvContent)->toContain('FINANCIAL SUMMARY');
     expect($csvContent)->toContain('Total Sales (Gross Payments)');
     expect($csvContent)->toContain('SERVICE BREAKDOWN');
+    expect($csvContent)->toContain('Ferry');
+    expect($csvContent)->toContain('Remittance');
     expect($csvContent)->toContain('EXPENSES BREAKDOWN BY CATEGORY');
 });
 

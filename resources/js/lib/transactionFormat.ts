@@ -39,6 +39,7 @@ export const formatTransactionType = (
         psa: 'PSA Assistance',
         online_assistance: 'Online Assistance',
         printing: 'Printing',
+        remittance: 'Remittance',
     };
 
     return labels[type] || type;
