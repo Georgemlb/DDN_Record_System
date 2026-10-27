@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowDown,
     ArrowUp,
@@ -15,7 +15,7 @@ import {
     Trash2,
     UserCheck,
 } from '@lucide/vue';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Pagination from '@/components/Pagination.vue';
 import ReimburseExpenseModal from '@/components/ReimburseExpenseModal.vue';
 import { Badge } from '@/components/ui/badge';
@@ -96,6 +96,30 @@ const status = ref<ExpenseTabStatus>(
 
 const reimburseModalOpen = ref(false);
 const expenseToReimburse = ref<Expense | null>(null);
+
+const page = usePage();
+const currentUser = computed(() => page.props.auth?.user);
+
+const canModify = (expense: Expense): boolean => {
+    if (!currentUser.value) {
+        return false;
+    }
+
+    if (
+        currentUser.value.role === 'admin' ||
+        currentUser.value.role === 'tech_admin'
+    ) {
+        return true;
+    }
+
+    const isOwner = expense.user_id === currentUser.value.id;
+    const createdDate = expense.created_at
+        ? new Date(expense.created_at).toDateString()
+        : '';
+    const todayDate = new Date().toDateString();
+
+    return isOwner && createdDate === todayDate;
+};
 
 const openReimburseModal = (expense: Expense) => {
     expenseToReimburse.value = expense;
@@ -775,6 +799,7 @@ const toggleSort = (field: string) => {
                                         </Link>
                                     </Button>
                                     <Button
+                                        v-if="canModify(expense)"
                                         variant="ghost"
                                         size="sm"
                                         as-child

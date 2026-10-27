@@ -334,6 +334,7 @@ const toggleSort = (field: string) => {
                         <SelectItem value="online_assistance"
                             >Online Assistance</SelectItem
                         >
+                        <SelectItem value="remittance">Remittance</SelectItem>
                         <SelectItem value="printing"
                             >Printing & Services</SelectItem
                         >

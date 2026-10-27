@@ -506,6 +506,56 @@ defineOptions({
                             <dd class="mt-1 font-medium">Printing Service</dd>
                         </div>
                     </template>
+
+                    <!-- Remittance Details -->
+                    <template v-if="transaction.type === 'remittance'">
+                        <div>
+                            <dt class="text-muted-foreground">
+                                Remittance Direction
+                            </dt>
+                            <dd class="mt-1 font-medium">
+                                <span
+                                    v-if="
+                                        transaction.service_details ===
+                                        'GCASH_CASH_OUT'
+                                    "
+                                    class="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-400"
+                                >
+                                    GCash Cash-Out (Dispensed Cash)
+                                </span>
+                                <span
+                                    v-else-if="
+                                        transaction.service_details ===
+                                        'GCASH_CASH_IN'
+                                    "
+                                    class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+                                >
+                                    GCash Cash-In (Transferred GCash)
+                                </span>
+                                <span v-else>
+                                    {{
+                                        transaction.service_details ||
+                                        'Remittance'
+                                    }}
+                                </span>
+                            </dd>
+                        </div>
+                        <div
+                            v-if="
+                                transaction.ddn_amount &&
+                                Number(transaction.ddn_amount) > 0
+                            "
+                        >
+                            <dt class="text-muted-foreground">
+                                Service / Convenience Fee
+                            </dt>
+                            <dd
+                                class="mt-1 font-medium text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(transaction.ddn_amount) }}
+                            </dd>
+                        </div>
+                    </template>
                 </dl>
             </article>
 
