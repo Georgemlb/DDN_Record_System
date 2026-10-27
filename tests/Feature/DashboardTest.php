@@ -328,4 +328,3 @@ test('it excludes flight portal reload expenses from operating expenses and net 
 
     Carbon::setTestNow();
 });
-
