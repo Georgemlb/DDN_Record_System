@@ -328,3 +328,67 @@ test('it excludes flight portal reload expenses from operating expenses and net 
 
     Carbon::setTestNow();
 });
+
+test('it excludes personal expenses from operating expenses and net profit', function () {
+    $user = User::factory()->create();
+    $now = Carbon::create(2026, 9, 15, 12, 0, 0);
+    Carbon::setTestNow($now);
+
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_AIRLINE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Airline Customer',
+        'pax' => 1,
+        'amount' => 5000.00,
+        'ddn_amount' => 2000.00,
+    ]);
+
+    $officeCat = ExpenseCategory::query()->create([
+        'name' => 'Office Supplies',
+        'is_active' => true,
+    ]);
+
+    $personalCat = ExpenseCategory::query()->create([
+        'name' => 'Personal Errand',
+        'is_active' => true,
+    ]);
+
+    // Business Operating expense
+    Expense::query()->create([
+        'title' => 'Paper and pens',
+        'expense_category_id' => $officeCat->id,
+        'amount' => 400.00,
+        'expense_date' => '2026-09-11',
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'is_personal' => false,
+    ]);
+
+    // Personal expense (should be excluded from total/operating expenses, net profit, and category breakdown)
+    Expense::query()->create([
+        'title' => 'Personal groceries',
+        'expense_category_id' => $personalCat->id,
+        'amount' => 1200.00,
+        'expense_date' => '2026-09-11',
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+        'is_personal' => true,
+        'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Dashboard')
+            ->where('kpis.total_sales', 5000)
+            ->where('kpis.total_ddn', 2000)
+            ->where('kpis.total_expenses', 400)
+            ->where('kpis.operating_expenses', 400)
+            ->where('kpis.portal_reloads', 0)
+            ->where('kpis.net_profit', 1600) // 2000 - 400
+            ->has('expensesByCategory', 1)
+            ->where('expensesByCategory.0.category', 'Office Supplies')
+        );
+
+    Carbon::setTestNow();
+});

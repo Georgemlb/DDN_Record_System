@@ -148,6 +148,7 @@ class DashboardController extends Controller
         }
 
         $expenseQuery = Expense::query()
+            ->business()
             ->whereBetween('expense_date', [$startDate, $endDate]);
 
         $totalExpenses = (float) (clone $expenseQuery)->sum('amount');

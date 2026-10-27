@@ -493,7 +493,7 @@ class ReportController extends Controller
     {
         $transactions = Transaction::query()
             ->whereBetween('transaction_date', [$startDate, $endDate])
-            ->get(['type', 'payment_method', 'amount', 'ddn_amount']);
+            ->get(['type', 'payment_method', 'amount', 'ddn_amount', 'cash_amount', 'gcash_amount']);
 
         $totalSales = 0.0;
         $totalDdn = 0.0;
@@ -502,10 +502,12 @@ class ReportController extends Controller
 
         $servicesGrouped = [
             Transaction::TYPE_AIRLINE => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
+            Transaction::TYPE_FERRY => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
             Transaction::TYPE_TRANSLATION => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
             Transaction::TYPE_PSA => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
             Transaction::TYPE_ONLINE_ASSISTANCE => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
             Transaction::TYPE_PRINTING => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
+            Transaction::TYPE_REMITTANCE => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
         ];
 
         foreach ($transactions as $tx) {
@@ -519,6 +521,9 @@ class ReportController extends Controller
                 $cashSales += $amount;
             } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
                 $gcashSales += $amount;
+            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashSales += (float) ($tx->cash_amount ?? 0);
+                $gcashSales += (float) ($tx->gcash_amount ?? 0);
             }
 
             if (isset($servicesGrouped[$tx->type])) {
@@ -530,6 +535,7 @@ class ReportController extends Controller
 
         $expenses = Expense::query()
             ->with('category:id,name')
+            ->business()
             ->whereBetween('expense_date', [$startDate, $endDate])
             ->get(['expense_category_id', 'payment_method', 'amount']);
 
