@@ -1096,10 +1096,14 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
                             />
                             <div class="space-y-0.5">
                                 <span class="text-sm leading-none font-medium"
-                                    >Record as Drawer Cash-Out / Fund Transfer</span
+                                    >Record as Drawer Cash-Out / Fund
+                                    Transfer</span
                                 >
                                 <p class="text-xs text-muted-foreground">
-                                    Records cash-out under "Flight Portal Reload" in the Daily Cash Settlement. Excluded from operating expenses and net profit.
+                                    Records cash-out under "Flight Portal
+                                    Reload" in the Daily Cash Settlement.
+                                    Excluded from operating expenses and net
+                                    profit.
                                 </p>
                             </div>
                         </label>

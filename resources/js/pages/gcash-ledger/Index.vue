@@ -163,7 +163,10 @@ const submitAdjustment = () => {
         .transform((data) => ({
             ...data,
             amount: signedAmount.toFixed(2),
-            from_drawer: adjustmentDirection.value === 'credit' ? data.from_drawer : false,
+            from_drawer:
+                adjustmentDirection.value === 'credit'
+                    ? data.from_drawer
+                    : false,
             is_balance_anchor: isAdjAnchor.value,
             running_balance:
                 isAdjAnchor.value && data.running_balance
@@ -1007,7 +1010,9 @@ const moveEntry = (entry: GcashLedgerEntry, direction: 'up' | 'down') => {
                                     Funded from Cash Drawer (Top-Up)
                                 </Label>
                                 <p class="text-muted-foreground">
-                                    Records a physical cash withdrawal from the drawer (-Cash Drawer) to reload into office GCash (+GCash Wallet).
+                                    Records a physical cash withdrawal from the
+                                    drawer (-Cash Drawer) to reload into office
+                                    GCash (+GCash Wallet).
                                 </p>
                             </div>
                         </div>

@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\AirlineMarkup;
-use App\Models\BaggageOption;
 use App\Models\Customer;
 use App\Models\DailySettlement;
 use App\Models\Expense;
@@ -100,7 +99,6 @@ class FreshStartResetCommand extends Command
             ['PSA Rates', PsaRate::count(), 'Preserved'],
             ['Online Assistance Types', OnlineAssistanceType::count(), 'Preserved'],
             ['Expense Categories', ExpenseCategory::count(), 'Preserved'],
-            ['Baggage Options', BaggageOption::count(), 'Preserved'],
         ];
 
         $this->table(['Table / Model', 'Current Count', 'Status'], $counts);
