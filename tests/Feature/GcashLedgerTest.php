@@ -410,3 +410,96 @@ test('translation transaction with gcash disbursement records translator fee out
         'notes' => 'Translator fee disbursement for Translation Client GCash',
     ]);
 });
+
+test('subsequent balance collection via gcash syncs accurately to gcash ledger on payment date', function () {
+    $user = User::factory()->create();
+
+    // 1. Initial transaction created with cash downpayment of 500 out of 1,500 total
+    $transaction = Transaction::query()->create([
+        'user_id' => $user->id,
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Downpayment Client',
+        'amount' => 1500.00,
+        'amount_paid' => 500.00,
+        'balance' => 1000.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+        'ddn_amount' => 1500.00,
+    ]);
+
+    // Initial cash downpayment produces 0 gcash ledger entries
+    expect(GcashLedgerEntry::where('transaction_id', $transaction->id)->count())->toBe(0);
+
+    // 2. Client returns on 2026-09-10 to collect item and pays 1,000 remaining balance via GCash
+    $response = $this->actingAs($user)->post(route('transactions.payments.store', $transaction->id), [
+        'amount' => 1000.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-10',
+        'notes' => 'Remaining balance collected via GCash on pickup',
+    ]);
+
+    $response->assertSessionHasNoErrors();
+    $response->assertRedirect();
+
+    // Check that a GCash ledger entry was created on 2026-09-10 for 1,000
+    $entries = GcashLedgerEntry::where('transaction_id', $transaction->id)
+        ->where('type', GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT)
+        ->get();
+
+    expect($entries)->toHaveCount(1);
+    $entry = $entries->first();
+    expect((float) $entry->amount)->toBe(1000.00);
+    expect($entry->entry_date->toDateString())->toBe('2026-09-10');
+    expect($entry->notes)->toContain('Payment from Downpayment Client');
+    expect($entry->notes)->toContain('Remaining balance collected via GCash on pickup');
+});
+
+test('transaction with initial gcash downpayment and subsequent gcash balance collection records both entries', function () {
+    $user = User::factory()->create();
+
+    // 1. Transaction with GCash downpayment of 1,000 out of 2,500
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Dual GCash Client',
+        'amount' => 2500.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+        'amount_paid' => 1000.00,
+    ]);
+
+    $response->assertSessionHasNoErrors();
+    $transaction = Transaction::where('customer_name', 'Dual GCash Client')->first();
+    expect($transaction)->not->toBeNull();
+
+    // First payment entry on 2026-09-08 for 1,000
+    $firstEntries = GcashLedgerEntry::where('transaction_id', $transaction->id)
+        ->where('type', GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT)
+        ->get();
+    expect($firstEntries)->toHaveCount(1);
+    expect((float) $firstEntries->first()->amount)->toBe(1000.00);
+    expect($firstEntries->first()->entry_date->toDateString())->toBe('2026-09-08');
+
+    // 2. Client pays remaining 1,500 balance via GCash on 2026-09-12
+    $responsePayment = $this->actingAs($user)->post(route('transactions.payments.store', $transaction->id), [
+        'amount' => 1500.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-12',
+        'notes' => 'Pickup balance via GCash',
+    ]);
+
+    $responsePayment->assertSessionHasNoErrors();
+
+    // Now both entries must exist on their respective dates
+    $allEntries = GcashLedgerEntry::where('transaction_id', $transaction->id)
+        ->where('type', GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT)
+        ->orderBy('entry_date')
+        ->get();
+
+    expect($allEntries)->toHaveCount(2);
+    expect((float) $allEntries[0]->amount)->toBe(1000.00);
+    expect($allEntries[0]->entry_date->toDateString())->toBe('2026-09-08');
+    expect((float) $allEntries[1]->amount)->toBe(1500.00);
+    expect($allEntries[1]->entry_date->toDateString())->toBe('2026-09-12');
+});
