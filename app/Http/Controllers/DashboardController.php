@@ -108,20 +108,24 @@ class DashboardController extends Controller
 
         // Accurate Cash & GCash collections for the period via TransactionPayment
         $periodPaymentCash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('payment_method', Transaction::PAYMENT_METHOD_CASH)
             ->sum('amount');
         $periodPaymentSplitCash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
             ->sum('cash_amount');
         $totalPeriodCash = $periodPaymentCash + $periodPaymentSplitCash;
 
         $periodPaymentGcash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)
             ->sum('amount');
         $periodPaymentSplitGcash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
             ->sum('gcash_amount');
