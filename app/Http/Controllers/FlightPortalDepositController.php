@@ -6,6 +6,7 @@ use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\FlightPortalDeposit;
+use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -177,6 +178,8 @@ class FlightPortalDepositController extends Controller
 
             $expenseId = $expense->id;
 
+            GcashLedgerEntry::syncForExpense($expense);
+
             // Sync daily settlement if exists
             DailySettlement::syncForDate($validated['entry_date']);
         }
@@ -287,6 +290,8 @@ class FlightPortalDepositController extends Controller
                 $expense->notes = $validated['notes'] ?? null;
                 $expense->save();
 
+                GcashLedgerEntry::syncForExpense($expense);
+
                 if ($oldDate) {
                     DailySettlement::syncForDate($oldDate);
                 }
@@ -359,7 +364,10 @@ class FlightPortalDepositController extends Controller
 
         // If it was linked to an expense, soft delete the expense as well
         if ($deposit->expense) {
+            $expenseId = $deposit->expense->id;
             $deposit->expense->delete();
+            GcashLedgerEntry::where('expense_id', $expenseId)->delete();
+            GcashLedgerEntry::recalculateRunningBalances();
             DailySettlement::syncForDate($deposit->entry_date->toDateString());
         }
 

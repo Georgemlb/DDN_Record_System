@@ -233,7 +233,10 @@ const submitEdit = () => {
     }
 
     const signedAmount =
-        editAdjustmentDirection.value === 'debit' ? -rawAmount : rawAmount;
+        entryToEdit.value.type === 'adjustment' &&
+        editAdjustmentDirection.value === 'debit'
+            ? -rawAmount
+            : rawAmount;
 
     editForm
         .transform((data) => ({
@@ -579,23 +582,20 @@ const moveEntry = (entry: GcashLedgerEntry, direction: 'up' | 'down') => {
                                 <SelectItem value="remittance_cash_in"
                                     >Cash-In (Outflow -)</SelectItem
                                 >
-                                <SelectItem value="online_assistance"
-                                    >Gov Fee (Outflow -)</SelectItem
-                                >
-                                <SelectItem value="direct_payment"
+                                <SelectItem value="customer_payment"
                                     >Customer Payment (+)</SelectItem
                                 >
-                                <SelectItem value="direct_expense"
+                                <SelectItem value="government_disbursement"
+                                    >Gov Disbursement (-)</SelectItem
+                                >
+                                <SelectItem value="expense_payment"
                                     >GCash Expense (-)</SelectItem
                                 >
-                                <SelectItem value="cash_transfer"
-                                    >Cash Transfer (+)</SelectItem
-                                >
-                                <SelectItem value="bank_transfer"
-                                    >Bank Transfer (+)</SelectItem
+                                <SelectItem value="portal_reload"
+                                    >Portal Reload (-)</SelectItem
                                 >
                                 <SelectItem value="adjustment"
-                                    >Adjustments</SelectItem
+                                    >Adjustments (+/-)</SelectItem
                                 >
                             </SelectContent>
                         </Select>
@@ -1159,6 +1159,42 @@ const moveEntry = (entry: GcashLedgerEntry, direction: 'up' | 'down') => {
                 </DialogHeader>
 
                 <form @submit.prevent="submitEdit" class="space-y-4 py-2">
+                    <!-- Adjustment Direction -->
+                    <div
+                        v-if="entryToEdit?.type === 'adjustment'"
+                        class="space-y-1.5"
+                    >
+                        <Label>Direction</Label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <Button
+                                type="button"
+                                :variant="
+                                    editAdjustmentDirection === 'credit'
+                                        ? 'default'
+                                        : 'outline'
+                                "
+                                class="w-full gap-2"
+                                @click="editAdjustmentDirection = 'credit'"
+                            >
+                                <Plus class="size-4" />
+                                <span>Inflow / Credit (+)</span>
+                            </Button>
+                            <Button
+                                type="button"
+                                :variant="
+                                    editAdjustmentDirection === 'debit'
+                                        ? 'destructive'
+                                        : 'outline'
+                                "
+                                class="w-full gap-2"
+                                @click="editAdjustmentDirection = 'debit'"
+                            >
+                                <Minus class="size-4" />
+                                <span>Outflow / Debit (-)</span>
+                            </Button>
+                        </div>
+                    </div>
+
                     <!-- Amount -->
                     <div class="space-y-1.5">
                         <Label for="edit_amount">

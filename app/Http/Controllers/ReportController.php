@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\Transaction;
+use App\Models\TransactionPayment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -497,8 +498,6 @@ class ReportController extends Controller
 
         $totalSales = 0.0;
         $totalDdn = 0.0;
-        $cashSales = 0.0;
-        $gcashSales = 0.0;
 
         $servicesGrouped = [
             Transaction::TYPE_AIRLINE => ['count' => 0, 'total_sales' => 0.0, 'total_ddn' => 0.0],
@@ -517,19 +516,56 @@ class ReportController extends Controller
             $totalSales += $amount;
             $totalDdn += $ddn;
 
-            if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
-                $cashSales += $amount;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $gcashSales += $amount;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-                $cashSales += (float) ($tx->cash_amount ?? 0);
-                $gcashSales += (float) ($tx->gcash_amount ?? 0);
-            }
-
             if (isset($servicesGrouped[$tx->type])) {
                 $servicesGrouped[$tx->type]['count']++;
                 $servicesGrouped[$tx->type]['total_sales'] += $amount;
                 $servicesGrouped[$tx->type]['total_ddn'] += $ddn;
+            }
+        }
+
+        // Accurate Cash & GCash collections for the period via TransactionPayment
+        $periodPaymentCash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->where('payment_method', Transaction::PAYMENT_METHOD_CASH)
+            ->sum('amount');
+        $periodPaymentSplitCash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
+            ->sum('cash_amount');
+        $cashSales = $periodPaymentCash + $periodPaymentSplitCash;
+
+        $periodPaymentGcash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)
+            ->sum('amount');
+        $periodPaymentSplitGcash = (float) TransactionPayment::query()
+            ->whereHas('transaction')
+            ->whereBetween('payment_date', [$startDate, $endDate])
+            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
+            ->sum('gcash_amount');
+        $gcashSales = $periodPaymentGcash + $periodPaymentSplitGcash;
+
+        // Fallback for transactions in range without payments
+        $fallbackTransactions = Transaction::query()
+            ->whereBetween('transaction_date', [$startDate, $endDate])
+            ->whereDoesntHave('payments')
+            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'amount_paid', 'payment_status']);
+
+        foreach ($fallbackTransactions as $tx) {
+            $amt = $tx->amount_paid !== null && (float) $tx->amount_paid > 0
+                ? (float) $tx->amount_paid
+                : ($tx->payment_status === Transaction::PAYMENT_STATUS_UNPAID ? 0.0 : (float) $tx->amount);
+
+            if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
+                $cashSales += $amt;
+            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
+                $gcashSales += $amt;
+            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $cashSales += (float) ($tx->cash_amount ?? 0);
+                $gcashSales += (float) ($tx->gcash_amount ?? 0);
             }
         }
 

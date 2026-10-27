@@ -503,3 +503,131 @@ test('transaction with initial gcash downpayment and subsequent gcash balance co
     expect((float) $allEntries[1]->amount)->toBe(1500.00);
     expect($allEntries[1]->entry_date->toDateString())->toBe('2026-09-12');
 });
+
+test('gcash ledger index filters accurately by canonical entry types', function () {
+    $user = User::factory()->create();
+
+    GcashLedgerEntry::create([
+        'user_id' => $user->id,
+        'type' => GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT,
+        'amount' => 500.00,
+        'entry_date' => '2026-09-10',
+        'notes' => 'Customer GCash payment',
+    ]);
+
+    GcashLedgerEntry::create([
+        'user_id' => $user->id,
+        'type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT,
+        'amount' => 180.00,
+        'entry_date' => '2026-09-10',
+        'notes' => 'Gov fee disbursement',
+    ]);
+
+    GcashLedgerEntry::create([
+        'user_id' => $user->id,
+        'type' => GcashLedgerEntry::TYPE_PORTAL_RELOAD,
+        'amount' => 10000.00,
+        'entry_date' => '2026-09-10',
+        'notes' => 'Portal reload via GCash',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('gcash-ledger.index', ['type' => GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('entries.data', 1)
+            ->where('entries.data.0.type', GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT)
+        );
+
+    $this->actingAs($user)
+        ->get(route('gcash-ledger.index', ['type' => GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('entries.data', 1)
+            ->where('entries.data.0.type', GcashLedgerEntry::TYPE_GOVERNMENT_DISBURSEMENT)
+        );
+
+    $this->actingAs($user)
+        ->get(route('gcash-ledger.index', ['type' => GcashLedgerEntry::TYPE_PORTAL_RELOAD]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('entries.data', 1)
+            ->where('entries.data.0.type', GcashLedgerEntry::TYPE_PORTAL_RELOAD)
+        );
+});
+
+test('reordering same-day gcash ledger entries normalizes sort order and updates running balances', function () {
+    $user = User::factory()->create();
+
+    // Both entries initially have tied sort_order = 1 on the same date
+    $entry1 = GcashLedgerEntry::create([
+        'user_id' => $user->id,
+        'type' => GcashLedgerEntry::TYPE_CUSTOMER_PAYMENT,
+        'amount' => 1000.00,
+        'entry_date' => '2026-09-10',
+        'sort_order' => 1,
+        'notes' => 'First payment',
+    ]);
+
+    $entry2 = GcashLedgerEntry::create([
+        'user_id' => $user->id,
+        'type' => GcashLedgerEntry::TYPE_EXPENSE_PAYMENT,
+        'amount' => 400.00,
+        'entry_date' => '2026-09-10',
+        'sort_order' => 1,
+        'notes' => 'Expense outflow',
+    ]);
+
+    GcashLedgerEntry::recalculateRunningBalances();
+
+    // Move entry2 up in asc order (so it runs before entry1)
+    $this->actingAs($user)
+        ->post(route('gcash-ledger.move', $entry2), [
+            'direction' => 'up',
+            'table_direction' => 'asc',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $entry1->refresh();
+    $entry2->refresh();
+
+    expect($entry2->sort_order)->toBeLessThan($entry1->sort_order);
+    expect((float) $entry2->running_balance)->toBe(-400.00);
+    expect((float) $entry1->running_balance)->toBe(600.00);
+});
+
+test('editing a gcash top-up from drawer expense preserves and updates the linked adjustment entry', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('gcash-ledger.adjustment'), [
+            'amount' => 1000.00,
+            'entry_date' => '2026-09-10',
+            'notes' => 'Reload GCash from cash drawer',
+            'from_drawer' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $entry = GcashLedgerEntry::where('type', GcashLedgerEntry::TYPE_ADJUSTMENT)->first();
+    expect($entry)->not->toBeNull();
+    expect($entry->expense_id)->not->toBeNull();
+    $expense = Expense::find($entry->expense_id);
+
+    // Edit the linked cash expense amount from 1000 to 1500
+    $this->actingAs($user)
+        ->put(route('expenses.update', $expense), [
+            'title' => $expense->title,
+            'expense_category_id' => $expense->expense_category_id,
+            'amount' => '1500.00',
+            'expense_date' => '2026-09-10',
+            'payment_method' => Expense::PAYMENT_METHOD_CASH,
+            'payee' => $expense->payee,
+            'notes' => $expense->notes,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $entry->refresh();
+    expect($entry->trashed())->toBeFalse();
+    expect((float) $entry->amount)->toBe(1500.00);
+    expect(GcashLedgerEntry::getCurrentBalance())->toBe(1500.00);
+});

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\FlightPortalDeposit;
+use App\Models\GcashLedgerEntry;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -676,4 +677,53 @@ test('moving entry beyond boundaries on same date safely does nothing', function
     $entry1->refresh();
     $entry2->refresh();
     expect($entry1->sort_order)->toBeLessThan($entry2->sort_order);
+});
+
+test('portal top-up funded via gcash syncs with gcash ledger on create, update, and delete', function () {
+    $admin = User::factory()->create();
+
+    // 1. Create Portal Top-Up via GCash with record_as_expense = true
+    $this->actingAs($admin)
+        ->post(route('portal-deposits.top-up'), [
+            'amount' => 15000.00,
+            'entry_date' => '2026-09-10',
+            'payment_source' => 'gcash',
+            'reference_number' => 'GC-PORTAL-01',
+            'notes' => 'Reload portal via GCash',
+            'record_as_expense' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $deposit = FlightPortalDeposit::where('reference_number', 'GC-PORTAL-01')->first();
+    expect($deposit)->not->toBeNull();
+    expect($deposit->expense_id)->not->toBeNull();
+
+    // Verify GCash ledger recorded portal_reload outflow of 15,000
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'expense_id' => $deposit->expense_id,
+        'type' => GcashLedgerEntry::TYPE_PORTAL_RELOAD,
+        'amount' => 15000.00,
+        'deleted_at' => null,
+    ]);
+    expect(GcashLedgerEntry::getCurrentBalance())->toEqual(-15000.00);
+
+    // 2. Update Top-Up amount to 20,000
+    $this->actingAs($admin)
+        ->put(route('portal-deposits.update', $deposit), [
+            'amount' => 20000.00,
+            'entry_date' => '2026-09-10',
+            'payment_source' => 'gcash',
+            'reference_number' => 'GC-PORTAL-01',
+            'notes' => 'Updated reload amount',
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(GcashLedgerEntry::getCurrentBalance())->toEqual(-20000.00);
+
+    // 3. Delete Top-Up and verify GCash ledger entry is soft-deleted and balance restored
+    $this->actingAs($admin)
+        ->delete(route('portal-deposits.destroy', $deposit))
+        ->assertSessionHasNoErrors();
+
+    expect(GcashLedgerEntry::getCurrentBalance())->toEqual(0.00);
 });
