@@ -1,6 +1,10 @@
 export type GcashLedgerEntryType =
+    | 'customer_payment'
     | 'remittance_cash_in'
     | 'remittance_cash_out'
+    | 'government_disbursement'
+    | 'expense_payment'
+    | 'portal_reload'
     | 'online_assistance'
     | 'direct_payment'
     | 'direct_expense'

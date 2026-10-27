@@ -224,6 +224,8 @@ class GcashLedgerController extends Controller
             'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
         ]);
 
+        $oldDate = $entry->entry_date?->toDateString();
+
         $entry->amount = $validated['amount'];
         $entry->entry_date = $validated['entry_date'];
         $entry->notes = $validated['notes'] ?? null;
@@ -237,7 +239,17 @@ class GcashLedgerController extends Controller
 
         $entry->save();
 
+        if ($entry->type === GcashLedgerEntry::TYPE_ADJUSTMENT && $entry->expense) {
+            $entry->expense->amount = abs((float) $validated['amount']);
+            $entry->expense->expense_date = $validated['entry_date'];
+            $entry->expense->save();
+        }
+
         GcashLedgerEntry::recalculateRunningBalances();
+
+        if ($oldDate && $oldDate !== $validated['entry_date']) {
+            DailySettlement::syncForDate($oldDate);
+        }
         DailySettlement::syncForDate($validated['entry_date']);
 
         Inertia::flash('toast', [
@@ -286,37 +298,66 @@ class GcashLedgerController extends Controller
             'table_direction' => ['nullable', 'string', 'in:asc,desc'],
         ]);
 
-        $direction = $validated['direction'];
+        $visualDirection = $validated['direction'];
         $tableDirection = $validated['table_direction'] ?? 'desc';
         $entryDate = $entry->entry_date->toDateString();
 
-        $desiredOrder = $direction === 'up'
-            ? ($tableDirection === 'desc' ? 'asc' : 'desc')
-            : ($tableDirection === 'desc' ? 'desc' : 'asc');
+        $dayEntries = GcashLedgerEntry::whereDate('entry_date', $entryDate)
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
 
-        if ($desiredOrder === 'asc') {
-            $adjacent = GcashLedgerEntry::whereDate('entry_date', $entryDate)
-                ->where('sort_order', '>', $entry->sort_order)
-                ->orderBy('sort_order', 'asc')
-                ->first();
-        } else {
-            $adjacent = GcashLedgerEntry::whereDate('entry_date', $entryDate)
-                ->where('sort_order', '<', $entry->sort_order)
-                ->orderBy('sort_order', 'desc')
-                ->first();
+        if ($dayEntries->count() <= 1) {
+            return back();
         }
 
-        if ($adjacent) {
-            $currentSort = $entry->sort_order;
-            $adjacentSort = $adjacent->sort_order;
+        // Re-normalize sort_orders to 1, 2, 3... to avoid ties or gaps
+        foreach ($dayEntries as $index => $item) {
+            $expectedOrder = $index + 1;
+            if ($item->sort_order !== $expectedOrder) {
+                $item->sort_order = $expectedOrder;
+                $item->saveQuietly();
+            }
+        }
 
-            $entry->sort_order = $adjacentSort;
-            $entry->save();
+        $currentIndex = $dayEntries->search(fn ($item) => $item->id === $entry->id);
 
-            $adjacent->sort_order = $currentSort;
-            $adjacent->save();
+        if ($currentIndex === false) {
+            return back();
+        }
+
+        $targetIndex = null;
+        if ($tableDirection === 'desc') {
+            if ($visualDirection === 'up' && $currentIndex < $dayEntries->count() - 1) {
+                $targetIndex = $currentIndex + 1;
+            } elseif ($visualDirection === 'down' && $currentIndex > 0) {
+                $targetIndex = $currentIndex - 1;
+            }
+        } else {
+            if ($visualDirection === 'up' && $currentIndex > 0) {
+                $targetIndex = $currentIndex - 1;
+            } elseif ($visualDirection === 'down' && $currentIndex < $dayEntries->count() - 1) {
+                $targetIndex = $currentIndex + 1;
+            }
+        }
+
+        if ($targetIndex !== null) {
+            $currentItem = $dayEntries[$currentIndex];
+            $sibling = $dayEntries[$targetIndex];
+
+            $currentOrder = $currentItem->sort_order;
+            $currentItem->sort_order = $sibling->sort_order;
+            $sibling->sort_order = $currentOrder;
+
+            $currentItem->saveQuietly();
+            $sibling->saveQuietly();
 
             GcashLedgerEntry::recalculateRunningBalances();
+
+            Inertia::flash('toast', [
+                'type' => 'success',
+                'message' => 'Entry order updated. Balances recalculated.',
+            ]);
         }
 
         return back();

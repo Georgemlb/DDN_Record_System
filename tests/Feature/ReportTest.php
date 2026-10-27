@@ -758,3 +758,55 @@ test('daily settlement accounts for employee share as cash out on cash transacti
     // DDN earnings is 150
     expect((float) $metrics['total_ddn_earnings'])->toBe(150.00);
 });
+
+test('financial report excludes unpaid transactions from collections and attributes multi-payment collections accurately', function () {
+    $user = User::factory()->create();
+    $now = Carbon::create(2026, 9, 15, 12, 0, 0);
+    Carbon::setTestNow($now);
+
+    // 1. Unpaid transaction (amount = 2,000, amount_paid = 0) -> should NOT inflate cash_sales
+    Transaction::query()->create([
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_UNPAID,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Unpaid Client',
+        'amount' => 2000.00,
+        'amount_paid' => 0.00,
+        'balance' => 2000.00,
+        'ddn_amount' => 2000.00,
+    ]);
+
+    // 2. Multi-payment transaction: 1,500 total, 500 Cash downpayment on 2026-09-10 + 1,000 GCash pickup on 2026-09-12
+    $multiTx = Transaction::query()->create([
+        'user_id' => $user->id,
+        'type' => Transaction::TYPE_TRANSLATION,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Multi Pay Client',
+        'amount' => 1500.00,
+        'amount_paid' => 500.00,
+        'balance' => 1000.00,
+        'ddn_amount' => 1000.00,
+    ]);
+
+    $this->actingAs($user)->post(route('transactions.payments.store', $multiTx->id), [
+        'amount' => 1000.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-12',
+        'notes' => 'Pickup balance via GCash',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('reports.index', ['period' => 'this_month']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('reports/Index')
+            ->where('financialReports.summary.total_sales', 3500)
+            ->where('financialReports.summary.cash_sales', 500)
+            ->where('financialReports.summary.gcash_sales', 1000)
+        );
+
+    Carbon::setTestNow();
+});

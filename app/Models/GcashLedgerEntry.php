@@ -450,7 +450,17 @@ class GcashLedgerEntry extends Model
     {
         $entry = static::withTrashed()->where('expense_id', $expense->id)->first();
 
-        if ($expense->payment_method === Expense::PAYMENT_METHOD_GCASH && ! $expense->trashed()) {
+        if ($entry && $entry->type === self::TYPE_ADJUSTMENT && $expense->payment_method === Expense::PAYMENT_METHOD_CASH && ! $expense->trashed()) {
+            if ($entry->trashed()) {
+                $entry->restore();
+            }
+
+            $entry->user_id = $expense->user_id ?? auth()->id();
+            $entry->amount = (float) $expense->amount;
+            $entry->entry_date = $expense->expense_date;
+            $entry->reference_number = $expense->reference_number;
+            $entry->save();
+        } elseif ($expense->payment_method === Expense::PAYMENT_METHOD_GCASH && ! $expense->trashed()) {
             if (! $entry) {
                 $entry = new static;
                 $entry->expense_id = $expense->id;
