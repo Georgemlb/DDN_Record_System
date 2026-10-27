@@ -154,6 +154,7 @@ class DailySettlement extends Model
 
         // Cash In and GCash In are calculated from payments collected on this date
         $payments = TransactionPayment::query()
+            ->whereHas('transaction')
             ->whereDate('payment_date', $dateString)
             ->get(['transaction_id', 'payment_method', 'amount', 'cash_amount', 'gcash_amount', 'gcash_tendered', 'cash_change', 'change_fee']);
 

@@ -215,3 +215,104 @@ test('collecting balance supports gcash overpayment with cash change and fee', f
     expect((float) $payment->cash_change)->toBe(480.00);
     expect((float) $payment->change_fee)->toBe(20.00);
 });
+
+test('updating single-payment transaction synchronizes initial payment and keeps balance accurate', function () {
+    $user = User::factory()->create();
+
+    // 1. Create a paid transaction for 2,000 Cash
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Initial Client',
+        'amount' => '2000.00',
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        'amount_paid' => '2000.00',
+    ]);
+
+    $response->assertSessionHasNoErrors();
+    $transaction = Transaction::where('customer_name', 'Initial Client')->first();
+    expect($transaction)->not->toBeNull();
+    expect($transaction->payments)->toHaveCount(1);
+    expect((float) $transaction->payments->first()->amount)->toBe(2000.00);
+    expect($transaction->payments->first()->payment_method)->toBe(Transaction::PAYMENT_METHOD_CASH);
+
+    // 2. User edits the transaction: updates price to 2,500 and switches payment method to GCash
+    $updateResponse = $this->actingAs($user)->put(route('transactions.update', $transaction), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Initial Client',
+        'amount' => '2500.00',
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        'amount_paid' => '2500.00',
+    ]);
+
+    $updateResponse->assertSessionHasNoErrors();
+    $transaction->refresh();
+
+    // Transaction balance remains 0 and status remains paid
+    expect((float) $transaction->amount)->toBe(2500.00);
+    expect((float) $transaction->amount_paid)->toBe(2500.00);
+    expect((float) $transaction->balance)->toBe(0.00);
+    expect($transaction->payment_status)->toBe(Transaction::PAYMENT_STATUS_PAID);
+
+    // Initial TransactionPayment was updated to 2,500 GCash
+    $payments = $transaction->payments()->get();
+    expect($payments)->toHaveCount(1);
+    expect((float) $payments->first()->amount)->toBe(2500.00);
+    expect($payments->first()->payment_method)->toBe(Transaction::PAYMENT_METHOD_GCASH);
+
+    // Daily settlement for date accurately reflects GCash rather than Cash
+    $metrics = DailySettlement::calculateMetricsForDate('2026-09-08');
+    expect((float) $metrics['cash_in'])->toBe(0.00);
+    expect((float) $metrics['total_gcash'])->toBe(2500.00);
+
+    // GCash ledger entry has 2,500 inflow
+    $ledger = GcashLedgerEntry::where('transaction_id', $transaction->id)->first();
+    expect($ledger)->not->toBeNull();
+    expect((float) $ledger->amount)->toBe(2500.00);
+});
+
+test('soft-deleting and restoring transaction removes and restores its payments from daily settlements and dashboard', function () {
+    $user = User::factory()->create();
+
+    // 1. Create a paid transaction for 3,000 Cash
+    $response = $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Delete Restore Client',
+        'amount' => '3000.00',
+        'payment_status' => Transaction::PAYMENT_STATUS_PAID,
+        'amount_paid' => '3000.00',
+    ]);
+
+    $response->assertSessionHasNoErrors();
+    $transaction = Transaction::where('customer_name', 'Delete Restore Client')->first();
+    expect($transaction)->not->toBeNull();
+
+    // Pre-delete: metrics show 3,000 Cash
+    $metricsActive = DailySettlement::calculateMetricsForDate('2026-09-08');
+    expect((float) $metricsActive['cash_in'])->toBe(3000.00);
+
+    // 2. Move transaction to trash (soft-delete)
+    $deleteResponse = $this->actingAs($user)->delete(route('transactions.destroy', $transaction));
+    $deleteResponse->assertRedirect();
+    expect($transaction->fresh()->trashed())->toBeTrue();
+
+    // Post-delete: metrics must exclude the soft-deleted transaction's payments
+    $metricsDeleted = DailySettlement::calculateMetricsForDate('2026-09-08');
+    expect((float) $metricsDeleted['cash_in'])->toBe(0.00);
+    expect((float) $metricsDeleted['total_sales'])->toBe(0.00);
+
+    // 3. Restore the transaction
+    $restoreResponse = $this->actingAs($user)->post(route('transactions.restore', $transaction));
+    $restoreResponse->assertRedirect();
+    expect($transaction->fresh()->trashed())->toBeFalse();
+
+    // Post-restore: metrics count the transaction payments again
+    $metricsRestored = DailySettlement::calculateMetricsForDate('2026-09-08');
+    expect((float) $metricsRestored['cash_in'])->toBe(3000.00);
+    expect((float) $metricsRestored['total_sales'])->toBe(3000.00);
+});

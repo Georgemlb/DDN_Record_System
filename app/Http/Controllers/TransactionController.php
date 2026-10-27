@@ -272,6 +272,52 @@ class TransactionController extends Controller
 
         $transaction->update($payload);
 
+        // Synchronize initial payment when transaction has 0 or 1 payment record
+        $paymentsCount = $transaction->payments()->count();
+        if ($paymentsCount <= 1) {
+            $payment = $transaction->payments()->first();
+            $amountPaid = (float) ($payload['amount_paid'] ?? 0);
+
+            if ($amountPaid > 0) {
+                if (! $payment) {
+                    $transaction->payments()->create([
+                        'user_id' => $transaction->user_id ?? auth()->id(),
+                        'amount' => $amountPaid,
+                        'payment_method' => $payload['payment_method'],
+                        'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                        'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                        'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                        'cash_change' => $payload['cash_change'] ?? 0,
+                        'change_fee' => $payload['change_fee'] ?? 0,
+                        'payment_date' => $payload['transaction_date'],
+                        'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
+                    ]);
+                } else {
+                    $oldPaymentDate = $payment->payment_date?->toDateString();
+                    $payment->update([
+                        'amount' => $amountPaid,
+                        'payment_method' => $payload['payment_method'],
+                        'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                        'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                        'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                        'cash_change' => $payload['cash_change'] ?? 0,
+                        'change_fee' => $payload['change_fee'] ?? 0,
+                        'payment_date' => $payload['transaction_date'],
+                    ]);
+
+                    if ($oldPaymentDate && $oldPaymentDate !== $transaction->transaction_date?->toDateString()) {
+                        DailySettlement::syncForDate($oldPaymentDate);
+                    }
+                }
+            } elseif ($payment) {
+                $oldPaymentDate = $payment->payment_date?->toDateString();
+                $payment->delete();
+                if ($oldPaymentDate) {
+                    DailySettlement::syncForDate($oldPaymentDate);
+                }
+            }
+        }
+
         $transaction->recalculateBalance();
 
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
@@ -346,11 +392,17 @@ class TransactionController extends Controller
     {
         Gate::authorize('delete', $transaction);
 
+        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+        $affectedDates[] = $transaction->transaction_date->toDateString();
+
         $transaction->delete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
         GcashLedgerEntry::removeForTransaction($transaction->id);
-        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+
+        foreach (array_unique($affectedDates) as $date) {
+            DailySettlement::syncForDate($date);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
@@ -364,11 +416,17 @@ class TransactionController extends Controller
     {
         Gate::authorize('restore', $transaction);
 
+        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+        $affectedDates[] = $transaction->transaction_date->toDateString();
+
         $transaction->restore();
 
         FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
         GcashLedgerEntry::restoreForTransaction($transaction->id);
-        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+
+        foreach (array_unique($affectedDates) as $date) {
+            DailySettlement::syncForDate($date);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
 
@@ -382,12 +440,18 @@ class TransactionController extends Controller
     {
         Gate::authorize('forceDelete', $transaction);
 
-        $transactionDate = $transaction->transaction_date->toDateString();
+        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+        $affectedDates[] = $transaction->transaction_date->toDateString();
+
+        $transaction->payments()->delete();
         $transaction->forceDelete();
 
         FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
         GcashLedgerEntry::removeForTransaction($transaction->id);
-        DailySettlement::syncForDate($transactionDate);
+
+        foreach (array_unique($affectedDates) as $date) {
+            DailySettlement::syncForDate($date);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
 
