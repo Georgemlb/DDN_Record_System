@@ -193,14 +193,6 @@ class GcashLedgerEntry extends Model
         $date = $transaction->transaction_date;
         $userId = $transaction->user_id ?? auth()->id();
 
-        // 1. Check for GCash Payment Inflow from Customer
-        $gcashCollected = 0.00;
-        if ($transaction->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-            $gcashCollected = (float) ($transaction->gcash_tendered ?: $transaction->amount);
-        } elseif ($transaction->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-            $gcashCollected = (float) ($transaction->gcash_tendered ?: ($transaction->gcash_amount ?? 0));
-        }
-
         // Remittance Cash-Out: customer sent GCash to agency (+GCash)
         $isRemittanceCashOut = $transaction->type === Transaction::TYPE_REMITTANCE
             && ($transaction->service_details === 'GCASH_CASH_OUT' || stripos($transaction->notes ?? '', 'cash out') !== false);
@@ -209,15 +201,17 @@ class GcashLedgerEntry extends Model
         $isRemittanceCashIn = $transaction->type === Transaction::TYPE_REMITTANCE
             && ($transaction->service_details === 'GCASH_CASH_IN' || stripos($transaction->notes ?? '', 'cash in') !== false);
 
-        // Manage Payment Inflow Entry
-        $inflowType = $isRemittanceCashOut ? self::TYPE_REMITTANCE_CASH_OUT : self::TYPE_CUSTOMER_PAYMENT;
-        $paymentEntry = static::withTrashed()
-            ->where('transaction_id', $transaction->id)
-            ->whereIn('type', [self::TYPE_CUSTOMER_PAYMENT, self::TYPE_REMITTANCE_CASH_OUT])
-            ->first();
+        // 1. Manage Payment Inflow Entries
+        // When transaction has recorded TransactionPayment records, sync each GCash payment
+        $payments = $transaction->payments()->get();
 
-        if ($gcashCollected > 0 || $isRemittanceCashOut) {
-            $inflowAmount = $isRemittanceCashOut ? (float) $transaction->amount : $gcashCollected;
+        if ($isRemittanceCashOut) {
+            // Remittance Cash-Out: Single inflow for remittance amount
+            $paymentEntry = static::withTrashed()
+                ->where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_REMITTANCE_CASH_OUT)
+                ->first();
+
             if (! $paymentEntry) {
                 $paymentEntry = new static;
                 $paymentEntry->transaction_id = $transaction->id;
@@ -228,20 +222,132 @@ class GcashLedgerEntry extends Model
             }
 
             $paymentEntry->user_id = $userId;
-            $paymentEntry->type = $inflowType;
-            $paymentEntry->amount = $inflowAmount;
+            $paymentEntry->type = self::TYPE_REMITTANCE_CASH_OUT;
+            $paymentEntry->amount = (float) $transaction->amount;
             $paymentEntry->entry_date = $date;
             $paymentEntry->reference_number = $transaction->reference_number;
-            $paymentEntry->notes = $isRemittanceCashOut
-                ? "GCash Cash-Out from {$transaction->customer_name}"
-                : ((float) ($transaction->cash_change ?? 0) > 0
-                    ? "Payment from {$transaction->customer_name} (₱".number_format((float) $transaction->cash_change, 2).' cash change)'
-                    : "Payment from {$transaction->customer_name} ({$transaction->service_details})");
+            $paymentEntry->notes = "GCash Cash-Out from {$transaction->customer_name}";
             $paymentEntry->save();
-        } else {
-            if ($paymentEntry) {
-                $paymentEntry->delete();
+
+            // Clean up any normal customer payment entries if any existed
+            static::where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_CUSTOMER_PAYMENT)
+                ->delete();
+        } elseif ($payments->isNotEmpty()) {
+            // Remove any remittance cash out entries if type changed
+            static::where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_REMITTANCE_CASH_OUT)
+                ->delete();
+
+            $existingEntries = static::withTrashed()
+                ->where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_CUSTOMER_PAYMENT)
+                ->orderBy('id')
+                ->get();
+
+            $gcashPayments = $payments->filter(function (TransactionPayment $p) {
+                if ($p->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
+                    return true;
+                }
+                if ($p->payment_method === Transaction::PAYMENT_METHOD_SPLIT && (float) ($p->gcash_amount ?? 0) > 0) {
+                    return true;
+                }
+
+                return false;
+            })->values();
+
+            // Match each GCash payment with an entry by index
+            foreach ($gcashPayments as $index => $payment) {
+                $paymentInflow = $payment->gcash_tendered !== null && (float) $payment->gcash_tendered > 0
+                    ? (float) $payment->gcash_tendered
+                    : ($payment->payment_method === Transaction::PAYMENT_METHOD_SPLIT
+                        ? (float) ($payment->gcash_amount ?? 0)
+                        : (float) $payment->amount);
+
+                if ($paymentInflow <= 0) {
+                    continue;
+                }
+
+                $paymentDate = $payment->payment_date ?: $date;
+                $paymentUser = $payment->user_id ?? $userId;
+
+                /** @var GcashLedgerEntry|null $entry */
+                $entry = $existingEntries->get($index);
+
+                if (! $entry) {
+                    $entry = new static;
+                    $entry->transaction_id = $transaction->id;
+                    $maxOrder = static::whereDate('entry_date', $paymentDate)->max('sort_order') ?? 0;
+                    $entry->sort_order = $maxOrder + 1;
+                } elseif ($entry->trashed()) {
+                    $entry->restore();
+                }
+
+                $entry->user_id = $paymentUser;
+                $entry->type = self::TYPE_CUSTOMER_PAYMENT;
+                $entry->amount = $paymentInflow;
+                $entry->entry_date = $paymentDate;
+                $entry->reference_number = $transaction->reference_number;
+
+                $changeText = (float) ($payment->cash_change ?? 0) > 0
+                    ? ' (₱'.number_format((float) $payment->cash_change, 2).' cash change)'
+                    : '';
+                $noteSuffix = $payment->notes ? " - {$payment->notes}" : ($transaction->service_details ? " ({$transaction->service_details})" : '');
+
+                $entry->notes = "Payment from {$transaction->customer_name}{$changeText}{$noteSuffix}";
+                $entry->save();
             }
+
+            // Soft-delete extra existing entries if fewer GCash payments exist now
+            if ($existingEntries->count() > $gcashPayments->count()) {
+                for ($i = $gcashPayments->count(); $i < $existingEntries->count(); $i++) {
+                    $existingEntries[$i]->delete();
+                }
+            }
+        } else {
+            // Fallback for transactions without TransactionPayment records
+            $gcashCollected = 0.00;
+            if ($transaction->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
+                $gcashCollected = (float) ($transaction->gcash_tendered ?: ($transaction->amount_paid ?: $transaction->amount));
+            } elseif ($transaction->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
+                $gcashCollected = (float) ($transaction->gcash_tendered ?: ($transaction->gcash_amount ?? 0));
+            }
+
+            $paymentEntry = static::withTrashed()
+                ->where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_CUSTOMER_PAYMENT)
+                ->first();
+
+            if ($gcashCollected > 0) {
+                if (! $paymentEntry) {
+                    $paymentEntry = new static;
+                    $paymentEntry->transaction_id = $transaction->id;
+                    $maxOrder = static::whereDate('entry_date', $date)->max('sort_order') ?? 0;
+                    $paymentEntry->sort_order = $maxOrder + 1;
+                } elseif ($paymentEntry->trashed()) {
+                    $paymentEntry->restore();
+                }
+
+                $paymentEntry->user_id = $userId;
+                $paymentEntry->type = self::TYPE_CUSTOMER_PAYMENT;
+                $paymentEntry->amount = $gcashCollected;
+                $paymentEntry->entry_date = $date;
+                $paymentEntry->reference_number = $transaction->reference_number;
+                $paymentEntry->notes = (float) ($transaction->cash_change ?? 0) > 0
+                    ? "Payment from {$transaction->customer_name} (₱".number_format((float) $transaction->cash_change, 2).' cash change)'
+                    : "Payment from {$transaction->customer_name} ({$transaction->service_details})";
+                $paymentEntry->save();
+            } else {
+                if ($paymentEntry) {
+                    $paymentEntry->delete();
+                }
+            }
+
+            // Clean up any extra customer payment entries
+            static::where('transaction_id', $transaction->id)
+                ->where('type', self::TYPE_CUSTOMER_PAYMENT)
+                ->when($paymentEntry, fn ($q) => $q->where('id', '!=', $paymentEntry->id))
+                ->delete();
         }
 
         // 2. Check for Government / Third-Party Disbursement Outflow via GCash
