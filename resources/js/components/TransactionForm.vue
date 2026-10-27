@@ -181,20 +181,20 @@ const notes = ref<string>(props.transaction?.notes ?? '');
 
 const getInitialDisbursementSource = (): 'gcash' | 'cash' | 'none' => {
     if (props.transaction?.disbursement_source === 'cash') {
-return 'cash';
-}
+        return 'cash';
+    }
 
     if (props.transaction?.disbursement_source === 'none') {
-return 'none';
-}
+        return 'none';
+    }
 
     if (props.transaction?.disbursement_source === 'gcash') {
-return 'gcash';
-}
+        return 'gcash';
+    }
 
     if (formType.value === 'psa' || formType.value === 'translation') {
-return 'cash';
-}
+        return 'cash';
+    }
 
     return 'gcash';
 };
@@ -268,8 +268,8 @@ const calculatePortalCost = () => {
 
                 const getLegMarkup = (rule?: AirlineMarkup) => {
                     if (!rule) {
-return 0;
-}
+                        return 0;
+                    }
 
                     if (rule.markup_type === 'percent') {
                         return (
@@ -500,8 +500,8 @@ const handleOnlineAssistanceTypeChange = (value: unknown) => {
 
 const selectedPsaRate = computed(() => {
     if (!psaDocumentType.value || props.psaRates.length === 0) {
-return null;
-}
+        return null;
+    }
 
     return (
         props.psaRates.find(
@@ -624,12 +624,7 @@ const airlineSuggestions = computed(() => {
         'Sunlight Air',
     ];
 
-    return Array.from(
-        new Set([
-            ...defaultAirlines,
-            ...configuredAirlines,
-        ]),
-    );
+    return Array.from(new Set([...defaultAirlines, ...configuredAirlines]));
 });
 
 const ferrySuggestions = computed(() => {

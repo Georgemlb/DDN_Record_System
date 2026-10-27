@@ -625,7 +625,12 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                             <p
                                 class="mt-3 text-2xl font-semibold tracking-tight"
                             >
-                                {{ formatPhp(kpis.operating_expenses ?? kpis.total_expenses) }}
+                                {{
+                                    formatPhp(
+                                        kpis.operating_expenses ??
+                                            kpis.total_expenses,
+                                    )
+                                }}
                             </p>
                         </div>
                         <span
@@ -639,7 +644,9 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     >
                         <span>Operating overhead</span>
                         <span
-                            v-if="kpis.portal_reloads && kpis.portal_reloads > 0"
+                            v-if="
+                                kpis.portal_reloads && kpis.portal_reloads > 0
+                            "
                             class="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
                             :title="`Portal reloads: ${formatPhp(kpis.portal_reloads)}`"
                         >
@@ -753,7 +760,10 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                     <div
                         class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
                     >
-                        <span>Today In: +{{ formatPhp(register.gcash_in) }} / Out: -{{ formatPhp(register.gcash_out) }}</span>
+                        <span
+                            >Today In: +{{ formatPhp(register.gcash_in) }} /
+                            Out: -{{ formatPhp(register.gcash_out) }}</span
+                        >
                         <Link
                             href="/gcash-ledger"
                             class="font-medium text-primary hover:underline"
@@ -855,7 +865,8 @@ const hasSalesTrend = computed(() => (props.salesTrend ?? []).length > 0);
                             >Operating Expenses by Category</CardTitle
                         >
                         <p class="text-sm text-muted-foreground">
-                            Operational overhead breakdown (excluding portal capital transfers)
+                            Operational overhead breakdown (excluding portal
+                            capital transfers)
                         </p>
                     </CardHeader>
                     <CardContent>

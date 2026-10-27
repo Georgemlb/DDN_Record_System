@@ -73,7 +73,8 @@ export const getTransactionServiceDetail = (tx: Transaction): string => {
                 : `${tx.pax ?? 1} pax${tripSuffix}`;
         }
         case 'psa': {
-            const copiesText = tx.copies && tx.copies > 1 ? ` (${tx.copies} copies)` : '';
+            const copiesText =
+                tx.copies && tx.copies > 1 ? ` (${tx.copies} copies)` : '';
 
             return tx.psa_document_type
                 ? `Doc: ${tx.psa_document_type}${copiesText}`

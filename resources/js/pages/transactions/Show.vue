@@ -430,9 +430,7 @@ defineOptions({
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-muted-foreground">
-                                Copies
-                            </dt>
+                            <dt class="text-muted-foreground">Copies</dt>
                             <dd class="mt-1 font-medium">
                                 {{ transaction.copies || 1 }}
                             </dd>

@@ -1886,8 +1886,10 @@ const calculateExpenseSharePct = (amount: number): string => {
                             >
                                 {{
                                     formatPhp(
-                                        financialReports.summary.operating_expenses ??
-                                        financialReports.summary.total_expenses,
+                                        financialReports.summary
+                                            .operating_expenses ??
+                                            financialReports.summary
+                                                .total_expenses,
                                     )
                                 }}
                             </p>
@@ -1910,10 +1912,18 @@ const calculateExpenseSharePct = (amount: number): string => {
                             }}
                         </span>
                         <span
-                            v-if="financialReports.summary.portal_reloads && financialReports.summary.portal_reloads > 0"
+                            v-if="
+                                financialReports.summary.portal_reloads &&
+                                financialReports.summary.portal_reloads > 0
+                            "
                             class="rounded bg-sky-100 px-1 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
                         >
-                            +{{ formatPhp(financialReports.summary.portal_reloads) }} reloads
+                            +{{
+                                formatPhp(
+                                    financialReports.summary.portal_reloads,
+                                )
+                            }}
+                            reloads
                         </span>
                         <span v-else>
                             GCash:

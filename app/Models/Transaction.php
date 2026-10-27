@@ -21,7 +21,6 @@ use Illuminate\Support\Carbon;
  * @property int|null $pax
  * @property string|null $provider
  * @property string|null $service_details
- * @property int|null $baggage_option_id
  * @property string|null $psa_document_type
  * @property int|null $copies
  * @property int|null $online_assistance_type_id
