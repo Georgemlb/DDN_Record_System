@@ -379,11 +379,11 @@ class DailySettlement extends Model
                 $q->where('service_details', 'GCASH_CASH_IN')
                     ->orWhere('notes', 'like', '%cash in%');
             })
-            ->get(['amount', 'payment_method']);
+            ->get(['amount', 'payment_method', 'payment_status']);
 
         foreach ($remittanceCashIns as $rem) {
             $amt = (float) $rem->amount;
-            if ($rem->payment_method !== Transaction::PAYMENT_METHOD_CASH) {
+            if ($rem->payment_method !== Transaction::PAYMENT_METHOD_CASH && $rem->payment_status !== Transaction::PAYMENT_STATUS_UNPAID) {
                 $cashIn += $amt; // ensure physical cash received into drawer
             }
             $gcashOut += $amt; // GCash transferred to customer

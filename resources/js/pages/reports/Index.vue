@@ -547,8 +547,26 @@ interface SlipData {
         customer_name: string;
         type: string;
         payment_method: string;
+        payment_status?: string;
         amount: number | string;
+        amount_paid?: number | string;
+        balance?: number | string;
         ddn_amount: number | string | null;
+    }>;
+    balance_collections?: Array<{
+        id: number;
+        transaction_id: number;
+        amount: number | string;
+        payment_method: string;
+        payment_date: string;
+        notes?: string | null;
+        transaction?: {
+            id: number;
+            reference_number: string | null;
+            customer_name: string;
+            type: string;
+            transaction_date: string;
+        } | null;
     }>;
     expenses: Array<{
         id: number;
@@ -3535,6 +3553,39 @@ const calculateExpenseSharePct = (amount: number): string => {
                                         ).label
                                     }}
                                 </Badge>
+                            </div>
+                        </div>
+
+                        <!-- Balance Collections on Prior Transactions (if any) -->
+                        <div
+                            v-if="
+                                slipData.balance_collections &&
+                                slipData.balance_collections.length
+                            "
+                            class="space-y-1.5 border-t pt-2 text-xs"
+                        >
+                            <p
+                                class="text-[11px] font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400"
+                            >
+                                Balance Collections (Prior Transactions)
+                            </p>
+                            <div
+                                v-for="bc in slipData.balance_collections"
+                                :key="bc.id"
+                                class="flex justify-between text-[11px]"
+                            >
+                                <span class="text-muted-foreground">
+                                    {{
+                                        bc.transaction?.customer_name ??
+                                        'Customer'
+                                    }}
+                                    ({{ bc.payment_method }})
+                                </span>
+                                <span
+                                    class="font-mono font-medium text-foreground"
+                                >
+                                    {{ formatPhp(bc.amount) }}
+                                </span>
                             </div>
                         </div>
 

@@ -810,3 +810,46 @@ test('financial report excludes unpaid transactions from collections and attribu
 
     Carbon::setTestNow();
 });
+
+test('settlement slip includes balance collections from prior transactions collected on settlement date', function () {
+    $user = User::factory()->create();
+
+    // Create partial transaction on 2026-09-08
+    $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+        'transaction_date' => '2026-09-08',
+        'customer_name' => 'Prior Day Client',
+        'amount' => 1200.00,
+        'amount_paid' => 400.00,
+    ]);
+
+    $tx = Transaction::where('customer_name', 'Prior Day Client')->first();
+
+    // Collect remaining 800 balance on 2026-09-10
+    $this->actingAs($user)->post(route('transactions.payments.store', $tx->id), [
+        'amount' => 800.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_date' => '2026-09-10',
+    ]);
+
+    $settlement = DailySettlement::query()->create([
+        'settlement_date' => '2026-09-10',
+        'user_id' => $user->id,
+        'status' => DailySettlement::STATUS_OPEN,
+        'opening_cash' => 1000.00,
+        'cash_in' => 800.00,
+        'cash_out' => 0.00,
+        'expected_cash' => 1800.00,
+    ]);
+
+    $response = $this->actingAs($user)->get(route('reports.settlements.show', $settlement));
+    $response->assertOk();
+
+    $data = $response->json();
+    expect($data)->toHaveKey('balance_collections');
+    expect($data['balance_collections'])->toHaveCount(1);
+    expect((float) $data['balance_collections'][0]['amount'])->toBe(800.00);
+    expect($data['balance_collections'][0]['transaction']['customer_name'])->toBe('Prior Day Client');
+});

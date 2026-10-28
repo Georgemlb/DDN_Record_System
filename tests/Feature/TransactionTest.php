@@ -504,3 +504,70 @@ test('return_provider is cleared when trip_type is one_way', function () {
         'return_provider' => null,
     ]);
 });
+
+test('transaction index summary cards accurately reflect collected cash and gcash for unpaid and multi-payment transactions', function () {
+    $user = User::factory()->create();
+
+    // 1. Unpaid transaction (amount = 2,000, paid = 0)
+    $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_UNPAID,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Unpaid Client',
+        'amount' => '2000.00',
+    ]);
+
+    // 2. Partial cash downpayment (500) + GCash balance collection (1,000)
+    $this->actingAs($user)->post(route('transactions.store'), [
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Multi Pay Client',
+        'amount' => '1500.00',
+        'amount_paid' => '500.00',
+    ]);
+
+    $multiTx = Transaction::where('customer_name', 'Multi Pay Client')->first();
+
+    $this->actingAs($user)->post(route('transactions.payments.store', $multiTx->id), [
+        'amount' => 1000.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-11',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transactions/Index')
+            ->where('summary.total_payments', 3500)
+            ->where('summary.total_cash', 500)
+            ->where('summary.total_gcash', 1000)
+            ->where('summary.total_balance', 2000)
+        );
+});
+
+test('permanently deleting a transaction from trash removes its soft-deleted portal and gcash ledger entries', function () {
+    $admin = User::factory()->create();
+
+    $this->actingAs($admin)->post(route('transactions.store'), transactionData([
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'amount' => '5000.00',
+        'third_party_payment' => '4000.00',
+    ]));
+
+    $tx = Transaction::first();
+    expect($tx)->not->toBeNull();
+
+    // Soft-delete first (moves to trash and soft-deletes ledger rows)
+    $this->actingAs($admin)->delete(route('transactions.destroy', $tx));
+
+    // Force-delete from trash
+    $this->actingAs($admin)->delete(route('transactions.forceDelete', $tx));
+
+    $this->assertDatabaseMissing('transactions', ['id' => $tx->id]);
+    $this->assertDatabaseMissing('flight_portal_deposits', ['transaction_id' => $tx->id]);
+    $this->assertDatabaseMissing('gcash_ledger_entries', ['transaction_id' => $tx->id]);
+});

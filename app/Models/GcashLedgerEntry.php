@@ -50,6 +50,8 @@ class GcashLedgerEntry extends Model
 
     public const TYPE_REMITTANCE_CASH_OUT = 'remittance_cash_out';
 
+    public const TYPE_EXPENSE_REIMBURSEMENT = 'expense_reimbursement';
+
     // Outflows from GCash wallet
     public const TYPE_REMITTANCE_CASH_IN = 'remittance_cash_in';
 
@@ -67,6 +69,7 @@ class GcashLedgerEntry extends Model
     public const TYPES = [
         self::TYPE_CUSTOMER_PAYMENT,
         self::TYPE_REMITTANCE_CASH_OUT,
+        self::TYPE_EXPENSE_REIMBURSEMENT,
         self::TYPE_REMITTANCE_CASH_IN,
         self::TYPE_GOVERNMENT_DISBURSEMENT,
         self::TYPE_EXPENSE_PAYMENT,
@@ -77,6 +80,7 @@ class GcashLedgerEntry extends Model
     public const INFLOW_TYPES = [
         self::TYPE_CUSTOMER_PAYMENT,
         self::TYPE_REMITTANCE_CASH_OUT,
+        self::TYPE_EXPENSE_REIMBURSEMENT,
     ];
 
     public const OUTFLOW_TYPES = [
@@ -444,44 +448,112 @@ class GcashLedgerEntry extends Model
     }
 
     /**
+     * Permanently delete GCash entries linked to a Transaction.
+     */
+    public static function forceRemoveForTransaction(int $transactionId): void
+    {
+        static::withTrashed()->where('transaction_id', $transactionId)->forceDelete();
+        static::recalculateRunningBalances();
+    }
+
+    /**
      * Synchronize GCash entries linked to an Expense.
      */
     public static function syncForExpense(Expense $expense, bool $recalculate = true): void
     {
-        $entry = static::withTrashed()->where('expense_id', $expense->id)->first();
+        if ($expense->trashed()) {
+            static::where('expense_id', $expense->id)->delete();
 
-        if ($entry && $entry->type === self::TYPE_ADJUSTMENT && $expense->payment_method === Expense::PAYMENT_METHOD_CASH && ! $expense->trashed()) {
-            if ($entry->trashed()) {
-                $entry->restore();
+            if ($recalculate) {
+                static::recalculateRunningBalances();
             }
 
-            $entry->user_id = $expense->user_id ?? auth()->id();
-            $entry->amount = (float) $expense->amount;
-            $entry->entry_date = $expense->expense_date;
-            $entry->reference_number = $expense->reference_number;
-            $entry->save();
-        } elseif ($expense->payment_method === Expense::PAYMENT_METHOD_GCASH && ! $expense->trashed()) {
-            if (! $entry) {
-                $entry = new static;
-                $entry->expense_id = $expense->id;
+            return;
+        }
+
+        // 1. Adjustment entry (cash drawer top-up into GCash)
+        $adjustmentEntry = static::withTrashed()
+            ->where('expense_id', $expense->id)
+            ->where('type', self::TYPE_ADJUSTMENT)
+            ->first();
+
+        if ($adjustmentEntry && $expense->payment_method === Expense::PAYMENT_METHOD_CASH) {
+            if ($adjustmentEntry->trashed()) {
+                $adjustmentEntry->restore();
+            }
+
+            $adjustmentEntry->user_id = $expense->user_id ?? auth()->id();
+            $adjustmentEntry->amount = (float) $expense->amount;
+            $adjustmentEntry->entry_date = $expense->expense_date;
+            $adjustmentEntry->reference_number = $expense->reference_number;
+            $adjustmentEntry->save();
+        } elseif ($adjustmentEntry && $expense->payment_method !== Expense::PAYMENT_METHOD_CASH) {
+            $adjustmentEntry->delete();
+        }
+
+        // 2. Expense Outflow entry (paid via GCash)
+        $outflowEntry = static::withTrashed()
+            ->where('expense_id', $expense->id)
+            ->whereIn('type', [self::TYPE_EXPENSE_PAYMENT, self::TYPE_PORTAL_RELOAD])
+            ->first();
+
+        if ($expense->payment_method === Expense::PAYMENT_METHOD_GCASH) {
+            if (! $outflowEntry) {
+                $outflowEntry = new static;
+                $outflowEntry->expense_id = $expense->id;
                 $maxOrder = static::whereDate('entry_date', $expense->expense_date)->max('sort_order') ?? 0;
-                $entry->sort_order = $maxOrder + 1;
-            } elseif ($entry->trashed()) {
-                $entry->restore();
+                $outflowEntry->sort_order = $maxOrder + 1;
+            } elseif ($outflowEntry->trashed()) {
+                $outflowEntry->restore();
             }
 
-            $entry->user_id = $expense->user_id ?? auth()->id();
-            $entry->type = stripos($expense->title ?? '', 'portal') !== false
+            $outflowEntry->user_id = $expense->user_id ?? auth()->id();
+            $outflowEntry->type = stripos($expense->title ?? '', 'portal') !== false
                 ? self::TYPE_PORTAL_RELOAD
                 : self::TYPE_EXPENSE_PAYMENT;
-            $entry->amount = (float) $expense->amount;
-            $entry->entry_date = $expense->expense_date;
-            $entry->reference_number = $expense->reference_number;
-            $entry->notes = $expense->title ?: 'Expense paid via GCash';
-            $entry->save();
+            $outflowEntry->amount = (float) $expense->amount;
+            $outflowEntry->entry_date = $expense->expense_date;
+            $outflowEntry->reference_number = $expense->reference_number;
+            $outflowEntry->notes = $expense->title ?: 'Expense paid via GCash';
+            $outflowEntry->save();
         } else {
-            if ($entry) {
-                $entry->delete();
+            if ($outflowEntry) {
+                $outflowEntry->delete();
+            }
+        }
+
+        // 3. Personal Expense Reimbursement Inflow entry (reimbursed via GCash)
+        $reimbursementEntry = static::withTrashed()
+            ->where('expense_id', $expense->id)
+            ->where('type', self::TYPE_EXPENSE_REIMBURSEMENT)
+            ->first();
+
+        $isReimbursedViaGcash = $expense->is_personal
+            && $expense->reimbursement_status === Expense::REIMBURSEMENT_STATUS_REIMBURSED
+            && $expense->reimbursement_method === Expense::PAYMENT_METHOD_GCASH;
+
+        if ($isReimbursedViaGcash) {
+            $reimbursementDate = $expense->reimbursed_at ?? $expense->expense_date;
+
+            if (! $reimbursementEntry) {
+                $reimbursementEntry = new static;
+                $reimbursementEntry->expense_id = $expense->id;
+                $maxOrder = static::whereDate('entry_date', $reimbursementDate)->max('sort_order') ?? 0;
+                $reimbursementEntry->sort_order = $maxOrder + 1;
+            } elseif ($reimbursementEntry->trashed()) {
+                $reimbursementEntry->restore();
+            }
+
+            $reimbursementEntry->user_id = $expense->user_id ?? auth()->id();
+            $reimbursementEntry->type = self::TYPE_EXPENSE_REIMBURSEMENT;
+            $reimbursementEntry->amount = (float) $expense->amount;
+            $reimbursementEntry->entry_date = $reimbursementDate;
+            $reimbursementEntry->reference_number = $expense->reference_number;
+            $reimbursementEntry->notes = 'Personal expense reimbursement: '.($expense->title ?: 'Personal errand');
+            $reimbursementEntry->save();
+        } else {
+            if ($reimbursementEntry) {
+                $reimbursementEntry->delete();
             }
         }
 

@@ -391,7 +391,15 @@ class ReportController extends Controller
 
         $transactions = Transaction::query()
             ->whereDate('transaction_date', $date)
-            ->get(['id', 'reference_number', 'customer_name', 'type', 'payment_method', 'amount', 'ddn_amount', 'employee_share']);
+            ->get(['id', 'reference_number', 'customer_name', 'type', 'payment_method', 'payment_status', 'amount', 'amount_paid', 'balance', 'ddn_amount', 'employee_share']);
+
+        $balanceCollections = TransactionPayment::query()
+            ->whereDate('payment_date', $date)
+            ->whereHas('transaction', function ($q) use ($date) {
+                $q->whereDate('transaction_date', '!=', $date);
+            })
+            ->with('transaction:id,reference_number,customer_name,type,transaction_date')
+            ->get(['id', 'transaction_id', 'amount', 'payment_method', 'payment_date', 'notes']);
 
         $expenses = Expense::query()
             ->whereDate('expense_date', $date)
@@ -408,6 +416,7 @@ class ReportController extends Controller
         return [
             'settlement' => $settlement,
             'transactions' => $transactions,
+            'balance_collections' => $balanceCollections,
             'expenses' => $expenses,
             'reimbursements' => $reimbursements,
         ];

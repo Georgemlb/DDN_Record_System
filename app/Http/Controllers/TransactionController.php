@@ -11,6 +11,7 @@ use App\Models\GcashLedgerEntry;
 use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
 use App\Models\Transaction;
+use App\Models\TransactionPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -91,13 +92,33 @@ class TransactionController extends Controller
         $totalDdn = (float) $summaryQuery->sum('ddn_amount');
         $totalBalance = (float) $summaryQuery->sum('balance');
 
-        $totalCashFromCash = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount');
-        $totalCashFromSplit = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('cash_amount');
-        $totalCash = $totalCashFromCash + $totalCashFromSplit;
+        $paymentsSummaryQuery = TransactionPayment::query()
+            ->whereIn('transaction_id', (clone $summaryQuery)->select('id'));
 
-        $totalGcashFromGcash = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)->sum('amount');
-        $totalGcashFromSplit = (float) (clone $summaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('gcash_amount');
-        $totalGcash = $totalGcashFromGcash + $totalGcashFromSplit;
+        $totalCashFromPayments = (float) (clone $paymentsSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_CASH)->sum('amount')
+            + (float) (clone $paymentsSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('cash_amount');
+
+        $totalGcashFromPayments = (float) (clone $paymentsSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)->sum('amount')
+            + (float) (clone $paymentsSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('gcash_amount');
+
+        $fallbackSummaryQuery = (clone $summaryQuery)
+            ->whereDoesntHave('payments')
+            ->where('payment_status', '!=', Transaction::PAYMENT_STATUS_UNPAID);
+
+        $totalCashFallback = (float) (clone $fallbackSummaryQuery)
+            ->where('payment_method', Transaction::PAYMENT_METHOD_CASH)
+            ->selectRaw('COALESCE(SUM(CASE WHEN amount_paid > 0 THEN amount_paid ELSE amount END), 0) as total')
+            ->value('total')
+            + (float) (clone $fallbackSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('cash_amount');
+
+        $totalGcashFallback = (float) (clone $fallbackSummaryQuery)
+            ->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)
+            ->selectRaw('COALESCE(SUM(CASE WHEN amount_paid > 0 THEN amount_paid ELSE amount END), 0) as total')
+            ->value('total')
+            + (float) (clone $fallbackSummaryQuery)->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)->sum('gcash_amount');
+
+        $totalCash = $totalCashFromPayments + $totalCashFallback;
+        $totalGcash = $totalGcashFromPayments + $totalGcashFallback;
 
         $summary = [
             'total_payments' => $totalPayments,
@@ -447,8 +468,8 @@ class TransactionController extends Controller
         $transaction->payments()->delete();
         $transaction->forceDelete();
 
-        FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
-        GcashLedgerEntry::removeForTransaction($transaction->id);
+        FlightPortalDeposit::forceRemoveTransactionTicketDeduction($transaction->id);
+        GcashLedgerEntry::forceRemoveForTransaction($transaction->id);
 
         foreach (array_unique($affectedDates) as $date) {
             DailySettlement::syncForDate($date);

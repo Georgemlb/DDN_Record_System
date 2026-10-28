@@ -299,6 +299,8 @@ const getTypeLabel = (type: string) => {
             return 'Customer Payment';
         case 'remittance_cash_out':
             return 'Cash-Out (+GCash)';
+        case 'expense_reimbursement':
+            return 'Expense Reimbursement';
         case 'remittance_cash_in':
             return 'Cash-In (-GCash)';
         case 'government_disbursement':
@@ -325,6 +327,7 @@ const getTypeBadgeClass = (type: string, amount: string | number) => {
         case 'customer_payment':
         case 'direct_payment':
         case 'remittance_cash_out':
+        case 'expense_reimbursement':
             return 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300';
         case 'remittance_cash_in':
         case 'government_disbursement':
@@ -352,6 +355,7 @@ const isInflow = (entry: GcashLedgerEntry) => {
     return [
         'customer_payment',
         'remittance_cash_out',
+        'expense_reimbursement',
         'direct_payment',
         'cash_transfer',
         'bank_transfer',
