@@ -23,12 +23,20 @@ class ExpenseRequest extends FormRequest
      */
     public function rules(): array
     {
+        $currentCategoryId = $this->route('expense')?->expense_category_id;
+
         return [
             'title' => ['required', 'string', 'max:255'],
             'expense_category_id' => [
                 'required',
                 'integer',
-                Rule::exists('expense_categories', 'id')->where('is_active', true),
+                Rule::exists('expense_categories', 'id')->where(function ($query) use ($currentCategoryId) {
+                    $query->where('is_active', true);
+
+                    if ($currentCategoryId) {
+                        $query->orWhere('id', $currentCategoryId);
+                    }
+                }),
             ],
             'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
             'expense_date' => ['required', 'date', 'before_or_equal:today'],

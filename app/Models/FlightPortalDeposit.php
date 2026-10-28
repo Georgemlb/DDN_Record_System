@@ -183,8 +183,12 @@ class FlightPortalDeposit extends Model
     public static function syncTransactionTicketDeduction(Transaction $transaction): ?self
     {
         $cost = (float) ($transaction->third_party_payment ?? 0);
+        $isPortalDisbursed = in_array($transaction->disbursement_source, [
+            null,
+            Transaction::DISBURSEMENT_SOURCE_FLIGHT_PORTAL,
+        ], true);
 
-        if (in_array($transaction->type, [Transaction::TYPE_AIRLINE, Transaction::TYPE_FERRY], true) && $cost > 0) {
+        if (in_array($transaction->type, [Transaction::TYPE_AIRLINE, Transaction::TYPE_FERRY], true) && $cost > 0 && $isPortalDisbursed) {
             $entry = static::withTrashed()->where('transaction_id', $transaction->id)->first();
 
             if (! $entry) {
@@ -218,7 +222,7 @@ class FlightPortalDeposit extends Model
             return $entry;
         }
 
-        // If transaction is not airline or cost is 0, remove deduction if it exists
+        // If transaction is not airline/ferry, not disbursed via portal, or cost is 0, remove deduction if it exists
         static::removeTransactionTicketDeduction($transaction->id);
 
         return null;
@@ -233,6 +237,18 @@ class FlightPortalDeposit extends Model
 
         if ($entry) {
             $entry->delete();
+            static::recalculateRunningBalances();
+        }
+    }
+
+    /**
+     * Permanently delete a transaction's ticket deduction.
+     */
+    public static function forceRemoveTransactionTicketDeduction(int $transactionId): void
+    {
+        $deleted = static::withTrashed()->where('transaction_id', $transactionId)->forceDelete();
+
+        if ($deleted) {
             static::recalculateRunningBalances();
         }
     }

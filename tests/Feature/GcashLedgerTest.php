@@ -631,3 +631,94 @@ test('editing a gcash top-up from drawer expense preserves and updates the linke
     expect((float) $entry->amount)->toBe(1500.00);
     expect(GcashLedgerEntry::getCurrentBalance())->toBe(1500.00);
 });
+
+test('reimbursing a personal expense via gcash records an inflow entry in gcash ledger and preserves original outflow', function () {
+    $user = User::factory()->create();
+    $cat = ExpenseCategory::query()->create(['name' => 'Personal Errands']);
+
+    // 1. Record personal expense paid via GCash on 2026-09-08
+    $this->actingAs($user)
+        ->post(route('expenses.store'), [
+            'expense_date' => '2026-09-08',
+            'title' => 'Family Errand Purchase',
+            'expense_category_id' => $cat->id,
+            'amount' => 800.00,
+            'payment_method' => Expense::PAYMENT_METHOD_GCASH,
+            'payee' => 'Shopee',
+            'is_personal' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $expense = Expense::where('title', 'Family Errand Purchase')->first();
+    expect($expense)->not->toBeNull();
+    expect(GcashLedgerEntry::getCurrentBalance())->toBe(-800.00);
+
+    // 2. Reimburse via GCash on 2026-09-10
+    $this->actingAs($user)
+        ->post(route('expenses.reimburse', $expense), [
+            'reimbursement_method' => Expense::PAYMENT_METHOD_GCASH,
+            'reimbursed_at' => '2026-09-10',
+            'reimbursement_notes' => 'Repaid via GCash transfer',
+        ])
+        ->assertSessionHasNoErrors();
+
+    // Both outflow (-800 on 09-08) and inflow (+800 on 09-10) exist, net balance = 0.00
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'expense_id' => $expense->id,
+        'type' => GcashLedgerEntry::TYPE_EXPENSE_PAYMENT,
+        'amount' => 800.00,
+        'deleted_at' => null,
+    ]);
+
+    $this->assertDatabaseHas('gcash_ledger_entries', [
+        'expense_id' => $expense->id,
+        'type' => GcashLedgerEntry::TYPE_EXPENSE_REIMBURSEMENT,
+        'amount' => 800.00,
+        'deleted_at' => null,
+    ]);
+
+    expect(GcashLedgerEntry::getCurrentBalance())->toBe(0.00);
+});
+
+test('gcash remittance cash-in recorded as unpaid deducts gcash immediately and collects cash on payment date', function () {
+    $user = User::factory()->create();
+
+    // 1. Family member requests 1,000 GCash on 2026-09-09, to be paid in cash on a different day
+    $response = $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'type' => Transaction::TYPE_REMITTANCE,
+            'service_details' => 'GCASH_CASH_IN',
+            'transaction_date' => '2026-09-09',
+            'customer_name' => 'Family Member',
+            'amount' => 1000.00,
+            'third_party_payment' => 0.00,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_status' => Transaction::PAYMENT_STATUS_UNPAID,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $transaction = Transaction::where('customer_name', 'Family Member')->first();
+    expect($transaction)->not->toBeNull();
+    expect($transaction->payment_status)->toBe(Transaction::PAYMENT_STATUS_UNPAID);
+    expect((float) $transaction->balance)->toBe(1000.00);
+
+    // On 2026-09-09: GCash wallet sent 1,000 (-1,000), but cash drawer received 0
+    expect(GcashLedgerEntry::getCurrentBalance())->toBe(-1000.00);
+    $metricsDay1 = DailySettlement::calculateMetricsForDate('2026-09-09');
+    expect((float) $metricsDay1['gcash_out'])->toBe(1000.00)
+        ->and((float) $metricsDay1['cash_in'])->toBe(0.00);
+
+    // 2. Family member pays 1,000 cash on 2026-09-11
+    $this->actingAs($user)
+        ->post(route('transactions.payments.store', $transaction->id), [
+            'amount' => 1000.00,
+            'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+            'payment_date' => '2026-09-11',
+            'notes' => 'Paid cash for GCash request',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $metricsDay2 = DailySettlement::calculateMetricsForDate('2026-09-11');
+    expect((float) $metricsDay2['cash_in'])->toBe(1000.00);
+});

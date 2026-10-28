@@ -218,13 +218,23 @@ const remittanceFee = ref<number | string>(
 
 watch(
     [formType, remittanceDirection],
-    () => {
-        if (formType.value === 'remittance') {
-            paymentStatus.value = 'paid';
-            paymentMethod.value =
-                remittanceDirection.value === 'GCASH_CASH_OUT'
-                    ? 'gcash'
-                    : 'cash';
+    ([newType, newDir], [oldType, oldDir]) => {
+        if (newType === 'remittance') {
+            if (newDir === 'GCASH_CASH_OUT') {
+                paymentStatus.value = 'paid';
+                paymentMethod.value = 'gcash';
+            } else {
+                paymentMethod.value = 'cash';
+
+                if (oldType !== 'remittance' || oldDir === 'GCASH_CASH_OUT') {
+                    if (
+                        !props.transaction ||
+                        props.transaction.service_details !== 'GCASH_CASH_IN'
+                    ) {
+                        paymentStatus.value = 'paid';
+                    }
+                }
+            }
         }
     },
     { immediate: true },
@@ -1039,14 +1049,24 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                     </span>
                 </div>
                 <span
+                    v-if="remittanceDirection === 'GCASH_CASH_OUT'"
                     class="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                 >
                     Settles Immediately (Paid)
                 </span>
+                <span
+                    v-else
+                    class="shrink-0 rounded bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                >
+                    Cash Paid Now or Later
+                </span>
             </div>
 
             <div
-                v-if="formType !== 'remittance'"
+                v-if="
+                    formType !== 'remittance' ||
+                    remittanceDirection === 'GCASH_CASH_IN'
+                "
                 class="grid gap-2 md:col-span-2"
             >
                 <Label>Payment Status</Label>

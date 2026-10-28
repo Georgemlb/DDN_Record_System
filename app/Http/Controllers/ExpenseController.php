@@ -300,6 +300,8 @@ class ExpenseController extends Controller
             'reimbursement_notes' => $validated['reimbursement_notes'] ?? null,
         ]);
 
+        GcashLedgerEntry::syncForExpense($expense);
+
         if ($oldReimbursedAt && $oldReimbursedAt !== $validated['reimbursed_at']) {
             DailySettlement::syncForDate($oldReimbursedAt);
         }
@@ -346,8 +348,7 @@ class ExpenseController extends Controller
 
         $expense->restore();
 
-        GcashLedgerEntry::onlyTrashed()->where('expense_id', $expense->id)->restore();
-        GcashLedgerEntry::recalculateRunningBalances();
+        GcashLedgerEntry::syncForExpense($expense);
 
         if ($expense->expense_date) {
             DailySettlement::syncForDate($expense->expense_date->toDateString());
@@ -373,7 +374,7 @@ class ExpenseController extends Controller
 
         $expense->forceDelete();
 
-        GcashLedgerEntry::where('expense_id', $expense->id)->forceDelete();
+        GcashLedgerEntry::withTrashed()->where('expense_id', $expense->id)->forceDelete();
         GcashLedgerEntry::recalculateRunningBalances();
 
         if ($expenseDate) {

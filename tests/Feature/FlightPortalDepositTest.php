@@ -727,3 +727,35 @@ test('portal top-up funded via gcash syncs with gcash ledger on create, update, 
 
     expect(GcashLedgerEntry::getCurrentBalance())->toEqual(0.00);
 });
+
+test('airline or ferry transaction with non-portal disbursement source does not deduct from flight portal', function () {
+    $user = User::factory()->create();
+
+    FlightPortalDeposit::create([
+        'user_id' => $user->id,
+        'type' => FlightPortalDeposit::TYPE_TOP_UP,
+        'amount' => 25000.00,
+        'running_balance' => 25000.00,
+        'entry_date' => '2026-09-10',
+        'payment_source' => 'bank_transfer',
+    ]);
+
+    // Create airline transaction with disbursement_source = cash
+    $transaction = Transaction::create([
+        'user_id' => $user->id,
+        'type' => Transaction::TYPE_AIRLINE,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-10',
+        'customer_name' => 'Non Portal Ticket Client',
+        'pax' => 1,
+        'amount' => 5000.00,
+        'third_party_payment' => 4200.00,
+        'disbursement_source' => Transaction::DISBURSEMENT_SOURCE_CASH,
+        'ddn_amount' => 800.00,
+    ]);
+
+    $deduction = FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
+
+    expect($deduction)->toBeNull();
+    expect(FlightPortalDeposit::getCurrentBalance())->toEqual(25000.00);
+});

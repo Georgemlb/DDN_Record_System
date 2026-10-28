@@ -435,3 +435,33 @@ test('expense index filters by personal pending and reimbursed tabs', function (
             ->where('expenses.data.0.title', 'Bond Paper')
         );
 });
+
+test('can update an expense whose category was later deactivated', function () {
+    $user = User::factory()->create();
+    $category = ExpenseCategory::query()->first();
+
+    $expense = Expense::query()->create(expenseData([
+        'title' => 'Legacy Category Expense',
+        'expense_category_id' => $category->id,
+        'amount' => '350.00',
+    ]));
+
+    // Deactivate category after expense was recorded
+    $category->update(['is_active' => false]);
+
+    $this->actingAs($user)
+        ->put(route('expenses.update', $expense), expenseData([
+            'title' => 'Updated Legacy Category Expense',
+            'expense_category_id' => $category->id,
+            'amount' => '425.00',
+        ]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('expenses.show', $expense));
+
+    $this->assertDatabaseHas('expenses', [
+        'id' => $expense->id,
+        'title' => 'Updated Legacy Category Expense',
+        'expense_category_id' => $category->id,
+        'amount' => '425.00',
+    ]);
+});
