@@ -245,7 +245,7 @@ class TransactionController extends Controller
     {
         Gate::authorize('update', $transaction);
 
-        $transaction->load(['onlineAssistanceType', 'customer']);
+        $transaction->load(['onlineAssistanceType', 'customer', 'payments']);
 
         $onlineAssistanceTypes = OnlineAssistanceType::query()->active()->get();
         if ($transaction->onlineAssistanceType && ! $transaction->onlineAssistanceType->is_active) {
@@ -360,6 +360,8 @@ class TransactionController extends Controller
      */
     public function storePayment(Request $request, Transaction $transaction): RedirectResponse
     {
+        Gate::authorize('collectPayment', $transaction);
+
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0', 'lte:'.max(0.01, (float) $transaction->balance)],
             'payment_method' => ['required', 'string', Rule::in(Transaction::PAYMENT_METHODS)],

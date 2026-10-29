@@ -17,6 +17,7 @@ use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
 class FreshStartResetCommand extends Command
 {
@@ -47,13 +48,17 @@ class FreshStartResetCommand extends Command
 
         $this->info('=== STARTING FRESH START RESET ===');
 
-        // Step 1: Backup current database
-        $dbPath = database_path('database.sqlite');
-        $archivePath = database_path('database_archive_pre_fresh_start.sqlite');
+        $isSqlite = DB::getDriverName() === 'sqlite';
 
-        if (File::exists($dbPath)) {
-            File::copy($dbPath, $archivePath);
-            $this->info("Archived current database to: <comment>{$archivePath}</comment>");
+        // Step 1: Backup current database (if SQLite file exists)
+        if ($isSqlite) {
+            $dbPath = database_path('database.sqlite');
+            $archivePath = database_path('database_archive_pre_fresh_start.sqlite');
+
+            if (File::exists($dbPath)) {
+                File::copy($dbPath, $archivePath);
+                $this->info("Archived current database to: <comment>{$archivePath}</comment>");
+            }
         }
 
         // Tables to wipe
@@ -69,18 +74,20 @@ class FreshStartResetCommand extends Command
 
         $this->info('Wiping operational tables and resetting auto-increment counters...');
 
-        DB::transaction(function () use ($tablesToWipe) {
-            DB::statement('PRAGMA foreign_keys = OFF;');
+        DB::transaction(function () use ($tablesToWipe, $isSqlite) {
+            Schema::disableForeignKeyConstraints();
 
             foreach ($tablesToWipe as $table) {
                 DB::table($table)->truncate();
                 $this->line(" - Truncated table: <comment>{$table}</comment>");
 
-                // Reset sqlite_sequence so IDs start from 1
-                DB::statement("DELETE FROM sqlite_sequence WHERE name = '{$table}';");
+                // Reset auto-increment counter on SQLite
+                if ($isSqlite) {
+                    DB::statement("DELETE FROM sqlite_sequence WHERE name = '{$table}';");
+                }
             }
 
-            DB::statement('PRAGMA foreign_keys = ON;');
+            Schema::enableForeignKeyConstraints();
         });
 
         $this->line('');

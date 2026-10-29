@@ -78,6 +78,9 @@ const paymentMethod = ref<PaymentMethod>(
 const paymentStatus = ref<PaymentStatus>(
     props.transaction?.payment_status ?? 'paid',
 );
+const hasMultiplePayments = computed<boolean>(
+    () => (props.transaction?.payments?.length ?? 0) > 1,
+);
 const transactionDate = ref<string>(
     props.transaction?.transaction_date ?? getTodayDateString(),
 );
@@ -1070,16 +1073,33 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 class="grid gap-2 md:col-span-2"
             >
                 <Label>Payment Status</Label>
+
+                <!-- Multi-payment locking notice -->
+                <div
+                    v-if="hasMultiplePayments"
+                    class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300"
+                >
+                    <div class="flex items-center gap-1.5 font-medium">
+                        <AlertCircle class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span>Multiple Payments Recorded</span>
+                    </div>
+                    <p class="mt-1 text-[11px] text-amber-700/90 dark:text-amber-300/90">
+                        This transaction has multiple payment records. Payment status and method are locked here; manage subsequent payments via the transaction's Payment History table.
+                    </p>
+                </div>
+
                 <div class="grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        @click="paymentStatus = 'paid'"
+                        :disabled="hasMultiplePayments"
+                        @click="!hasMultiplePayments && (paymentStatus = 'paid')"
                         class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="
+                        :class="[
                             paymentStatus === 'paid'
                                 ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : 'border-input text-muted-foreground hover:bg-muted'
-                        "
+                                : 'border-input text-muted-foreground hover:bg-muted',
+                            hasMultiplePayments ? 'cursor-not-allowed opacity-60' : '',
+                        ]"
                     >
                         <CheckCircle class="size-3.5" />
                         <span>Fully Paid</span>
@@ -1087,13 +1107,15 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
                     <button
                         type="button"
-                        @click="paymentStatus = 'partial'"
+                        :disabled="hasMultiplePayments"
+                        @click="!hasMultiplePayments && (paymentStatus = 'partial')"
                         class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="
+                        :class="[
                             paymentStatus === 'partial'
                                 ? 'border-amber-600 bg-amber-50 text-amber-700 ring-1 ring-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
-                                : 'border-input text-muted-foreground hover:bg-muted'
-                        "
+                                : 'border-input text-muted-foreground hover:bg-muted',
+                            hasMultiplePayments ? 'cursor-not-allowed opacity-60' : '',
+                        ]"
                     >
                         <Clock class="size-3.5" />
                         <span>Downpayment / Partial</span>
@@ -1101,13 +1123,15 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
 
                     <button
                         type="button"
-                        @click="paymentStatus = 'unpaid'"
+                        :disabled="hasMultiplePayments"
+                        @click="!hasMultiplePayments && (paymentStatus = 'unpaid')"
                         class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="
+                        :class="[
                             paymentStatus === 'unpaid'
                                 ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
-                                : 'border-input text-muted-foreground hover:bg-muted'
-                        "
+                                : 'border-input text-muted-foreground hover:bg-muted',
+                            hasMultiplePayments ? 'cursor-not-allowed opacity-60' : '',
+                        ]"
                     >
                         <AlertCircle class="size-3.5" />
                         <span>Unpaid (On Pickup)</span>
@@ -1130,6 +1154,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                         step="0.01"
                         inputmode="decimal"
                         v-model="amountPaid"
+                        :disabled="hasMultiplePayments"
                         required
                         placeholder="0.00"
                     />
@@ -1162,7 +1187,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 class="grid gap-2 md:col-span-2"
             >
                 <Label for="payment_method_select">Payment method</Label>
-                <Select v-model="paymentMethod">
+                <Select v-model="paymentMethod" :disabled="hasMultiplePayments">
                     <SelectTrigger id="payment_method_select" class="w-full">
                         <SelectValue placeholder="Select payment method" />
                     </SelectTrigger>

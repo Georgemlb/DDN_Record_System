@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\OnlineAssistanceTypeSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -315,4 +316,68 @@ test('soft-deleting and restoring transaction removes and restores its payments 
     $metricsRestored = DailySettlement::calculateMetricsForDate('2026-09-08');
     expect((float) $metricsRestored['cash_in'])->toBe(3000.00);
     expect((float) $metricsRestored['total_sales'])->toBe(3000.00);
+});
+
+test('staff and admin are authorized to collect payments on transactions', function () {
+    $admin = User::factory()->create();
+    $staff = User::factory()->staff()->create();
+
+    $transaction = Transaction::create([
+        'user_id' => $admin->id,
+        'customer_name' => 'Policy Test Client',
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'amount' => 1000.00,
+        'amount_paid' => 400.00,
+        'balance' => 600.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+    ]);
+
+    // Guest cannot collect payment
+    $this->post(route('transactions.payments.store', $transaction->id), [
+        'amount' => 300.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_date' => '2026-09-09',
+    ])->assertRedirect(route('login'));
+
+    // Staff can collect payment
+    $this->actingAs($staff)->post(route('transactions.payments.store', $transaction->id), [
+        'amount' => 300.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'payment_date' => '2026-09-09',
+    ])->assertRedirect();
+
+    expect((float) $transaction->fresh()->balance)->toBe(300.00);
+});
+
+test('transaction edit view loads payments relation for multi-payment locking', function () {
+    $user = User::factory()->create();
+
+    $transaction = Transaction::create([
+        'user_id' => $user->id,
+        'customer_name' => 'Multi Payment Edit Client',
+        'type' => Transaction::TYPE_PRINTING,
+        'payment_method' => Transaction::PAYMENT_METHOD_CASH,
+        'transaction_date' => '2026-09-08',
+        'amount' => 1000.00,
+        'amount_paid' => 400.00,
+        'balance' => 600.00,
+        'payment_status' => Transaction::PAYMENT_STATUS_PARTIAL,
+    ]);
+
+    $transaction->payments()->create([
+        'user_id' => $user->id,
+        'amount' => 300.00,
+        'payment_method' => Transaction::PAYMENT_METHOD_GCASH,
+        'payment_date' => '2026-09-09',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.edit', $transaction))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('transactions/Edit')
+            ->has('transaction.payments', 2)
+        );
 });
