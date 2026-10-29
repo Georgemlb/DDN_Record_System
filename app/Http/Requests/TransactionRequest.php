@@ -6,6 +6,7 @@ use App\Models\PsaRate;
 use App\Models\Transaction;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class TransactionRequest extends FormRequest
 {
@@ -122,5 +123,31 @@ class TransactionRequest extends FormRequest
             'cash_amount.required' => 'Please enter the cash amount for split payment.',
             'gcash_amount.required' => 'Please enter the GCash amount for split payment.',
         ];
+    }
+
+    /**
+     * Configure the validator instance.
+     *
+     * @param  Validator  $validator
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($this->input('payment_method') === Transaction::PAYMENT_METHOD_SPLIT) {
+                $status = $this->input('payment_status', Transaction::PAYMENT_STATUS_PAID);
+                if ($status !== Transaction::PAYMENT_STATUS_UNPAID) {
+                    $payable = $status === Transaction::PAYMENT_STATUS_PARTIAL
+                        ? (float) $this->input('amount_paid', 0)
+                        : (float) $this->input('amount', 0);
+
+                    $cash = (float) $this->input('cash_amount', 0);
+                    $gcash = (float) $this->input('gcash_amount', 0);
+
+                    if (round($cash + $gcash, 2) !== round($payable, 2)) {
+                        $validator->errors()->add('cash_amount', 'The sum of Cash and GCash amounts must equal the amount paid today (₱'.number_format($payable, 2).').');
+                    }
+                }
+            }
+        });
     }
 }

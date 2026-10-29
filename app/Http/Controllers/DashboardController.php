@@ -31,7 +31,7 @@ class DashboardController extends Controller
 
         $openingCash = $todaySettlement ? (float) $todaySettlement->opening_cash : 0.0;
         $cashInBox = round($openingCash + $todayMetrics['cash_in'] - $todayMetrics['cash_out'], 2);
-        $exactNetGcash = round($todayMetrics['total_gcash'] - $todayMetrics['expense_gcash'], 2);
+        $exactNetGcash = round($todayMetrics['gcash_in'] - $todayMetrics['gcash_out'], 2);
 
         $portalBalance = FlightPortalDeposit::getCurrentBalance();
         $portalLowBalance = $portalBalance < FlightPortalDeposit::LOW_BALANCE_THRESHOLD;
@@ -54,8 +54,8 @@ class DashboardController extends Controller
             'cash_in' => $todayMetrics['cash_in'],
             'cash_out' => $todayMetrics['cash_out'],
             'cash_in_box' => $cashInBox,
-            'gcash_in' => $todayMetrics['total_gcash'],
-            'gcash_out' => $todayMetrics['expense_gcash'],
+            'gcash_in' => $todayMetrics['gcash_in'],
+            'gcash_out' => $todayMetrics['gcash_out'],
             'exact_net_gcash' => $exactNetGcash,
             'total_sales' => $todayMetrics['total_sales'],
             'total_expenses' => $todayMetrics['total_expenses'],

@@ -256,9 +256,16 @@ class DailySettlement extends Model
             ->whereDate('transaction_date', $dateString)
             ->whereNotNull('third_party_payment')
             ->where('third_party_payment', '>', 0)
-            ->get(['payment_method', 'cash_amount', 'third_party_payment']);
+            ->get(['payment_method', 'cash_amount', 'third_party_payment', 'disbursement_source', 'payment_status']);
 
         foreach ($psaTransactions as $psaTx) {
+            if ($psaTx->disbursement_source !== null && $psaTx->disbursement_source !== Transaction::DISBURSEMENT_SOURCE_CASH) {
+                continue;
+            }
+            if ($psaTx->payment_status === Transaction::PAYMENT_STATUS_UNPAID) {
+                continue;
+            }
+
             $fee = (float) $psaTx->third_party_payment;
             if ($psaTx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
                 $psaCashDisbursements += $fee;
@@ -288,9 +295,13 @@ class DailySettlement extends Model
             ->whereDate('transaction_date', $dateString)
             ->whereNotNull('employee_share')
             ->where('employee_share', '>', 0)
-            ->get(['payment_method', 'cash_amount', 'employee_share']);
+            ->get(['payment_method', 'cash_amount', 'employee_share', 'payment_status']);
 
         foreach ($employeeShareTransactions as $esTx) {
+            if ($esTx->payment_status === Transaction::PAYMENT_STATUS_UNPAID) {
+                continue;
+            }
+
             $share = (float) $esTx->employee_share;
             if ($esTx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
                 $employeeShareCashDisbursements += $share;

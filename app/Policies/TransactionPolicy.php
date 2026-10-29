@@ -51,6 +51,14 @@ class TransactionPolicy
     }
 
     /**
+     * Determine whether the user can record payment collections for the transaction.
+     */
+    public function collectPayment(User $user, Transaction $transaction): bool
+    {
+        return $user->isAdmin() || $user->isStaff();
+    }
+
+    /**
      * Determine whether the user can delete (soft delete) the transaction.
      * Admin/TechAdmin can delete any transaction.
      * Staff can only delete if they created it AND it was created today.

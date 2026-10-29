@@ -38,7 +38,7 @@ class ExpenseCategoryController extends Controller
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
-        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['sort_order'] = $validated['sort_order'] ?? $expenseCategory->sort_order;
         $validated['is_active'] = $request->boolean('is_active', true);
 
         $expenseCategory->update($validated);

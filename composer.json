@@ -68,6 +68,7 @@
             "@test"
         ],
         "types:check": [
+            "@php vendor/bin/phpstan analyse --memory-limit=512M"
         ],
         "test": [
             "@php artisan config:clear --ansi",
