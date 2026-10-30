@@ -58,7 +58,6 @@ const props = withDefaults(
         ddnSplitConfig?: DdnSplitConfig;
         portalBalance?: number;
         recurringCustomers?: Customer[];
-        initialCustomers?: Customer[];
     }>(),
     {
         onlineAssistanceTypes: () => [],
@@ -67,7 +66,6 @@ const props = withDefaults(
         psaRates: () => [],
         ddnSplitConfig: () => ({ ddn: 0.6, employee: 0.4 }),
         recurringCustomers: () => [],
-        initialCustomers: () => [],
     },
 );
 
@@ -782,10 +780,7 @@ const computedOnlineEmployeeShare = computed(() => {
 });
 
 function onCustomerInput() {
-    const list =
-        props.recurringCustomers && props.recurringCustomers.length
-            ? props.recurringCustomers
-            : (props.initialCustomers ?? []);
+    const list = props.recurringCustomers ?? [];
     const trimmed = customerName.value.trim().toLowerCase();
     const match = list.find((c) => c.name.toLowerCase() === trimmed);
 
@@ -993,10 +988,7 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
                 />
                 <datalist id="recurring-customers-list">
                     <option
-                        v-for="c in recurringCustomers &&
-                        recurringCustomers.length
-                            ? recurringCustomers
-                            : initialCustomers"
+                        v-for="c in recurringCustomers"
                         :key="c.id"
                         :value="c.name"
                     >

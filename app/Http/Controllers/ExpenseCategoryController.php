@@ -32,6 +32,7 @@ class ExpenseCategoryController extends Controller
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense category added.']);
+        Inertia::flash('new_category', $category);
 
         return back()->with('new_category', $category);
     }

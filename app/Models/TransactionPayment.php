@@ -11,15 +11,18 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $transaction_id
  * @property int|null $user_id
- * @property string $amount
+ * @property float|int|string $amount
  * @property string $payment_method
- * @property string|null $cash_amount
- * @property string|null $gcash_amount
+ * @property float|int|string|null $cash_amount
+ * @property float|int|string|null $gcash_amount
+ * @property float|int|string|null $gcash_tendered
+ * @property float|int|string|null $cash_change
+ * @property float|int|string|null $change_fee
  * @property Carbon $payment_date
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property Transaction $transaction
+ * @property Transaction|null $transaction
  * @property User|null $user
  */
 #[Fillable([

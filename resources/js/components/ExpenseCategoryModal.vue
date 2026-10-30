@@ -53,8 +53,12 @@ const submit = () => {
         {
             preserveScroll: true,
             onSuccess: (page) => {
-                const newCategory = (page.props as Record<string, any>)?.flash
-                    ?.new_category as ExpenseCategory | undefined;
+                const flash =
+                    (page as any)?.flash ??
+                    (page.props as Record<string, any>)?.flash;
+                const newCategory = (flash?.new_category ??
+                    (page.props as Record<string, any>)?.new_category) as
+                    ExpenseCategory | undefined;
 
                 if (newCategory) {
                     emit('category-created', newCategory);

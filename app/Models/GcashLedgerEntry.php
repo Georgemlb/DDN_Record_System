@@ -12,8 +12,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $user_id
  * @property string $type
- * @property string $amount
- * @property string $running_balance
+ * @property float|int|string $amount
+ * @property float|int|string|null $running_balance
  * @property bool $is_balance_anchor
  * @property int|null $transaction_id
  * @property int|null $expense_id
@@ -21,6 +21,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $entry_date
  * @property int $sort_order
  * @property string|null $notes
+ * @property bool $can_move_up
+ * @property bool $can_move_down
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -112,9 +114,7 @@ class GcashLedgerEntry extends Model
     protected static function booted(): void
     {
         static::saving(function (self $entry) {
-            if ($entry->entry_date) {
-                $entry->attributes['entry_date'] = Carbon::parse($entry->entry_date)->toDateString();
-            }
+            $entry->attributes['entry_date'] = Carbon::parse($entry->entry_date)->toDateString();
         });
     }
 
@@ -195,7 +195,7 @@ class GcashLedgerEntry extends Model
     public static function syncForTransaction(Transaction $transaction, bool $recalculate = true): void
     {
         $date = $transaction->transaction_date;
-        $userId = $transaction->user_id ?? auth()->id();
+        $userId = $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null);
 
         // Remittance Cash-Out: customer sent GCash to agency (+GCash)
         $isRemittanceCashOut = $transaction->type === Transaction::TYPE_REMITTANCE
@@ -217,7 +217,7 @@ class GcashLedgerEntry extends Model
                 ->first();
 
             if (! $paymentEntry) {
-                $paymentEntry = new static;
+                $paymentEntry = new self;
                 $paymentEntry->transaction_id = $transaction->id;
                 $maxOrder = static::whereDate('entry_date', $date)->max('sort_order') ?? 0;
                 $paymentEntry->sort_order = $maxOrder + 1;
@@ -272,14 +272,14 @@ class GcashLedgerEntry extends Model
                     continue;
                 }
 
-                $paymentDate = $payment->payment_date ?: $date;
+                $paymentDate = $payment->payment_date;
                 $paymentUser = $payment->user_id ?? $userId;
 
                 /** @var GcashLedgerEntry|null $entry */
                 $entry = $existingEntries->get($index);
 
                 if (! $entry) {
-                    $entry = new static;
+                    $entry = new self;
                     $entry->transaction_id = $transaction->id;
                     $maxOrder = static::whereDate('entry_date', $paymentDate)->max('sort_order') ?? 0;
                     $entry->sort_order = $maxOrder + 1;
@@ -324,7 +324,7 @@ class GcashLedgerEntry extends Model
 
             if ($gcashCollected > 0) {
                 if (! $paymentEntry) {
-                    $paymentEntry = new static;
+                    $paymentEntry = new self;
                     $paymentEntry->transaction_id = $transaction->id;
                     $maxOrder = static::whereDate('entry_date', $date)->max('sort_order') ?? 0;
                     $paymentEntry->sort_order = $maxOrder + 1;
@@ -372,7 +372,7 @@ class GcashLedgerEntry extends Model
 
         if ($thirdPartyCost > 0 && $isDisbursedViaGcash && ! $isRemittanceCashIn && ! $isRemittanceCashOut) {
             if (! $disbursementEntry) {
-                $disbursementEntry = new static;
+                $disbursementEntry = new self;
                 $disbursementEntry->transaction_id = $transaction->id;
                 $maxOrder = static::whereDate('entry_date', $date)->max('sort_order') ?? 0;
                 $disbursementEntry->sort_order = $maxOrder + 1;
@@ -403,7 +403,7 @@ class GcashLedgerEntry extends Model
 
         if ($isRemittanceCashIn) {
             if (! $cashInEntry) {
-                $cashInEntry = new static;
+                $cashInEntry = new self;
                 $cashInEntry->transaction_id = $transaction->id;
                 $maxOrder = static::whereDate('entry_date', $date)->max('sort_order') ?? 0;
                 $cashInEntry->sort_order = $maxOrder + 1;
@@ -482,9 +482,9 @@ class GcashLedgerEntry extends Model
                 $adjustmentEntry->restore();
             }
 
-            $adjustmentEntry->user_id = $expense->user_id ?? auth()->id();
+            $adjustmentEntry->user_id = $expense->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null);
             $adjustmentEntry->amount = (float) $expense->amount;
-            $adjustmentEntry->entry_date = $expense->expense_date;
+            $adjustmentEntry->entry_date = $expense->expense_date ?: Carbon::now();
             $adjustmentEntry->reference_number = $expense->reference_number;
             $adjustmentEntry->save();
         } elseif ($adjustmentEntry && $expense->payment_method !== Expense::PAYMENT_METHOD_CASH) {
@@ -499,7 +499,7 @@ class GcashLedgerEntry extends Model
 
         if ($expense->payment_method === Expense::PAYMENT_METHOD_GCASH) {
             if (! $outflowEntry) {
-                $outflowEntry = new static;
+                $outflowEntry = new self;
                 $outflowEntry->expense_id = $expense->id;
                 $maxOrder = static::whereDate('entry_date', $expense->expense_date)->max('sort_order') ?? 0;
                 $outflowEntry->sort_order = $maxOrder + 1;
@@ -507,7 +507,7 @@ class GcashLedgerEntry extends Model
                 $outflowEntry->restore();
             }
 
-            $outflowEntry->user_id = $expense->user_id ?? auth()->id();
+            $outflowEntry->user_id = $expense->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null);
             $outflowEntry->type = stripos($expense->title ?? '', 'portal') !== false
                 ? self::TYPE_PORTAL_RELOAD
                 : self::TYPE_EXPENSE_PAYMENT;
@@ -536,7 +536,7 @@ class GcashLedgerEntry extends Model
             $reimbursementDate = $expense->reimbursed_at ?? $expense->expense_date;
 
             if (! $reimbursementEntry) {
-                $reimbursementEntry = new static;
+                $reimbursementEntry = new self;
                 $reimbursementEntry->expense_id = $expense->id;
                 $maxOrder = static::whereDate('entry_date', $reimbursementDate)->max('sort_order') ?? 0;
                 $reimbursementEntry->sort_order = $maxOrder + 1;
@@ -544,7 +544,7 @@ class GcashLedgerEntry extends Model
                 $reimbursementEntry->restore();
             }
 
-            $reimbursementEntry->user_id = $expense->user_id ?? auth()->id();
+            $reimbursementEntry->user_id = $expense->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null);
             $reimbursementEntry->type = self::TYPE_EXPENSE_REIMBURSEMENT;
             $reimbursementEntry->amount = (float) $expense->amount;
             $reimbursementEntry->entry_date = $reimbursementDate;

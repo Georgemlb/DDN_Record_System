@@ -183,18 +183,6 @@ test('an authenticated user cannot delete an expense category if used in expense
     $this->assertDatabaseHas('expense_categories', ['id' => $category->id]);
 });
 
-test('legacy settings configuration routes redirect to configurations with tab query', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->get('/settings/online-assistance-types')
-        ->assertRedirect('/configurations?tab=online-assistance');
-
-    $this->actingAs($user)
-        ->get('/settings/expense-categories')
-        ->assertRedirect('/configurations?tab=expense-categories');
-});
-
 test('an authenticated user cannot create online assistance type with duplicate name', function () {
     $user = User::factory()->create();
     $existing = OnlineAssistanceType::first();

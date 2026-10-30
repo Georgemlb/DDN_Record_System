@@ -23,7 +23,8 @@ class ExpenseRequest extends FormRequest
      */
     public function rules(): array
     {
-        $currentCategoryId = $this->route('expense')?->expense_category_id;
+        $expense = $this->route('expense');
+        $currentCategoryId = $expense instanceof Expense ? $expense->expense_category_id : null;
 
         return [
             'title' => ['required', 'string', 'max:255'],

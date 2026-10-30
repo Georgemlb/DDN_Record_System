@@ -129,8 +129,8 @@ class TransactionController extends Controller
         ];
 
         // Sorting
-        $sort = request('sort', 'transaction_date');
-        $direction = request('direction', 'desc');
+        $sort = (string) request('sort', 'transaction_date');
+        $direction = strtolower((string) request('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         $allowedSorts = ['transaction_date', 'amount', 'ddn_amount', 'customer_name', 'reference_number', 'balance'];
         if (in_array($sort, $allowedSorts)) {
@@ -161,9 +161,10 @@ class TransactionController extends Controller
      */
     public function create(): Response
     {
+        $customers = Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']);
+
         return Inertia::render('transactions/Create', [
-            'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
-            'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
+            'recurringCustomers' => $customers,
             'onlineAssistanceTypes' => OnlineAssistanceType::query()->active()->get(),
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
@@ -188,7 +189,7 @@ class TransactionController extends Controller
             );
             $validated['customer_id'] = $customer->id;
         } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
-            $customer = Customer::find($validated['customer_id']);
+            $customer = Customer::query()->find((int) $validated['customer_id']);
             if ($customer && empty($customer->contact_number)) {
                 $customer->update(['contact_number' => $request->input('customer_contact')]);
             }
@@ -196,7 +197,7 @@ class TransactionController extends Controller
 
         $payload = $this->prepareTransactionData($validated);
         if (empty($payload['user_id']) && auth()->check()) {
-            $payload['user_id'] = auth()->id();
+            $payload['user_id'] = (int) auth()->id();
         }
 
         $transaction = Transaction::query()->create($payload);
@@ -204,7 +205,7 @@ class TransactionController extends Controller
         // Record initial payment if amount_paid > 0 and not already recorded
         if ($payload['amount_paid'] > 0 && $transaction->payments()->doesntExist()) {
             $transaction->payments()->create([
-                'user_id' => auth()->id(),
+                'user_id' => (int) auth()->id(),
                 'amount' => $payload['amount_paid'],
                 'payment_method' => $payload['payment_method'],
                 'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
@@ -254,14 +255,25 @@ class TransactionController extends Controller
             $onlineAssistanceTypes->push($inactiveType);
         }
 
+        $psaRates = PsaRate::query()->active()->get();
+        if ($transaction->type === Transaction::TYPE_PSA && $transaction->psa_document_type) {
+            $matchingRate = PsaRate::query()->where('document_type', $transaction->psa_document_type)->first();
+            if ($matchingRate && ! $matchingRate->is_active && ! $psaRates->contains('id', $matchingRate->id)) {
+                $inactiveRate = clone $matchingRate;
+                $inactiveRate->name .= ' (Inactive)';
+                $psaRates->push($inactiveRate);
+            }
+        }
+
+        $customers = Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']);
+
         return Inertia::render('transactions/Edit', [
             'transaction' => $transaction,
-            'recurringCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
-            'initialCustomers' => Customer::query()->orderBy('name')->get(['id', 'name', 'contact_number']),
+            'recurringCustomers' => $customers,
             'onlineAssistanceTypes' => $onlineAssistanceTypes,
             'airlineMarkups' => AirlineMarkup::query()->where('is_active', true)->get(),
             'psaDocumentTypes' => Transaction::PSA_DOCUMENT_TYPES,
-            'psaRates' => PsaRate::query()->orderBy('sort_order')->orderBy('name')->get(),
+            'psaRates' => $psaRates,
             'ddnSplitConfig' => config('ddn.online_assistance_split'),
             'portalBalance' => FlightPortalDeposit::getCurrentBalance(),
         ]);
@@ -283,14 +295,14 @@ class TransactionController extends Controller
             );
             $validated['customer_id'] = $customer->id;
         } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
-            $customer = Customer::find($validated['customer_id']);
+            $customer = Customer::query()->find((int) $validated['customer_id']);
             if ($customer && empty($customer->contact_number)) {
                 $customer->update(['contact_number' => $request->input('customer_contact')]);
             }
         }
 
         $payload = $this->prepareTransactionData($validated);
-        $oldDate = $transaction->transaction_date?->toDateString();
+        $oldDate = $transaction->transaction_date->toDateString();
 
         $transaction->update($payload);
 
@@ -303,7 +315,7 @@ class TransactionController extends Controller
             if ($amountPaid > 0) {
                 if (! $payment) {
                     $transaction->payments()->create([
-                        'user_id' => $transaction->user_id ?? auth()->id(),
+                        'user_id' => $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null),
                         'amount' => $amountPaid,
                         'payment_method' => $payload['payment_method'],
                         'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
@@ -315,7 +327,7 @@ class TransactionController extends Controller
                         'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
                     ]);
                 } else {
-                    $oldPaymentDate = $payment->payment_date?->toDateString();
+                    $oldPaymentDate = $payment->payment_date->toDateString();
                     $payment->update([
                         'amount' => $amountPaid,
                         'payment_method' => $payload['payment_method'],
@@ -327,16 +339,14 @@ class TransactionController extends Controller
                         'payment_date' => $payload['transaction_date'],
                     ]);
 
-                    if ($oldPaymentDate && $oldPaymentDate !== $transaction->transaction_date?->toDateString()) {
+                    if ($oldPaymentDate !== $transaction->transaction_date->toDateString()) {
                         DailySettlement::syncForDate($oldPaymentDate);
                     }
                 }
             } elseif ($payment) {
-                $oldPaymentDate = $payment->payment_date?->toDateString();
+                $oldPaymentDate = $payment->payment_date->toDateString();
                 $payment->delete();
-                if ($oldPaymentDate) {
-                    DailySettlement::syncForDate($oldPaymentDate);
-                }
+                DailySettlement::syncForDate($oldPaymentDate);
             }
         }
 
@@ -345,7 +355,7 @@ class TransactionController extends Controller
         FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
         GcashLedgerEntry::syncForTransaction($transaction);
 
-        if ($oldDate && $oldDate !== $transaction->transaction_date?->toDateString()) {
+        if ($oldDate !== $transaction->transaction_date->toDateString()) {
             DailySettlement::syncForDate($oldDate);
         }
         DailySettlement::syncForDate($transaction->transaction_date->toDateString());
@@ -385,7 +395,7 @@ class TransactionController extends Controller
         }
 
         $transaction->payments()->create([
-            'user_id' => auth()->id(),
+            'user_id' => (int) auth()->id(),
             'amount' => $amount,
             'payment_method' => $validated['payment_method'],
             'cash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['cash_amount'] ?? 0) : null,
@@ -606,7 +616,7 @@ class TransactionController extends Controller
 
             case Transaction::TYPE_ONLINE_ASSISTANCE:
                 $assistanceType = ! empty($data['online_assistance_type_id'])
-                    ? OnlineAssistanceType::find($data['online_assistance_type_id'])
+                    ? OnlineAssistanceType::query()->find((int) $data['online_assistance_type_id'])
                     : null;
                 $hasDisbursement = $assistanceType ? (bool) $assistanceType->has_disbursement : true;
 

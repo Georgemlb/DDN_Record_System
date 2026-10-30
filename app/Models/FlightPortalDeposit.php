@@ -12,15 +12,18 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $user_id
  * @property string $type
- * @property string $amount
- * @property string $running_balance
+ * @property float|int|string $amount
+ * @property float|int|string|null $running_balance
  * @property bool $is_balance_anchor
  * @property int|null $transaction_id
  * @property int|null $expense_id
  * @property string|null $reference_number
  * @property string|null $payment_source
  * @property Carbon $entry_date
+ * @property int $sort_order
  * @property string|null $notes
+ * @property bool $can_move_up
+ * @property bool $can_move_down
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -94,9 +97,7 @@ class FlightPortalDeposit extends Model
     protected static function booted(): void
     {
         static::saving(function (self $deposit) {
-            if ($deposit->entry_date) {
-                $deposit->attributes['entry_date'] = \Carbon\Carbon::parse($deposit->entry_date)->toDateString();
-            }
+            $deposit->attributes['entry_date'] = \Carbon\Carbon::parse($deposit->entry_date)->toDateString();
         });
     }
 
@@ -192,7 +193,7 @@ class FlightPortalDeposit extends Model
             $entry = static::withTrashed()->where('transaction_id', $transaction->id)->first();
 
             if (! $entry) {
-                $entry = new static;
+                $entry = new self;
                 $entry->transaction_id = $transaction->id;
                 $entry->type = self::TYPE_TICKET_DEDUCTION;
 
@@ -204,7 +205,7 @@ class FlightPortalDeposit extends Model
                 }
             }
 
-            $entry->user_id = $transaction->user_id ?? auth()->id();
+            $entry->user_id = $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null);
             $entry->amount = $cost;
             $entry->entry_date = $transaction->transaction_date;
             $entry->reference_number = $transaction->reference_number;

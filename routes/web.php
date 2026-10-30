@@ -50,7 +50,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('gcash-ledger', [GcashLedgerController::class, 'index'])->name('gcash-ledger.index');
         Route::post('gcash-ledger/adjustment', [GcashLedgerController::class, 'storeAdjustment'])->name('gcash-ledger.adjustment');
         Route::put('gcash-ledger/{entry}', [GcashLedgerController::class, 'update'])->name('gcash-ledger.update');
-        Route::post('gcash-ledger/{entry}/reorder', [GcashLedgerController::class, 'reorder'])->name('gcash-ledger.reorder');
         Route::post('gcash-ledger/{entry}/move', [GcashLedgerController::class, 'move'])->name('gcash-ledger.move');
         Route::delete('gcash-ledger/{entry}', [GcashLedgerController::class, 'destroy'])->name('gcash-ledger.destroy');
     });
@@ -77,7 +76,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::resource('psa-rates', PsaRateController::class)->only(['store', 'update', 'destroy']);
         });
     });
-
-    Route::redirect('settings/online-assistance-types', '/configurations?tab=online-assistance');
-    Route::redirect('settings/expense-categories', '/configurations?tab=expense-categories');
 });

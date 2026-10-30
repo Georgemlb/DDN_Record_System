@@ -33,7 +33,7 @@ class ExpenseCategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:expense_categories,name,'.$expenseCategory->id],
-            'description' => ['nullable', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
@@ -56,8 +56,7 @@ class ExpenseCategoryController extends Controller
                 'message' => 'Cannot delete expense category because it is used in existing expenses. Deactivate it instead.',
             ]);
 
-            return redirect()->route('configurations.index', ['tab' => 'expense-categories'])
-                ->with('error', 'Cannot delete expense category because it is used in existing expenses. Deactivate it instead.');
+            return redirect()->route('configurations.index', ['tab' => 'expense-categories']);
         }
 
         $expenseCategory->delete();
