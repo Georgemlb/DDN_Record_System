@@ -191,7 +191,7 @@ class ReportController extends Controller
         $openingCash = (float) $validated['opening_cash'];
         $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
         $actualCash = (float) $validated['actual_cash'];
-        $actualGcash = isset($validated['actual_gcash']) && $validated['actual_gcash'] !== '' && $validated['actual_gcash'] !== null
+        $actualGcash = is_numeric($validated['actual_gcash'] ?? null)
             ? (float) $validated['actual_gcash']
             : null;
 
@@ -283,7 +283,7 @@ class ReportController extends Controller
             $settlement->status = DailySettlement::STATUS_CLOSED;
             if (! $settlement->closed_at) {
                 $settlement->closed_at = now();
-                $settlement->closed_by_user_id = auth()->id();
+                $settlement->closed_by_user_id = (int) auth()->id();
             }
         } else {
             $settlement->status = DailySettlement::STATUS_OPEN;
@@ -328,7 +328,7 @@ class ReportController extends Controller
         $settlement->syncMetricsWithRecords();
 
         $settlement->status = DailySettlement::STATUS_CLOSED;
-        $settlement->closed_by_user_id = auth()->id();
+        $settlement->closed_by_user_id = (int) auth()->id();
         $settlement->closed_at = now();
         if (array_key_exists('notes', $validated)) {
             $settlement->notes = $validated['notes'];
@@ -367,7 +367,7 @@ class ReportController extends Controller
      */
     public function destroy(DailySettlement $settlement): RedirectResponse
     {
-        $date = $settlement->settlement_date ? Carbon::parse($settlement->settlement_date)->format('M d, Y') : 'Selected';
+        $date = $settlement->settlement_date->format('M d, Y');
         $settlement->forceDelete();
 
         Inertia::flash('toast', [
@@ -380,14 +380,14 @@ class ReportController extends Controller
 
     /**
      * Retrieve slip data for viewing and printing.
+     *
+     * @return array<string, mixed>
      */
     public function showSlip(DailySettlement $settlement): array
     {
         $settlement->load(['user', 'closedByUser']);
 
-        $date = $settlement->settlement_date instanceof \DateTimeInterface
-            ? $settlement->settlement_date->format('Y-m-d')
-            : Carbon::parse((string) $settlement->settlement_date)->toDateString();
+        $date = $settlement->settlement_date->format('Y-m-d');
 
         $transactions = Transaction::query()
             ->whereDate('transaction_date', $date)
@@ -442,6 +442,9 @@ class ReportController extends Controller
 
         return response()->stream(function () use ($report, $startDate, $endDate) {
             $handle = fopen('php://output', 'w');
+            if ($handle === false) {
+                return;
+            }
 
             // Title
             fputcsv($handle, ['DDN RECORD SYSTEM - FINANCIAL REPORT']);
@@ -596,7 +599,7 @@ class ReportController extends Controller
             $amount = (float) $exp->amount;
             $totalExpenses += $amount;
 
-            $catName = $exp->category?->name ?? 'Uncategorized';
+            $catName = $exp->category ? $exp->category->name : 'Uncategorized';
             if ($catName === 'Flight Portal Reload') {
                 $portalReloadExpenses += $amount;
             }
@@ -647,7 +650,7 @@ class ReportController extends Controller
                 'expense_count' => $expenses->count(),
             ],
             'servicesBreakdown' => $servicesBreakdown,
-            'expensesBreakdown' => array_values($categoriesGrouped),
+            'expensesBreakdown' => $categoriesGrouped,
         ];
     }
 

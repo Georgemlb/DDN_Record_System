@@ -24,18 +24,25 @@ use Illuminate\Support\Carbon;
  * @property string|null $psa_document_type
  * @property int|null $copies
  * @property int|null $online_assistance_type_id
- * @property string $amount
- * @property string|null $third_party_payment
- * @property string|null $ddn_amount
- * @property string|null $employee_share
+ * @property float|int|string $amount
+ * @property float|int|string|null $third_party_payment
+ * @property float|int|string|null $ddn_amount
+ * @property float|int|string|null $employee_share
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property int|null $customer_id
- * @property string $amount_paid
- * @property string $balance
+ * @property float|int|string|null $amount_paid
+ * @property float|int|string|null $balance
  * @property string $payment_status
+ * @property float|int|string|null $cash_amount
+ * @property float|int|string|null $gcash_amount
+ * @property float|int|string|null $cash_tendered
+ * @property float|int|string|null $gcash_tendered
+ * @property float|int|string|null $cash_change
+ * @property float|int|string|null $change_fee
+ * @property string|null $disbursement_source
  * @property OnlineAssistanceType|null $onlineAssistanceType
  * @property User|null $user
  * @property Customer|null $customer
@@ -181,11 +188,11 @@ class Transaction extends Model
     {
         static::creating(function (Transaction $transaction) {
             if (empty($transaction->reference_number)) {
-                $transaction->reference_number = static::generateReferenceNumber($transaction->transaction_date ? $transaction->transaction_date->format('Y-m-d') : null);
+                $transaction->reference_number = static::generateReferenceNumber($transaction->transaction_date->format('Y-m-d'));
             }
 
             if (empty($transaction->user_id) && auth()->check()) {
-                $transaction->user_id = auth()->id();
+                $transaction->user_id = (int) auth()->id();
             }
 
             if (empty($transaction->payment_status)) {
@@ -208,7 +215,7 @@ class Transaction extends Model
         static::created(function (Transaction $transaction) {
             if ($transaction->payments()->doesntExist() && (float) $transaction->amount_paid > 0) {
                 $transaction->payments()->create([
-                    'user_id' => $transaction->user_id ?? auth()->id(),
+                    'user_id' => $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null),
                     'amount' => $transaction->amount_paid,
                     'payment_method' => $transaction->payment_method,
                     'cash_amount' => $transaction->payment_method === static::PAYMENT_METHOD_SPLIT ? $transaction->cash_amount : null,
@@ -216,7 +223,7 @@ class Transaction extends Model
                     'gcash_tendered' => $transaction->gcash_tendered,
                     'cash_change' => $transaction->cash_change ?? 0,
                     'change_fee' => $transaction->change_fee ?? 0,
-                    'payment_date' => $transaction->transaction_date ? $transaction->transaction_date->format('Y-m-d') : now()->toDateString(),
+                    'payment_date' => $transaction->transaction_date->format('Y-m-d'),
                     'notes' => $transaction->payment_status === static::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
                 ]);
             }
@@ -309,6 +316,9 @@ class Transaction extends Model
         return $this->hasMany(TransactionPayment::class);
     }
 
+    /**
+     * @return BelongsTo<OnlineAssistanceType, $this>
+     */
     public function onlineAssistanceType(): BelongsTo
     {
         return $this->belongsTo(OnlineAssistanceType::class);

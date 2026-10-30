@@ -14,8 +14,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $user_id
  * @property string $title
  * @property int $expense_category_id
- * @property string $amount
- * @property Carbon $expense_date
+ * @property float|int|string $amount
+ * @property Carbon|null $expense_date
  * @property string $payment_method
  * @property string|null $payee
  * @property string|null $reference_number
@@ -29,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
- * @property ExpenseCategory $category
+ * @property ExpenseCategory|null $category
  * @property User|null $user
  */
 #[Fillable([
@@ -60,7 +60,7 @@ class Expense extends Model
     {
         static::creating(function (Expense $expense) {
             if (empty($expense->user_id) && auth()->check()) {
-                $expense->user_id = auth()->id();
+                $expense->user_id = (int) auth()->id();
             }
         });
     }
@@ -121,24 +121,27 @@ class Expense extends Model
 
     /**
      * @param  Builder<Expense>  $query
+     * @return Builder<Expense>
      */
-    public function scopePersonal($query)
+    public function scopePersonal(Builder $query): Builder
     {
         return $query->where('is_personal', true);
     }
 
     /**
      * @param  Builder<Expense>  $query
+     * @return Builder<Expense>
      */
-    public function scopeBusiness($query)
+    public function scopeBusiness(Builder $query): Builder
     {
         return $query->where('is_personal', false);
     }
 
     /**
      * @param  Builder<Expense>  $query
+     * @return Builder<Expense>
      */
-    public function scopePendingReimbursement($query)
+    public function scopePendingReimbursement(Builder $query): Builder
     {
         return $query->where('is_personal', true)
             ->where('reimbursement_status', self::REIMBURSEMENT_STATUS_PENDING);
@@ -146,8 +149,9 @@ class Expense extends Model
 
     /**
      * @param  Builder<Expense>  $query
+     * @return Builder<Expense>
      */
-    public function scopeReimbursed($query)
+    public function scopeReimbursed(Builder $query): Builder
     {
         return $query->where('is_personal', true)
             ->where('reimbursement_status', self::REIMBURSEMENT_STATUS_REIMBURSED);

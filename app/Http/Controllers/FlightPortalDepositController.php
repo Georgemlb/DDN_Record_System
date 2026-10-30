@@ -50,8 +50,8 @@ class FlightPortalDepositController extends Controller
         }
 
         // Sorting
-        $sort = $request->input('sort', 'entry_date');
-        $direction = $request->input('direction', 'desc');
+        $sort = (string) $request->input('sort', 'entry_date');
+        $direction = strtolower((string) $request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         if (in_array($sort, ['amount', 'running_balance', 'type', 'created_at'])) {
             $query->orderBy($sort, $direction);
@@ -85,23 +85,26 @@ class FlightPortalDepositController extends Controller
         $deposits->getCollection()->transform(function ($deposit) use ($dateStats, $direction) {
             $dateStr = Carbon::parse($deposit->entry_date)->toDateString();
             $stat = $dateStats->get($dateStr);
-            if (! $stat || $stat->entry_count <= 1) {
+            if (! $stat || (int) $stat->getAttribute('entry_count') <= 1) {
                 $deposit->can_move_up = false;
                 $deposit->can_move_down = false;
 
                 return $deposit;
             }
 
+            $maxOrder = (int) $stat->getAttribute('max_order');
+            $minOrder = (int) $stat->getAttribute('min_order');
+
             if ($direction === 'desc') {
                 // When newest is on top (desc):
                 // Higher sort_order is displayed visually higher on screen
-                $deposit->can_move_up = $deposit->sort_order < $stat->max_order;
-                $deposit->can_move_down = $deposit->sort_order > $stat->min_order;
+                $deposit->can_move_up = $deposit->sort_order < $maxOrder;
+                $deposit->can_move_down = $deposit->sort_order > $minOrder;
             } else {
                 // When oldest is on top (asc):
                 // Lower sort_order is displayed visually higher on screen
-                $deposit->can_move_up = $deposit->sort_order > $stat->min_order;
-                $deposit->can_move_down = $deposit->sort_order < $stat->max_order;
+                $deposit->can_move_up = $deposit->sort_order > $minOrder;
+                $deposit->can_move_down = $deposit->sort_order < $maxOrder;
             }
 
             return $deposit;
@@ -185,7 +188,7 @@ class FlightPortalDepositController extends Controller
         }
 
         $deposit = new FlightPortalDeposit;
-        $deposit->user_id = auth()->id();
+        $deposit->user_id = (int) auth()->id();
         $deposit->type = FlightPortalDeposit::TYPE_TOP_UP;
         $deposit->amount = $validated['amount'];
         $deposit->entry_date = $validated['entry_date'];
@@ -195,7 +198,7 @@ class FlightPortalDepositController extends Controller
         $deposit->expense_id = $expenseId;
 
         $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-        $deposit->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+        $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
 
         $deposit->save();
 
@@ -221,7 +224,7 @@ class FlightPortalDepositController extends Controller
         ]);
 
         $deposit = new FlightPortalDeposit;
-        $deposit->user_id = auth()->id();
+        $deposit->user_id = (int) auth()->id();
         $deposit->type = FlightPortalDeposit::TYPE_ADJUSTMENT;
         $deposit->amount = $validated['amount'];
         $deposit->entry_date = $validated['entry_date'];
@@ -229,9 +232,9 @@ class FlightPortalDepositController extends Controller
 
         if (str_contains(strtolower($validated['notes']), 'initial balance')) {
             $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-            $deposit->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+            $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
         } else {
-            $maxOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0;
+            $maxOrder = (int) (FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
             $deposit->sort_order = $maxOrder + 1;
         }
 
@@ -270,7 +273,7 @@ class FlightPortalDepositController extends Controller
                 'notes' => ['nullable', 'string', 'max:1000'],
             ]);
 
-            $oldDate = $deposit->entry_date?->toDateString();
+            $oldDate = $deposit->entry_date->toDateString();
 
             $deposit->amount = $validated['amount'];
             $deposit->entry_date = $validated['entry_date'];

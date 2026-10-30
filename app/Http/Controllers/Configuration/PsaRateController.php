@@ -61,8 +61,7 @@ class PsaRateController extends Controller
                 'message' => 'Cannot delete PSA rate because it is used in existing transactions. Deactivate it instead.',
             ]);
 
-            return redirect()->route('configurations.index', ['tab' => 'psa-rates'])
-                ->with('error', 'Cannot delete PSA rate because it is used in existing transactions. Deactivate it instead.');
+            return redirect()->route('configurations.index', ['tab' => 'psa-rates']);
         }
 
         $psaRate->delete();

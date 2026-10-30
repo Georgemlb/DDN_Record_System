@@ -172,9 +172,9 @@ class DashboardController extends Controller
             ->orderBy('date')
             ->get()
             ->map(fn ($row) => [
-                'date' => $row->date,
-                'total_sales' => (float) $row->total_sales,
-                'total_ddn' => (float) $row->total_ddn,
+                'date' => (string) $row->getAttribute('date'),
+                'total_sales' => (float) $row->getAttribute('total_sales'),
+                'total_ddn' => (float) $row->getAttribute('total_ddn'),
             ]);
 
         // Expenses by Category (operating expenses only, excluding portal reloads)
@@ -186,8 +186,8 @@ class DashboardController extends Controller
             ->orderByDesc('total')
             ->get()
             ->map(fn ($row) => [
-                'category' => $row->category?->name ?? 'Uncategorized',
-                'total' => (float) $row->total,
+                'category' => $row->category ? $row->category->name : 'Uncategorized',
+                'total' => (float) $row->getAttribute('total'),
             ]);
 
         return Inertia::render('Dashboard', [

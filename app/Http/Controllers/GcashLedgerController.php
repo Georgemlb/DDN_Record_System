@@ -14,8 +14,6 @@ use Inertia\Response;
 
 class GcashLedgerController extends Controller
 {
-    public const LOW_BALANCE_THRESHOLD = 5000.00;
-
     /**
      * Display listing of GCash ledger entries and balance metrics.
      */
@@ -51,8 +49,8 @@ class GcashLedgerController extends Controller
         }
 
         // Sorting
-        $sort = $request->input('sort', 'entry_date');
-        $direction = $request->input('direction', 'desc');
+        $sort = (string) $request->input('sort', 'entry_date');
+        $direction = strtolower((string) $request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         if (in_array($sort, ['amount', 'running_balance', 'type', 'created_at'], true)) {
             $query->orderBy($sort, $direction);
@@ -85,19 +83,22 @@ class GcashLedgerController extends Controller
         $entries->getCollection()->transform(function ($entry) use ($dateStats, $direction) {
             $dateStr = Carbon::parse($entry->entry_date)->toDateString();
             $stat = $dateStats->get($dateStr);
-            if (! $stat || $stat->entry_count <= 1) {
+            if (! $stat || (int) $stat->getAttribute('entry_count') <= 1) {
                 $entry->can_move_up = false;
                 $entry->can_move_down = false;
 
                 return $entry;
             }
 
+            $maxOrder = (int) $stat->getAttribute('max_order');
+            $minOrder = (int) $stat->getAttribute('min_order');
+
             if ($direction === 'desc') {
-                $entry->can_move_up = $entry->sort_order < $stat->max_order;
-                $entry->can_move_down = $entry->sort_order > $stat->min_order;
+                $entry->can_move_up = $entry->sort_order < $maxOrder;
+                $entry->can_move_down = $entry->sort_order > $minOrder;
             } else {
-                $entry->can_move_up = $entry->sort_order > $stat->min_order;
-                $entry->can_move_down = $entry->sort_order < $stat->max_order;
+                $entry->can_move_up = $entry->sort_order > $minOrder;
+                $entry->can_move_down = $entry->sort_order < $maxOrder;
             }
 
             return $entry;
@@ -116,7 +117,7 @@ class GcashLedgerController extends Controller
             ->whereBetween('entry_date', [$startOfMonth, $endOfMonth])
             ->sum('amount');
 
-        $isLowBalance = $currentBalance < self::LOW_BALANCE_THRESHOLD;
+        $isLowBalance = $currentBalance < GcashLedgerEntry::LOW_BALANCE_THRESHOLD;
 
         return Inertia::render('gcash-ledger/Index', [
             'entries' => $entries,
@@ -124,7 +125,7 @@ class GcashLedgerController extends Controller
                 'current_balance' => $currentBalance,
                 'total_inflows_month' => $monthInflows,
                 'total_outflows_month' => $monthOutflows,
-                'low_balance_threshold' => self::LOW_BALANCE_THRESHOLD,
+                'low_balance_threshold' => GcashLedgerEntry::LOW_BALANCE_THRESHOLD,
                 'is_low_balance' => $isLowBalance,
             ],
             'filters' => $request->only(['search', 'type', 'date_from', 'date_to', 'sort', 'direction']),
@@ -148,7 +149,7 @@ class GcashLedgerController extends Controller
         $isFromDrawer = $request->boolean('from_drawer') && (float) $validated['amount'] > 0;
 
         $entry = new GcashLedgerEntry;
-        $entry->user_id = auth()->id();
+        $entry->user_id = (int) auth()->id();
         $entry->type = GcashLedgerEntry::TYPE_ADJUSTMENT;
         $entry->amount = $validated['amount'];
         $entry->entry_date = $validated['entry_date'];
@@ -162,7 +163,7 @@ class GcashLedgerController extends Controller
                 ['is_active' => true, 'sort_order' => 1]
             );
             $expense = Expense::create([
-                'user_id' => auth()->id(),
+                'user_id' => (int) auth()->id(),
                 'expense_category_id' => $category->id,
                 'title' => 'GCash Top-Up from Drawer',
                 'amount' => $validated['amount'],
@@ -181,9 +182,9 @@ class GcashLedgerController extends Controller
 
         if (str_contains(strtolower($validated['notes']), 'initial balance')) {
             $minOrder = GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-            $entry->sort_order = $minOrder !== null ? min(0, $minOrder - 1) : 1;
+            $entry->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
         } else {
-            $maxOrder = GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0;
+            $maxOrder = (int) (GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
             $entry->sort_order = $maxOrder + 1;
         }
 
@@ -224,7 +225,7 @@ class GcashLedgerController extends Controller
             'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
         ]);
 
-        $oldDate = $entry->entry_date?->toDateString();
+        $oldDate = $entry->entry_date->toDateString();
 
         $entry->amount = $validated['amount'];
         $entry->entry_date = $validated['entry_date'];
@@ -291,7 +292,7 @@ class GcashLedgerController extends Controller
     /**
      * Move an entry up or down in sort order.
      */
-    public function reorder(Request $request, GcashLedgerEntry $entry): RedirectResponse
+    public function move(Request $request, GcashLedgerEntry $entry): RedirectResponse
     {
         $validated = $request->validate([
             'direction' => ['required', 'string', 'in:up,down'],
@@ -361,10 +362,5 @@ class GcashLedgerController extends Controller
         }
 
         return back();
-    }
-
-    public function move(Request $request, GcashLedgerEntry $entry): RedirectResponse
-    {
-        return $this->reorder($request, $entry);
     }
 }

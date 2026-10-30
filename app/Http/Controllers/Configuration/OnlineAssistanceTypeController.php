@@ -22,13 +22,9 @@ class OnlineAssistanceTypeController extends Controller
         ]);
 
         $hasDisbursement = $request->boolean('has_disbursement', false);
-        $amount = isset($validated['disbursement_amount']) && $validated['disbursement_amount'] !== '' && $validated['disbursement_amount'] !== null
+        $amount = $hasDisbursement && ! empty($validated['disbursement_amount'])
             ? (float) $validated['disbursement_amount']
             : null;
-
-        if (! $hasDisbursement) {
-            $amount = null;
-        }
 
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
         $validated['has_disbursement'] = $hasDisbursement;
@@ -54,13 +50,9 @@ class OnlineAssistanceTypeController extends Controller
         ]);
 
         $hasDisbursement = $request->boolean('has_disbursement', false);
-        $amount = isset($validated['disbursement_amount']) && $validated['disbursement_amount'] !== '' && $validated['disbursement_amount'] !== null
+        $amount = $hasDisbursement && ! empty($validated['disbursement_amount'])
             ? (float) $validated['disbursement_amount']
             : null;
-
-        if (! $hasDisbursement) {
-            $amount = null;
-        }
 
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
         $validated['has_disbursement'] = $hasDisbursement;
@@ -82,8 +74,7 @@ class OnlineAssistanceTypeController extends Controller
                 'message' => 'Cannot delete online assistance type because it is used in existing transactions. Deactivate it instead.',
             ]);
 
-            return redirect()->route('configurations.index', ['tab' => 'online-assistance'])
-                ->with('error', 'Cannot delete online assistance type because it is used in existing transactions. Deactivate it instead.');
+            return redirect()->route('configurations.index', ['tab' => 'online-assistance']);
         }
 
         $onlineAssistanceType->delete();

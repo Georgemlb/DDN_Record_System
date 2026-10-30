@@ -30,6 +30,7 @@ import { index as gcashLedger } from '@/routes/gcash-ledger';
 import { index as portalDeposits } from '@/routes/portal-deposits';
 import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
+import { index as users } from '@/routes/users';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -95,7 +96,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         },
         {
             title: 'Users',
-            href: '/users',
+            href: users(),
             icon: Users,
         },
     ];

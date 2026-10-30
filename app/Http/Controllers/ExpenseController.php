@@ -95,14 +95,14 @@ class ExpenseController extends Controller
             'total_gcash' => (float) (clone $summaryQuery)->where('payment_method', Expense::PAYMENT_METHOD_GCASH)->sum('amount'),
             'total_bank_transfer' => (float) (clone $summaryQuery)->where('payment_method', Expense::PAYMENT_METHOD_BANK_TRANSFER)->sum('amount'),
             'top_category' => $topCategoryRecord ? [
-                'name' => $topCategoryRecord->category?->name ?? 'Unknown',
-                'amount' => (float) $topCategoryRecord->total_amount,
+                'name' => $topCategoryRecord->category ? $topCategoryRecord->category->name : 'Unknown',
+                'amount' => (float) $topCategoryRecord->getAttribute('total_amount'),
             ] : null,
         ];
 
         // Sorting
-        $sort = request('sort', 'expense_date');
-        $direction = request('direction', 'desc');
+        $sort = (string) request('sort', 'expense_date');
+        $direction = strtolower((string) request('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         $allowedSorts = ['expense_date', 'amount', 'title'];
         if (in_array($sort, $allowedSorts, true)) {

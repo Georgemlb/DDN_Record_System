@@ -6,11 +6,6 @@ export type GcashLedgerEntryType =
     | 'government_disbursement'
     | 'expense_payment'
     | 'portal_reload'
-    | 'online_assistance'
-    | 'direct_payment'
-    | 'direct_expense'
-    | 'cash_transfer'
-    | 'bank_transfer'
     | 'adjustment';
 
 export interface GcashLedgerEntry {

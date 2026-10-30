@@ -295,7 +295,6 @@ const formatEntryDate = (dateStr: string | null | undefined) => {
 const getTypeLabel = (type: string) => {
     switch (type) {
         case 'customer_payment':
-        case 'direct_payment':
             return 'Customer Payment';
         case 'remittance_cash_out':
             return 'Cash-Out (+GCash)';
@@ -304,17 +303,11 @@ const getTypeLabel = (type: string) => {
         case 'remittance_cash_in':
             return 'Cash-In (-GCash)';
         case 'government_disbursement':
-        case 'online_assistance':
             return 'Gov Disbursement';
         case 'expense_payment':
-        case 'direct_expense':
             return 'GCash Expense';
         case 'portal_reload':
             return 'Portal Reload';
-        case 'cash_transfer':
-            return 'Cash Transfer';
-        case 'bank_transfer':
-            return 'Bank Transfer';
         case 'adjustment':
             return 'Adjustment / Top-Up';
         default:
@@ -325,20 +318,14 @@ const getTypeLabel = (type: string) => {
 const getTypeBadgeClass = (type: string, amount: string | number) => {
     switch (type) {
         case 'customer_payment':
-        case 'direct_payment':
         case 'remittance_cash_out':
         case 'expense_reimbursement':
             return 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300';
         case 'remittance_cash_in':
         case 'government_disbursement':
-        case 'online_assistance':
         case 'expense_payment':
-        case 'direct_expense':
         case 'portal_reload':
             return 'bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 dark:text-rose-300';
-        case 'bank_transfer':
-        case 'cash_transfer':
-            return 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300';
         case 'adjustment':
         default:
             return Number(amount) >= 0
@@ -356,9 +343,6 @@ const isInflow = (entry: GcashLedgerEntry) => {
         'customer_payment',
         'remittance_cash_out',
         'expense_reimbursement',
-        'direct_payment',
-        'cash_transfer',
-        'bank_transfer',
     ].includes(entry.type);
 };
 

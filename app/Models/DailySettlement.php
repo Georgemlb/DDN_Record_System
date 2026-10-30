@@ -14,19 +14,25 @@ use Illuminate\Support\Carbon;
  * @property int|null $user_id
  * @property int|null $closed_by_user_id
  * @property string $status
- * @property string $opening_cash
- * @property string $cash_in
- * @property string $cash_out
- * @property string $expected_cash
- * @property string|null $actual_cash
- * @property string|null $discrepancy
- * @property string $total_gcash
- * @property string $total_bank_transfer
- * @property string $total_sales
- * @property string $total_ddn_earnings
+ * @property float|int|string $opening_cash
+ * @property float|int|string $cash_in
+ * @property float|int|string $cash_out
+ * @property float|int|string $expected_cash
+ * @property float|int|string|null $actual_cash
+ * @property float|int|string|null $discrepancy
+ * @property float|int|string $opening_gcash
+ * @property float|int|string $gcash_in
+ * @property float|int|string $gcash_out
+ * @property float|int|string $expected_gcash
+ * @property float|int|string|null $actual_gcash
+ * @property float|int|string|null $gcash_discrepancy
+ * @property float|int|string $total_gcash
+ * @property float|int|string $total_bank_transfer
+ * @property float|int|string $total_sales
+ * @property float|int|string $total_ddn_earnings
  * @property string|null $notes
- * @property Carbon|null $opened_at
- * @property Carbon|null $closed_at
+ * @property \DateTimeInterface|Carbon|null $opened_at
+ * @property \DateTimeInterface|Carbon|null $closed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -117,10 +123,12 @@ class DailySettlement extends Model
      *
      * @return array{
      *     cash_in: float,
+     *     cash_out: float,
+     *     gcash_in: float,
+     *     gcash_out: float,
      *     total_gcash: float,
      *     total_sales: float,
      *     total_ddn_earnings: float,
-     *     cash_out: float,
      *     expense_gcash: float,
      *     total_bank_transfer: float,
      *     total_expenses: float
@@ -419,9 +427,7 @@ class DailySettlement extends Model
      */
     public function syncMetricsWithRecords(): void
     {
-        $dateString = $this->settlement_date instanceof \DateTimeInterface
-            ? $this->settlement_date->format('Y-m-d')
-            : Carbon::parse((string) $this->settlement_date)->toDateString();
+        $dateString = $this->settlement_date->format('Y-m-d');
 
         $metrics = self::calculateMetricsForDate($dateString);
 

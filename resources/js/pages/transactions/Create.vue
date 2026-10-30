@@ -20,7 +20,6 @@ defineProps<{
     ddnSplitConfig?: DdnSplitConfig;
     portalBalance?: number;
     recurringCustomers?: Customer[];
-    initialCustomers?: Customer[];
 }>();
 
 defineOptions({
@@ -58,7 +57,7 @@ defineOptions({
                 :psa-rates="psaRates"
                 :ddn-split-config="ddnSplitConfig"
                 :portal-balance="portalBalance"
-                :recurring-customers="recurringCustomers || initialCustomers"
+                :recurring-customers="recurringCustomers"
             />
         </section>
     </main>
