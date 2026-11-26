@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,15 +17,28 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $adminName = (string) config('ddn.admin.name', 'Tech Admin');
+        $adminUsername = (string) config('ddn.admin.username', 'admin');
+        $adminEmail = (string) config('ddn.admin.email', 'admin@ddn.com');
+        $rawPassword = config('ddn.admin.password');
+
+        if (app()->isProduction() && (! is_string($rawPassword) || trim($rawPassword) === '' || $rawPassword === 'admin123')) {
+            throw new RuntimeException(
+                'Set a strong DDN_ADMIN_PASSWORD in your production environment before seeding.',
+            );
+        }
+
+        $adminPassword = is_string($rawPassword) && trim($rawPassword) !== ''
+            ? $rawPassword
+            : 'admin123';
 
         User::firstOrCreate(
-            ['username' => 'admin'],
+            ['username' => $adminUsername],
             [
-                'name' => 'Tech Admin',
-                'email' => 'admin@ddn.com',
+                'name' => $adminName,
+                'email' => $adminEmail,
                 'role' => User::ROLE_TECH_ADMIN,
-                'password' => Hash::make('admin123'),
+                'password' => Hash::make($adminPassword),
                 'email_verified_at' => now(),
             ]
         );

@@ -21,11 +21,22 @@ Because free cloud containers use ephemeral filesystems, storing a local SQLite 
 5. Click **Deploy**. On boot, `docker/start.sh` automatically caches config/routes/views and runs `php artisan migrate --force`.
 
 ### 3. Seed Initial Admin Account (One-Time)
+Before seeding in production, set `DDN_ADMIN_PASSWORD` to a strong password in Render's **Environment** tab (the seeder rejects empty or default `admin123` passwords in production). Optionally set `DDN_BRANCH_FACEBOOK_URL` to your Facebook Page link.
+
 Open Render's **Shell** tab for the service and run:
 ```bash
 php artisan db:seed --force
 ```
-Then log in with your seeded admin account and immediately change the password via **User Menu → Change Password**.
+Then log in at `/login` with your seeded admin account and verify everything works.
+
+---
+
+## Pre-Deployment Go-Live Checklist
+1. Merge your feature branches into `main` on GitHub.
+2. Create Neon PostgreSQL DB (Singapore region) and copy `DB_URL`.
+3. Deploy via Render Blueprint (`render.yaml`) and set `DB_URL`, `APP_URL`, `DDN_ADMIN_PASSWORD`, and optional `DDN_BRANCH_FACEBOOK_URL`.
+4. Run `php artisan db:seed --force` once in Render Shell.
+5. Verify `/` renders the public customer landing page (Airline Ticketing, Ferry & Sea Travel, Document Translation + Toril branch contact info) and `/dashboard` redirects guests to `/login`.
 
 ---
 

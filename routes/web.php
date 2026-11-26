@@ -15,11 +15,12 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::get('/', function () {
-    return auth()->check()
-        ? redirect()->route('dashboard')
-        : redirect()->route('login');
+    return Inertia::render('Welcome', [
+        'branch' => config('ddn.branch'),
+    ]);
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
