@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
-import { ChevronsUpDown, Moon, Sun } from '@lucide/vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import { ChevronsUpDown, Moon, Plus, Sun } from '@lucide/vue';
 import { computed } from 'vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -13,6 +14,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import UserMenuContent from '@/components/UserMenuContent.vue';
 import { useAppearance } from '@/composables/useAppearance';
 import { getInitials } from '@/composables/useInitials';
+import { create as createTransaction } from '@/routes/transactions';
 import type { BreadcrumbItem } from '@/types';
 
 const page = usePage();
@@ -35,7 +37,7 @@ withDefaults(
 
 <template>
     <header
-        class="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/70 bg-background px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-6"
+        class="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/80 bg-background/85 px-4 backdrop-blur-md transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-6"
     >
         <div class="flex items-center gap-2">
             <SidebarTrigger class="-ml-1" />
@@ -44,6 +46,12 @@ withDefaults(
             </template>
         </div>
         <div class="ml-auto flex items-center gap-2">
+            <Button size="sm" as-child class="h-8 gap-1.5">
+                <Link :href="createTransaction()">
+                    <Plus class="size-3.5" />
+                    <span class="hidden sm:inline">New Transaction</span>
+                </Link>
+            </Button>
             <button
                 type="button"
                 @click="toggleTheme"

@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: ddn-record-system
+    runtime: docker
+    plan: free
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: DDN Record System
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_TIMEZONE
+        value: Asia/Manila
+      - key: FORCE_HTTPS
+        value: true
+      - key: TRUST_PROXIES
+        value: "*"
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: APP_KEY
+        generateValue: true
+      - key: DB_URL
+        sync: false
+      - key: APP_URL
+        sync: false

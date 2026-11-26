@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Account\PasswordController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Configuration\AirlineMarkupController;
 use App\Http\Controllers\Configuration\OnlineAssistanceTypeController;
 use App\Http\Controllers\Configuration\PsaRateController;
@@ -13,17 +15,17 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', function () {
-    if (auth()->check()) {
-        return redirect()->route('dashboard');
-    }
-
-    return Inertia::render('Welcome');
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('account/password', [PasswordController::class, 'edit'])->name('account.password.edit');
+    Route::put('account/password', [PasswordController::class, 'update'])->name('account.password.update');
+
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('transactions/{transaction}/restore', [TransactionController::class, 'restore'])->name('transactions.restore')->withTrashed();
     Route::delete('transactions/{transaction}/force-delete', [TransactionController::class, 'forceDelete'])->name('transactions.forceDelete')->withTrashed();
@@ -37,6 +39,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
 
     Route::resource('users', UserController::class)->middleware('can:manage-users');
+    Route::get('activity-logs', [ActivityLogController::class, 'index'])
+        ->middleware('can:manage-users')
+        ->name('activity-logs.index');
 
     Route::middleware('can:manage-flight-portal')->group(function () {
         Route::get('portal-deposits', [FlightPortalDepositController::class, 'index'])->name('portal-deposits.index');

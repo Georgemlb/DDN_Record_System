@@ -8,6 +8,7 @@ use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -311,6 +312,13 @@ class ExpenseController extends Controller
             DailySettlement::syncForDate($validated['reimbursed_at']);
         });
 
+        ActivityLogger::log(
+            'expense',
+            'reimbursed',
+            "Marked expense #{$expense->id} ({$expense->description}) as reimbursed via {$validated['reimbursement_method']}",
+            $expense,
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Personal expense marked as reimbursed.']);
 
         return back();
@@ -340,6 +348,13 @@ class ExpenseController extends Controller
             }
         });
 
+        ActivityLogger::log(
+            'expense',
+            'deleted',
+            "Moved expense #{$expense->id} ({$expense->description}) to trash",
+            $expense,
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense moved to trash.']);
 
         return to_route('expenses.index');
@@ -364,6 +379,13 @@ class ExpenseController extends Controller
                 DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
             }
         });
+
+        ActivityLogger::log(
+            'expense',
+            'restored',
+            "Restored expense #{$expense->id} ({$expense->description})",
+            $expense,
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense restored.']);
 

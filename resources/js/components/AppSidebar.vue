@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
     FileText,
+    History,
     LayoutDashboard,
     ReceiptText,
     SlidersHorizontal,
@@ -92,6 +93,11 @@ const navGroups = computed<NavGroup[]>(() => {
                     title: 'Configurations',
                     href: configurations(),
                     icon: SlidersHorizontal,
+                },
+                {
+                    title: 'Activity Log',
+                    href: '/activity-logs',
+                    icon: History,
                 },
                 {
                     title: 'Users',
