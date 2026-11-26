@@ -3,7 +3,11 @@
 use App\Models\ActivityLog;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Tests\TestCase;
+
+uses(TestCase::class, RefreshDatabase::class);
 
 test('root url redirects guests to login and authenticated users to dashboard', function () {
     $this->get('/')

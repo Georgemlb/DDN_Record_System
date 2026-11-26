@@ -28,7 +28,7 @@ class ActivityLogger
             'subject_id' => $subject?->getKey(),
             'description' => $description,
             'properties' => $properties,
-            'ip_address' => request()?->ip(),
+            'ip_address' => request()->ip(),
             'created_at' => now(),
         ]);
     }

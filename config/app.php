@@ -123,4 +123,8 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'force_https' => (bool) env('FORCE_HTTPS', false),
+
+    'trust_proxies' => env('TRUST_PROXIES', '*'),
+
 ];

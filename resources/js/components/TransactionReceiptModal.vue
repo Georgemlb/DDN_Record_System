@@ -89,11 +89,11 @@ const printReceipt = () => {
                         }}</span>
                     </div>
                     <div
-                        v-if="transaction.customer_contact"
+                        v-if="transaction.customer?.contact_number"
                         class="flex justify-between"
                     >
                         <span class="text-slate-500">Contact:</span>
-                        <span>{{ transaction.customer_contact }}</span>
+                        <span>{{ transaction.customer.contact_number }}</span>
                     </div>
                     <div v-if="transaction.user" class="flex justify-between">
                         <span class="text-slate-500">Processed By:</span>

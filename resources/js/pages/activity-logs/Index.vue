@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { PaginationMeta } from '@/types/transaction';
 
 type ActivityLogItem = {
     id: number;
@@ -39,7 +38,6 @@ const props = defineProps<{
     logs: {
         data: ActivityLogItem[];
         links: Array<{ url: string | null; label: string; active: boolean }>;
-        meta?: PaginationMeta;
         from?: number | null;
         to?: number | null;
         total?: number;
@@ -101,6 +99,7 @@ watch([search, moduleFilter, actionFilter, userFilter], () => {
 
 const formatTimestamp = (value: string): string => {
     const date = new Date(value);
+
     if (Number.isNaN(date.getTime())) {
         return value;
     }
@@ -121,9 +120,11 @@ const actionBadgeClass = (action: string): string => {
     if (action.includes('delete')) {
         return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300';
     }
+
     if (action === 'created' || action === 'restored' || action === 'top_up') {
         return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300';
     }
+
     if (action === 'reopened' || action === 'adjusted') {
         return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300';
     }

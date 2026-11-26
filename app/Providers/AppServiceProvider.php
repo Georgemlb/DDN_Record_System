@@ -50,7 +50,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Date::use(CarbonImmutable::class);
 
-        if ((bool) env('FORCE_HTTPS', false)) {
+        if ((bool) config('app.force_https', false)) {
             URL::forceScheme('https');
         }
 

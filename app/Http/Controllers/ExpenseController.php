@@ -315,7 +315,7 @@ class ExpenseController extends Controller
         ActivityLogger::log(
             'expense',
             'reimbursed',
-            "Marked expense #{$expense->id} ({$expense->description}) as reimbursed via {$validated['reimbursement_method']}",
+            "Marked expense #{$expense->id} ({$expense->title}) as reimbursed via {$validated['reimbursement_method']}",
             $expense,
         );
 
@@ -351,7 +351,7 @@ class ExpenseController extends Controller
         ActivityLogger::log(
             'expense',
             'deleted',
-            "Moved expense #{$expense->id} ({$expense->description}) to trash",
+            "Moved expense #{$expense->id} ({$expense->title}) to trash",
             $expense,
         );
 
@@ -383,7 +383,7 @@ class ExpenseController extends Controller
         ActivityLogger::log(
             'expense',
             'restored',
-            "Restored expense #{$expense->id} ({$expense->description})",
+            "Restored expense #{$expense->id} ({$expense->title})",
             $expense,
         );
 
