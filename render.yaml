@@ -31,3 +31,7 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: DDN_ADMIN_PASSWORD
+        sync: false
+      - key: DDN_BRANCH_FACEBOOK_URL
+        sync: false

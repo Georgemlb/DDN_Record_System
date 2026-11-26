@@ -5,19 +5,36 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
 
-test('root url redirects guests to login and authenticated users to dashboard', function () {
+test('public landing page renders for viewers and authenticated users with safe branch props', function () {
     $this->get('/')
-        ->assertRedirect(route('login'));
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Welcome')
+            ->where('branch.email', 'ddnticketing@gmail.com')
+            ->where('branch.telephone', '082-3214125')
+            ->where('branch.facebook_name', 'Ddn Ticketing')
+        );
 
     $user = User::factory()->create();
 
     $this->actingAs($user)
         ->get('/')
-        ->assertRedirect(route('dashboard'));
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Welcome'));
+});
+
+test('guests cannot access internal system modules or public registration', function () {
+    $this->get('/dashboard')->assertRedirect(route('login'));
+    $this->get('/transactions')->assertRedirect(route('login'));
+    $this->get('/expenses')->assertRedirect(route('login'));
+    $this->get('/reports')->assertRedirect(route('login'));
+    $this->get('/activity-logs')->assertRedirect(route('login'));
+    $this->get('/register')->assertNotFound();
 });
 
 test('security headers are applied to responses', function () {
