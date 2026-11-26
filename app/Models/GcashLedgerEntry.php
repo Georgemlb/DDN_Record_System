@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\GcashLedgerEntryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -45,7 +47,8 @@ use Illuminate\Support\Carbon;
 ])]
 class GcashLedgerEntry extends Model
 {
-    use SoftDeletes;
+    /** @use HasFactory<GcashLedgerEntryFactory> */
+    use HasFactory, SoftDeletes;
 
     // Inflows into GCash wallet
     public const TYPE_CUSTOMER_PAYMENT = 'customer_payment';

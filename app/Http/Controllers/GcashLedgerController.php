@@ -9,6 +9,7 @@ use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -148,50 +149,56 @@ class GcashLedgerController extends Controller
 
         $isFromDrawer = $request->boolean('from_drawer') && (float) $validated['amount'] > 0;
 
-        $entry = new GcashLedgerEntry;
-        $entry->user_id = (int) auth()->id();
-        $entry->type = GcashLedgerEntry::TYPE_ADJUSTMENT;
-        $entry->amount = $validated['amount'];
-        $entry->entry_date = $validated['entry_date'];
-        $entry->notes = $isFromDrawer
-            ? 'GCash Top-Up from Cash Drawer: '.$validated['notes']
-            : 'Adjustment: '.$validated['notes'];
+        DB::transaction(function () use ($validated, $isFromDrawer) {
+            $entry = new GcashLedgerEntry;
+            $entry->user_id = (int) auth()->id();
+            $entry->type = GcashLedgerEntry::TYPE_ADJUSTMENT;
+            $entry->amount = $validated['amount'];
+            $entry->entry_date = $validated['entry_date'];
+            $entry->notes = $isFromDrawer
+                ? 'GCash Top-Up from Cash Drawer: '.$validated['notes']
+                : 'Adjustment: '.$validated['notes'];
 
-        if ($isFromDrawer) {
-            $category = ExpenseCategory::firstOrCreate(
-                ['name' => 'Miscellaneous'],
-                ['is_active' => true, 'sort_order' => 1]
-            );
-            $expense = Expense::create([
-                'user_id' => (int) auth()->id(),
-                'expense_category_id' => $category->id,
-                'title' => 'GCash Top-Up from Drawer',
-                'amount' => $validated['amount'],
-                'expense_date' => $validated['entry_date'],
-                'payment_method' => Expense::PAYMENT_METHOD_CASH,
-                'payee' => 'GCash Wallet',
-                'notes' => 'Drawer cash withdrawn to top up GCash: '.$validated['notes'],
-            ]);
-            $entry->expense_id = $expense->id;
-        }
+            if ($isFromDrawer) {
+                $category = ExpenseCategory::firstOrCreate(
+                    ['name' => ExpenseCategory::GCASH_WALLET_TOP_UP],
+                    [
+                        'description' => 'Internal cash drawer funds transferred to business GCash wallet',
+                        'is_active' => true,
+                        'sort_order' => 11,
+                    ]
+                );
+                $expense = Expense::create([
+                    'user_id' => (int) auth()->id(),
+                    'expense_category_id' => $category->id,
+                    'title' => 'GCash Top-Up from Drawer',
+                    'amount' => $validated['amount'],
+                    'expense_date' => $validated['entry_date'],
+                    'payment_method' => Expense::PAYMENT_METHOD_CASH,
+                    'payee' => 'GCash Wallet',
+                    'notes' => 'Drawer cash withdrawn to top up GCash: '.$validated['notes'],
+                ]);
+                $entry->expense_id = $expense->id;
+            }
 
-        if (! empty($validated['is_balance_anchor'])) {
-            $entry->is_balance_anchor = true;
-            $entry->running_balance = $validated['running_balance'] ?? $validated['amount'];
-        }
+            if (! empty($validated['is_balance_anchor'])) {
+                $entry->is_balance_anchor = true;
+                $entry->running_balance = $validated['running_balance'] ?? $validated['amount'];
+            }
 
-        if (str_contains(strtolower($validated['notes']), 'initial balance')) {
-            $minOrder = GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-            $entry->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
-        } else {
-            $maxOrder = (int) (GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
-            $entry->sort_order = $maxOrder + 1;
-        }
+            if (str_contains(strtolower($validated['notes']), 'initial balance')) {
+                $minOrder = GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
+                $entry->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
+            } else {
+                $maxOrder = (int) (GcashLedgerEntry::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
+                $entry->sort_order = $maxOrder + 1;
+            }
 
-        $entry->save();
+            $entry->save();
 
-        GcashLedgerEntry::recalculateRunningBalances();
-        DailySettlement::syncForDate($validated['entry_date']);
+            GcashLedgerEntry::recalculateRunningBalances();
+            DailySettlement::syncForDate($validated['entry_date']);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -227,31 +234,33 @@ class GcashLedgerController extends Controller
 
         $oldDate = $entry->entry_date->toDateString();
 
-        $entry->amount = $validated['amount'];
-        $entry->entry_date = $validated['entry_date'];
-        $entry->notes = $validated['notes'] ?? null;
+        DB::transaction(function () use ($request, $entry, $validated, $oldDate) {
+            $entry->amount = $validated['amount'];
+            $entry->entry_date = $validated['entry_date'];
+            $entry->notes = $validated['notes'] ?? null;
 
-        if ($request->has('is_balance_anchor')) {
-            $entry->is_balance_anchor = (bool) $validated['is_balance_anchor'];
-            if ($entry->is_balance_anchor && isset($validated['running_balance'])) {
-                $entry->running_balance = $validated['running_balance'];
+            if ($request->has('is_balance_anchor')) {
+                $entry->is_balance_anchor = (bool) $validated['is_balance_anchor'];
+                if ($entry->is_balance_anchor && isset($validated['running_balance'])) {
+                    $entry->running_balance = $validated['running_balance'];
+                }
             }
-        }
 
-        $entry->save();
+            $entry->save();
 
-        if ($entry->type === GcashLedgerEntry::TYPE_ADJUSTMENT && $entry->expense) {
-            $entry->expense->amount = abs((float) $validated['amount']);
-            $entry->expense->expense_date = $validated['entry_date'];
-            $entry->expense->save();
-        }
+            if ($entry->type === GcashLedgerEntry::TYPE_ADJUSTMENT && $entry->expense) {
+                $entry->expense->amount = abs((float) $validated['amount']);
+                $entry->expense->expense_date = $validated['entry_date'];
+                $entry->expense->save();
+            }
 
-        GcashLedgerEntry::recalculateRunningBalances();
+            GcashLedgerEntry::recalculateRunningBalances();
 
-        if ($oldDate && $oldDate !== $validated['entry_date']) {
-            DailySettlement::syncForDate($oldDate);
-        }
-        DailySettlement::syncForDate($validated['entry_date']);
+            if ($oldDate && $oldDate !== $validated['entry_date']) {
+                DailySettlement::syncForDate($oldDate);
+            }
+            DailySettlement::syncForDate($validated['entry_date']);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -275,11 +284,13 @@ class GcashLedgerController extends Controller
             return back();
         }
 
-        $entryDate = $entry->entry_date->toDateString();
-        $entry->delete();
+        DB::transaction(function () use ($entry) {
+            $entryDate = $entry->entry_date->toDateString();
+            $entry->delete();
 
-        GcashLedgerEntry::recalculateRunningBalances();
-        DailySettlement::syncForDate($entryDate);
+            GcashLedgerEntry::recalculateRunningBalances();
+            DailySettlement::syncForDate($entryDate);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Database\Factories\ExpenseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -51,7 +53,8 @@ use Illuminate\Support\Carbon;
 ])]
 class Expense extends Model
 {
-    use SoftDeletes;
+    /** @use HasFactory<ExpenseFactory> */
+    use HasFactory, SoftDeletes;
 
     /**
      * Boot model events to assign user tracking.

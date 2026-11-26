@@ -4,16 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\DailySettlement;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\FlightPortalDeposit;
 use App\Models\GcashLedgerEntry;
 use App\Models\Transaction;
-use App\Models\TransactionPayment;
+use App\Services\FinancialMetricsService;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private readonly FinancialMetricsService $metricsService,
+    ) {}
+
     /**
      * Display the dashboard with real-time KPIs, chart data, and recent transactions/expenses.
      */
@@ -106,63 +111,14 @@ class DashboardController extends Controller
         $totalSales = (float) (clone $transactionQuery)->sum('amount');
         $totalDdn = (float) (clone $transactionQuery)->sum('ddn_amount');
 
-        // Accurate Cash & GCash collections for the period via TransactionPayment
-        $periodPaymentCash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_CASH)
-            ->sum('amount');
-        $periodPaymentSplitCash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
-            ->sum('cash_amount');
-        $totalPeriodCash = $periodPaymentCash + $periodPaymentSplitCash;
+        $collections = $this->metricsService->calculateCashAndGcashCollections($startDate, $endDate);
+        $totalPeriodCash = $collections['cash'];
+        $totalPeriodGcash = $collections['gcash'];
 
-        $periodPaymentGcash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)
-            ->sum('amount');
-        $periodPaymentSplitGcash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
-            ->sum('gcash_amount');
-        $totalPeriodGcash = $periodPaymentGcash + $periodPaymentSplitGcash;
-
-        // Fallback for transactions in range without payments
-        $fallbackTransactions = (clone $transactionQuery)
-            ->whereDoesntHave('payments')
-            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'amount_paid', 'payment_status']);
-
-        foreach ($fallbackTransactions as $tx) {
-            $amt = $tx->amount_paid !== null && (float) $tx->amount_paid > 0
-                ? (float) $tx->amount_paid
-                : ($tx->payment_status === Transaction::PAYMENT_STATUS_UNPAID ? 0.0 : (float) $tx->amount);
-
-            if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
-                $totalPeriodCash += $amt;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $totalPeriodGcash += $amt;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-                $totalPeriodCash += (float) ($tx->cash_amount ?? 0);
-                $totalPeriodGcash += (float) ($tx->gcash_amount ?? 0);
-            }
-        }
-
-        $expenseQuery = Expense::query()
-            ->business()
-            ->whereBetween('expense_date', [$startDate, $endDate]);
-
-        $totalExpenses = (float) (clone $expenseQuery)->sum('amount');
-
-        // Portal reload expenses are working capital / fund transfers, not operating expenses
-        $portalReloadExpenses = (float) (clone $expenseQuery)
-            ->whereHas('category', fn ($q) => $q->where('name', 'Flight Portal Reload'))
-            ->sum('amount');
-
-        $operatingExpenses = round(max(0, $totalExpenses - $portalReloadExpenses), 2);
+        $expenseMetrics = $this->metricsService->calculatePeriodExpenses($startDate, $endDate);
+        $totalExpenses = $expenseMetrics['total_expenses'];
+        $portalReloadExpenses = $expenseMetrics['portal_reloads'];
+        $operatingExpenses = $expenseMetrics['operating_expenses'];
         $netProfit = round($totalDdn - $operatingExpenses, 2);
 
         // Sales Trend (per day)
@@ -177,9 +133,11 @@ class DashboardController extends Controller
                 'total_ddn' => (float) $row->getAttribute('total_ddn'),
             ]);
 
-        // Expenses by Category (operating expenses only, excluding portal reloads)
-        $expensesByCategory = (clone $expenseQuery)
-            ->whereDoesntHave('category', fn ($q) => $q->where('name', 'Flight Portal Reload'))
+        // Expenses by Category (operating expenses only, excluding non-operating capital transfers)
+        $expensesByCategory = Expense::query()
+            ->business()
+            ->whereBetween('expense_date', [$startDate, $endDate])
+            ->whereDoesntHave('category', fn ($q) => $q->whereIn('name', ExpenseCategory::NON_OPERATING_CATEGORIES))
             ->with('category')
             ->selectRaw('expense_category_id, SUM(amount) as total')
             ->groupBy('expense_category_id')
