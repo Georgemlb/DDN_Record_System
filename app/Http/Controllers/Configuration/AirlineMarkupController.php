@@ -3,23 +3,16 @@
 namespace App\Http\Controllers\Configuration;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Configuration\AirlineMarkupRequest;
 use App\Models\AirlineMarkup;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class AirlineMarkupController extends Controller
 {
-    public function store(Request $request): RedirectResponse
+    public function store(AirlineMarkupRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'service_type' => ['required', 'in:flight,ferry'],
-            'airline' => ['required', 'string', 'max:255'],
-            'flight_type' => ['nullable', 'required_if:service_type,flight', 'in:local,international'],
-            'markup_type' => ['required', 'in:fixed,percent'],
-            'markup_amount' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
-            'is_active' => ['boolean'],
-        ]);
+        $validated = $request->validated();
 
         if ($validated['service_type'] === 'ferry') {
             $validated['flight_type'] = null;
@@ -34,16 +27,9 @@ class AirlineMarkupController extends Controller
         return redirect()->route('configurations.index', ['tab' => 'airline-markups']);
     }
 
-    public function update(Request $request, AirlineMarkup $airlineMarkup): RedirectResponse
+    public function update(AirlineMarkupRequest $request, AirlineMarkup $airlineMarkup): RedirectResponse
     {
-        $validated = $request->validate([
-            'service_type' => ['required', 'in:flight,ferry'],
-            'airline' => ['required', 'string', 'max:255'],
-            'flight_type' => ['nullable', 'required_if:service_type,flight', 'in:local,international'],
-            'markup_type' => ['required', 'in:fixed,percent'],
-            'markup_amount' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
-            'is_active' => ['boolean'],
-        ]);
+        $validated = $request->validated();
 
         if ($validated['service_type'] === 'ferry') {
             $validated['flight_type'] = null;

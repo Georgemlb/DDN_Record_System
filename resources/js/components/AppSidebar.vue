@@ -31,15 +31,16 @@ import { index as portalDeposits } from '@/routes/portal-deposits';
 import { index as reports } from '@/routes/reports';
 import { index as transactions } from '@/routes/transactions';
 import { index as users } from '@/routes/users';
-import type { NavItem } from '@/types';
+import type { NavGroup } from '@/types';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user);
 const isStaff = computed(() => user.value?.role === 'staff');
 
-const mainNavItems = computed<NavItem[]>(() => {
-    if (isStaff.value) {
-        return [
+const navGroups = computed<NavGroup[]>(() => {
+    const operationsGroup: NavGroup = {
+        label: 'Operations',
+        items: [
             {
                 title: 'Dashboard',
                 href: dashboard(),
@@ -55,49 +56,49 @@ const mainNavItems = computed<NavItem[]>(() => {
                 href: expenses(),
                 icon: FileText,
             },
-        ];
+        ],
+    };
+
+    if (isStaff.value) {
+        return [operationsGroup];
     }
 
     return [
+        operationsGroup,
         {
-            title: 'Dashboard',
-            href: dashboard(),
-            icon: LayoutDashboard,
+            label: 'Wallets & Ledgers',
+            items: [
+                {
+                    title: 'Portal Deposit',
+                    href: portalDeposits(),
+                    icon: Wallet,
+                },
+                {
+                    title: 'GCash Ledger',
+                    href: gcashLedger(),
+                    icon: GcashIcon,
+                },
+            ],
         },
         {
-            title: 'Transactions',
-            href: transactions(),
-            icon: ReceiptText,
-        },
-        {
-            title: 'Expenses',
-            href: expenses(),
-            icon: FileText,
-        },
-        {
-            title: 'Portal Deposit',
-            href: portalDeposits(),
-            icon: Wallet,
-        },
-        {
-            title: 'GCash Ledger',
-            href: gcashLedger(),
-            icon: GcashIcon,
-        },
-        {
-            title: 'Reports',
-            href: reports(),
-            icon: BarChart3,
-        },
-        {
-            title: 'Configurations',
-            href: configurations(),
-            icon: SlidersHorizontal,
-        },
-        {
-            title: 'Users',
-            href: users(),
-            icon: Users,
+            label: 'Management',
+            items: [
+                {
+                    title: 'Reports',
+                    href: reports(),
+                    icon: BarChart3,
+                },
+                {
+                    title: 'Configurations',
+                    href: configurations(),
+                    icon: SlidersHorizontal,
+                },
+                {
+                    title: 'Users',
+                    href: users(),
+                    icon: Users,
+                },
+            ],
         },
     ];
 });
@@ -117,8 +118,8 @@ const mainNavItems = computed<NavItem[]>(() => {
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent class="pt-2">
-            <NavMain :items="mainNavItems" />
+        <SidebarContent class="gap-3 pt-2">
+            <NavMain :groups="navGroups" />
         </SidebarContent>
 
         <SidebarFooter>

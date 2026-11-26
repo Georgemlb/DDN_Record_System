@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\MoveLedgerEntryRequest;
+use App\Http\Requests\StoreLedgerAdjustmentRequest;
+use App\Http\Requests\StorePortalTopUpRequest;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\FlightPortalDeposit;
 use App\Models\GcashLedgerEntry;
+use App\Services\LedgerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -16,6 +20,10 @@ use Inertia\Response;
 
 class FlightPortalDepositController extends Controller
 {
+    public function __construct(
+        private readonly LedgerService $ledgerService,
+    ) {}
+
     /**
      * Display a listing of flight portal deposits and live balance metrics.
      */
@@ -23,93 +31,12 @@ class FlightPortalDepositController extends Controller
     {
         $query = FlightPortalDeposit::query()->with(['user', 'transaction', 'expense']);
 
-        // Search filter (reference number or notes)
-        if ($search = $request->input('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('reference_number', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%")
-                    ->orWhereHas('transaction', function ($tq) use ($search) {
-                        $tq->where('customer_name', 'like', "%{$search}%")
-                            ->orWhere('reference_number', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        // Type filter
-        if ($type = $request->input('type')) {
-            if ($type !== 'all' && in_array($type, FlightPortalDeposit::TYPES)) {
-                $query->where('type', $type);
-            }
-        }
-
-        // Date range filter
-        if ($dateFrom = $request->input('date_from')) {
-            $query->whereDate('entry_date', '>=', $dateFrom);
-        }
-        if ($dateTo = $request->input('date_to')) {
-            $query->whereDate('entry_date', '<=', $dateTo);
-        }
-
-        // Sorting
-        $sort = (string) $request->input('sort', 'entry_date');
-        $direction = strtolower((string) $request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
-
-        if (in_array($sort, ['amount', 'running_balance', 'type', 'created_at'])) {
-            $query->orderBy($sort, $direction);
-        } else {
-            $query->orderByRaw('date(entry_date) '.$direction);
-        }
-
-        if ($sort === 'entry_date' || ! $request->has('sort')) {
-            $query->orderBy('sort_order', $direction);
-        }
-
-        // Secondary sort to stabilize pagination
-        if ($sort !== 'id') {
-            $query->orderBy('id', $direction);
-        }
-
-        $deposits = $query->paginate(15)->withQueryString();
-
-        $pageDates = $deposits->getCollection()->map(function ($d) {
-            return Carbon::parse($d->entry_date)->toDateString();
-        })->unique()->values()->all();
-
-        $dateStats = FlightPortalDeposit::whereIn('entry_date', $pageDates)
-            ->selectRaw('entry_date, MIN(sort_order) as min_order, MAX(sort_order) as max_order, COUNT(*) as entry_count')
-            ->groupBy('entry_date')
-            ->get()
-            ->keyBy(function ($item) {
-                return Carbon::parse($item->entry_date)->toDateString();
-            });
-
-        $deposits->getCollection()->transform(function ($deposit) use ($dateStats, $direction) {
-            $dateStr = Carbon::parse($deposit->entry_date)->toDateString();
-            $stat = $dateStats->get($dateStr);
-            if (! $stat || (int) $stat->getAttribute('entry_count') <= 1) {
-                $deposit->can_move_up = false;
-                $deposit->can_move_down = false;
-
-                return $deposit;
-            }
-
-            $maxOrder = (int) $stat->getAttribute('max_order');
-            $minOrder = (int) $stat->getAttribute('min_order');
-
-            if ($direction === 'desc') {
-                // When newest is on top (desc):
-                // Higher sort_order is displayed visually higher on screen
-                $deposit->can_move_up = $deposit->sort_order < $maxOrder;
-                $deposit->can_move_down = $deposit->sort_order > $minOrder;
-            } else {
-                // When oldest is on top (asc):
-                // Lower sort_order is displayed visually higher on screen
-                $deposit->can_move_up = $deposit->sort_order > $minOrder;
-                $deposit->can_move_down = $deposit->sort_order < $maxOrder;
-            }
-
-            return $deposit;
-        });
+        $deposits = $this->ledgerService->paginateWithOrdering(
+            $request,
+            $query,
+            FlightPortalDeposit::class,
+            FlightPortalDeposit::TYPES,
+        );
 
         // Calculate summary metrics
         $currentBalance = FlightPortalDeposit::getCurrentBalance();
@@ -144,16 +71,9 @@ class FlightPortalDepositController extends Controller
     /**
      * Store a new top-up entry.
      */
-    public function storeTopUp(Request $request): RedirectResponse
+    public function storeTopUp(StorePortalTopUpRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
-            'entry_date' => ['required', 'date'],
-            'payment_source' => ['required', 'string', 'in:cash,gcash,bank_transfer'],
-            'reference_number' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'record_as_expense' => ['nullable', 'boolean'],
-        ]);
+        $validated = $request->validated();
 
         DB::transaction(function () use ($validated) {
             $expenseId = null;
@@ -218,13 +138,9 @@ class FlightPortalDepositController extends Controller
     /**
      * Store a manual balance adjustment.
      */
-    public function storeAdjustment(Request $request): RedirectResponse
+    public function storeAdjustment(StoreLedgerAdjustmentRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'decimal:0,2'],
-            'entry_date' => ['required', 'date'],
-            'notes' => ['required', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validated();
 
         DB::transaction(function () use ($validated) {
             $deposit = new FlightPortalDeposit;
@@ -397,65 +313,18 @@ class FlightPortalDepositController extends Controller
     /**
      * Move a deposit entry up or down in same-day sequence.
      */
-    public function move(Request $request, FlightPortalDeposit $deposit): RedirectResponse
+    public function move(MoveLedgerEntryRequest $request, FlightPortalDeposit $deposit): RedirectResponse
     {
-        $validated = $request->validate([
-            'direction' => ['required', 'in:up,down'],
-            'table_direction' => ['nullable', 'in:asc,desc'],
-        ]);
+        $validated = $request->validated();
 
-        $visualDirection = $validated['direction'];
-        $tableDirection = $validated['table_direction'] ?? 'desc';
+        $moved = $this->ledgerService->moveEntryWithinDate(
+            FlightPortalDeposit::class,
+            $deposit,
+            $validated['direction'],
+            $validated['table_direction'] ?? 'desc',
+        );
 
-        // Fetch all active entries for this date ordered by sort_order asc, id asc
-        $dayEntries = FlightPortalDeposit::whereDate('entry_date', $deposit->entry_date)
-            ->orderBy('sort_order', 'asc')
-            ->orderBy('id', 'asc')
-            ->get();
-
-        if ($dayEntries->count() <= 1) {
-            return back();
-        }
-
-        // Re-normalize sort_orders to 1, 2, 3... to avoid ties or gaps
-        foreach ($dayEntries as $index => $entry) {
-            $expectedOrder = $index + 1;
-            if ($entry->sort_order !== $expectedOrder) {
-                $entry->sort_order = $expectedOrder;
-                $entry->saveQuietly();
-            }
-        }
-
-        $currentIndex = $dayEntries->search(fn ($item) => $item->id === $deposit->id);
-
-        if ($currentIndex === false) {
-            return back();
-        }
-
-        $targetIndex = null;
-        if ($tableDirection === 'desc') {
-            if ($visualDirection === 'up' && $currentIndex < $dayEntries->count() - 1) {
-                $targetIndex = $currentIndex + 1;
-            } elseif ($visualDirection === 'down' && $currentIndex > 0) {
-                $targetIndex = $currentIndex - 1;
-            }
-        } else {
-            if ($visualDirection === 'up' && $currentIndex > 0) {
-                $targetIndex = $currentIndex - 1;
-            } elseif ($visualDirection === 'down' && $currentIndex < $dayEntries->count() - 1) {
-                $targetIndex = $currentIndex + 1;
-            }
-        }
-
-        if ($targetIndex !== null) {
-            $sibling = $dayEntries[$targetIndex];
-            $currentOrder = $deposit->sort_order;
-            $deposit->sort_order = $sibling->sort_order;
-            $sibling->sort_order = $currentOrder;
-
-            $deposit->saveQuietly();
-            $sibling->saveQuietly();
-
+        if ($moved) {
             FlightPortalDeposit::recalculateRunningBalances();
 
             Inertia::flash('toast', [

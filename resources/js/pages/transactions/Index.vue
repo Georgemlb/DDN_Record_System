@@ -11,10 +11,12 @@ import {
     Plus,
     ReceiptText,
     RotateCcw,
+    Search,
     Trash2,
 } from '@lucide/vue';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import CollectBalanceModal from '@/components/CollectBalanceModal.vue';
+import FilterToggleBar from '@/components/FilterToggleBar.vue';
 import Pagination from '@/components/Pagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -135,6 +137,26 @@ const setStatus = (newStatus: 'active' | 'trash') => {
     if (status.value !== newStatus) {
         status.value = newStatus;
     }
+};
+
+const activeFilterCount = computed(
+    () =>
+        [
+            type.value !== 'all',
+            paymentMethod.value !== 'all',
+            paymentStatus.value !== 'all',
+            date.value !== 'all',
+        ].filter(Boolean).length,
+);
+
+const clearFilters = () => {
+    search.value = '';
+    type.value = 'all';
+    paymentMethod.value = 'all';
+    paymentStatus.value = 'all';
+    date.value = 'all';
+    dateFrom.value = '';
+    dateTo.value = '';
 };
 
 const restoringId = ref<number | null>(null);
@@ -311,106 +333,130 @@ const toggleSort = (field: string) => {
         </section>
 
         <!-- Filter and Search Section -->
-        <section
-            class="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:p-5"
-        >
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <Input
-                    v-model="search"
-                    placeholder="Search customer, ref #, or details..."
-                    class="w-full"
-                />
-
-                <Select v-model="type">
-                    <SelectTrigger class="w-full">
-                        <SelectValue placeholder="All types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Service Types</SelectItem>
-                        <SelectItem value="airline">Airline</SelectItem>
-                        <SelectItem value="ferry">Ferry</SelectItem>
-                        <SelectItem value="translation">Translation</SelectItem>
-                        <SelectItem value="psa">PSA Application</SelectItem>
-                        <SelectItem value="online_assistance"
-                            >Online Assistance</SelectItem
-                        >
-                        <SelectItem value="remittance">Remittance</SelectItem>
-                        <SelectItem value="printing"
-                            >Printing & Services</SelectItem
-                        >
-                    </SelectContent>
-                </Select>
-
-                <Select v-model="paymentMethod">
-                    <SelectTrigger class="w-full">
-                        <SelectValue placeholder="All methods" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Payment Methods</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="gcash">GCash</SelectItem>
-                        <SelectItem value="split"
-                            >Split (Cash & GCash)</SelectItem
-                        >
-                    </SelectContent>
-                </Select>
-
-                <Select v-model="paymentStatus">
-                    <SelectTrigger class="w-full">
-                        <SelectValue placeholder="All payment statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all"
-                            >All Payment Statuses</SelectItem
-                        >
-                        <SelectItem value="paid">Fully Paid</SelectItem>
-                        <SelectItem value="partial"
-                            >Downpayment / Partial</SelectItem
-                        >
-                        <SelectItem value="unpaid"
-                            >Unpaid (On Pickup)</SelectItem
-                        >
-                    </SelectContent>
-                </Select>
-
-                <Select v-model="date">
-                    <SelectTrigger class="w-full">
-                        <SelectValue placeholder="All dates" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Dates</SelectItem>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                        <SelectItem value="this_month">This Month</SelectItem>
-                        <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <!-- Custom Date Range Row -->
-            <div
-                v-if="date === 'custom'"
-                class="flex flex-wrap items-center gap-2 border-t pt-3"
+        <section class="rounded-lg border bg-card p-4 sm:p-5">
+            <FilterToggleBar
+                :active-count="activeFilterCount"
+                @clear="clearFilters"
             >
-                <span class="text-xs font-medium text-muted-foreground"
-                    >Date range:</span
-                >
-                <div class="flex items-center gap-2">
-                    <Input
-                        v-model="dateFrom"
-                        type="date"
-                        placeholder="From date"
-                        class="w-auto text-xs"
-                    />
-                    <span class="text-xs text-muted-foreground">to</span>
-                    <Input
-                        v-model="dateTo"
-                        type="date"
-                        placeholder="To date"
-                        class="w-auto text-xs"
-                    />
-                </div>
-            </div>
+                <template #search>
+                    <div class="relative">
+                        <Search
+                            class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                            v-model="search"
+                            placeholder="Search customer, ref #, or details..."
+                            class="w-full pl-9"
+                        />
+                    </div>
+                </template>
+
+                <template #filters>
+                    <Select v-model="type">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="All types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all"
+                                >All Service Types</SelectItem
+                            >
+                            <SelectItem value="airline">Airline</SelectItem>
+                            <SelectItem value="ferry">Ferry</SelectItem>
+                            <SelectItem value="translation"
+                                >Translation</SelectItem
+                            >
+                            <SelectItem value="psa">PSA Application</SelectItem>
+                            <SelectItem value="online_assistance"
+                                >Online Assistance</SelectItem
+                            >
+                            <SelectItem value="remittance"
+                                >Remittance</SelectItem
+                            >
+                            <SelectItem value="printing"
+                                >Printing & Services</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+
+                    <Select v-model="paymentMethod">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="All methods" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all"
+                                >All Payment Methods</SelectItem
+                            >
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="gcash">GCash</SelectItem>
+                            <SelectItem value="split"
+                                >Split (Cash & GCash)</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+
+                    <Select v-model="paymentStatus">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="All payment statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all"
+                                >All Payment Statuses</SelectItem
+                            >
+                            <SelectItem value="paid">Fully Paid</SelectItem>
+                            <SelectItem value="partial"
+                                >Downpayment / Partial</SelectItem
+                            >
+                            <SelectItem value="unpaid"
+                                >Unpaid (On Pickup)</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+
+                    <Select v-model="date">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="All dates" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Dates</SelectItem>
+                            <SelectItem value="today">Today</SelectItem>
+                            <SelectItem value="last_7_days"
+                                >Last 7 Days</SelectItem
+                            >
+                            <SelectItem value="this_month"
+                                >This Month</SelectItem
+                            >
+                            <SelectItem value="custom">Custom Range</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <!-- Custom Date Range Row -->
+                    <div
+                        v-if="date === 'custom'"
+                        class="flex flex-wrap items-center gap-2 border-t pt-3 sm:col-span-2 lg:col-span-4"
+                    >
+                        <span class="text-xs font-medium text-muted-foreground"
+                            >Date range:</span
+                        >
+                        <div class="flex items-center gap-2">
+                            <Input
+                                v-model="dateFrom"
+                                type="date"
+                                placeholder="From date"
+                                class="w-auto text-xs"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >to</span
+                            >
+                            <Input
+                                v-model="dateTo"
+                                type="date"
+                                placeholder="To date"
+                                class="w-auto text-xs"
+                            />
+                        </div>
+                    </div>
+                </template>
+            </FilterToggleBar>
         </section>
 
         <!-- Table Section -->

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreTransactionPaymentRequest;
 use App\Http\Requests\TransactionRequest;
 use App\Models\AirlineMarkup;
 use App\Models\Customer;
@@ -13,11 +14,9 @@ use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -375,21 +374,11 @@ class TransactionController extends Controller
     /**
      * Record a balance collection payment for a transaction.
      */
-    public function storePayment(Request $request, Transaction $transaction): RedirectResponse
+    public function storePayment(StoreTransactionPaymentRequest $request, Transaction $transaction): RedirectResponse
     {
         Gate::authorize('collectPayment', $transaction);
 
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'gt:0', 'lte:'.max(0.01, (float) $transaction->balance)],
-            'payment_method' => ['required', 'string', Rule::in(Transaction::PAYMENT_METHODS)],
-            'payment_date' => ['required', 'date'],
-            'cash_amount' => ['nullable', 'numeric', 'min:0'],
-            'gcash_amount' => ['nullable', 'numeric', 'min:0'],
-            'gcash_tendered' => ['nullable', 'numeric', 'min:0'],
-            'cash_change' => ['nullable', 'numeric', 'min:0'],
-            'change_fee' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+        $validated = $request->validated();
 
         $amount = (float) $validated['amount'];
 

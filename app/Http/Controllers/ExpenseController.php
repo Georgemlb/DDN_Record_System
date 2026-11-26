@@ -3,15 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ExpenseRequest;
+use App\Http\Requests\ReimburseExpenseRequest;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -287,15 +286,11 @@ class ExpenseController extends Controller
     /**
      * Mark a personal expense as reimbursed.
      */
-    public function reimburse(Request $request, Expense $expense): RedirectResponse
+    public function reimburse(ReimburseExpenseRequest $request, Expense $expense): RedirectResponse
     {
         Gate::authorize('update', $expense);
 
-        $validated = $request->validate([
-            'reimbursement_method' => ['required', 'string', Rule::in(Expense::PAYMENT_METHODS)],
-            'reimbursed_at' => ['required', 'date', 'before_or_equal:today'],
-            'reimbursement_notes' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $validated = $request->validated();
 
         $oldReimbursedAt = $expense->reimbursed_at?->toDateString();
 
