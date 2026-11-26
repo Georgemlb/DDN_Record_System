@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,29 +50,18 @@ class UserController extends Controller
     /**
      * Store a newly created user.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreUserRequest $request): RedirectResponse
     {
         Gate::authorize('create', User::class);
 
-        $isTechAdmin = auth()->user()?->isTechAdmin() ?? false;
-        $allowedRoles = $isTechAdmin
-            ? User::ROLES
-            : [User::ROLE_ADMIN, User::ROLE_STAFF];
-
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:50', 'alpha_dash', 'unique:users,username'],
-            'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', 'string', Rule::in($allowedRoles)],
-            'password' => ['required', 'string', 'min:6'],
-        ]);
+        $validated = $request->validated();
 
         User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
             'email' => $validated['email'] ?? null,
             'role' => $validated['role'],
-            'password' => Hash::make($validated['password']),
+            'password' => $validated['password'],
         ]);
 
         Inertia::flash('toast', [
@@ -105,22 +93,11 @@ class UserController extends Controller
     /**
      * Update the specified user.
      */
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
         Gate::authorize('update', $user);
 
-        $isTechAdmin = auth()->user()?->isTechAdmin() ?? false;
-        $allowedRoles = $isTechAdmin
-            ? User::ROLES
-            : [User::ROLE_ADMIN, User::ROLE_STAFF];
-
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user->id)],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => ['required', 'string', Rule::in($allowedRoles)],
-            'password' => ['nullable', 'string', 'min:6'],
-        ]);
+        $validated = $request->validated();
 
         $updateData = [
             'name' => $validated['name'],
@@ -130,7 +107,7 @@ class UserController extends Controller
         ];
 
         if (! empty($validated['password'])) {
-            $updateData['password'] = Hash::make($validated['password']);
+            $updateData['password'] = $validated['password'];
         }
 
         $user->update($updateData);

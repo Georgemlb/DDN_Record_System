@@ -55,6 +55,18 @@ class ExpenseCategorySeeder extends Seeder
                 'is_active' => true,
                 'sort_order' => 7,
             ],
+            [
+                'name' => ExpenseCategory::FLIGHT_PORTAL_RELOAD,
+                'description' => 'Funds deposited to third-party flight booking platform.',
+                'is_active' => true,
+                'sort_order' => 10,
+            ],
+            [
+                'name' => ExpenseCategory::GCASH_WALLET_TOP_UP,
+                'description' => 'Internal cash drawer funds transferred to business GCash wallet.',
+                'is_active' => true,
+                'sort_order' => 11,
+            ],
         ];
 
         foreach ($categories as $category) {

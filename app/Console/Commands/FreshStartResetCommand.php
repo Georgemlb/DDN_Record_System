@@ -15,12 +15,15 @@ use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Console\Prohibitable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 
 class FreshStartResetCommand extends Command
 {
+    use Prohibitable;
+
     /**
      * The name and signature of the console command.
      *
@@ -40,6 +43,10 @@ class FreshStartResetCommand extends Command
      */
     public function handle(): int
     {
+        if ($this->isProhibited()) {
+            return self::FAILURE;
+        }
+
         if (! $this->option('force') && ! $this->confirm('Are you sure you want to wipe all transactions, expenses, settlements, ledger entries, and customers?')) {
             $this->warn('Fresh start reset cancelled.');
 

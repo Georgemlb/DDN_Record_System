@@ -9,6 +9,7 @@ use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -178,16 +179,20 @@ class ExpenseController extends Controller
             $payload['reimbursement_notes'] = null;
         }
 
-        $expense = Expense::query()->create($payload);
+        $expense = DB::transaction(function () use ($payload) {
+            $expense = Expense::query()->create($payload);
 
-        GcashLedgerEntry::syncForExpense($expense);
+            GcashLedgerEntry::syncForExpense($expense);
 
-        if ($expense->expense_date) {
-            DailySettlement::syncForDate($expense->expense_date->toDateString());
-        }
-        if ($expense->reimbursed_at) {
-            DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
-        }
+            if ($expense->expense_date) {
+                DailySettlement::syncForDate($expense->expense_date->toDateString());
+            }
+            if ($expense->reimbursed_at) {
+                DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
+            }
+
+            return $expense;
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense recorded.']);
 
@@ -255,22 +260,24 @@ class ExpenseController extends Controller
             $payload['reimbursement_notes'] = null;
         }
 
-        $expense->update($payload);
+        DB::transaction(function () use ($expense, $payload, $oldExpenseDate, $oldReimbursedAt) {
+            $expense->update($payload);
 
-        GcashLedgerEntry::syncForExpense($expense);
+            GcashLedgerEntry::syncForExpense($expense);
 
-        if ($oldExpenseDate) {
-            DailySettlement::syncForDate($oldExpenseDate);
-        }
-        if ($expense->expense_date) {
-            DailySettlement::syncForDate($expense->expense_date->toDateString());
-        }
-        if ($oldReimbursedAt) {
-            DailySettlement::syncForDate($oldReimbursedAt);
-        }
-        if ($expense->reimbursed_at) {
-            DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
-        }
+            if ($oldExpenseDate) {
+                DailySettlement::syncForDate($oldExpenseDate);
+            }
+            if ($expense->expense_date) {
+                DailySettlement::syncForDate($expense->expense_date->toDateString());
+            }
+            if ($oldReimbursedAt) {
+                DailySettlement::syncForDate($oldReimbursedAt);
+            }
+            if ($expense->reimbursed_at) {
+                DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense updated.']);
 
@@ -292,20 +299,22 @@ class ExpenseController extends Controller
 
         $oldReimbursedAt = $expense->reimbursed_at?->toDateString();
 
-        $expense->update([
-            'is_personal' => true,
-            'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_REIMBURSED,
-            'reimbursed_at' => $validated['reimbursed_at'],
-            'reimbursement_method' => $validated['reimbursement_method'],
-            'reimbursement_notes' => $validated['reimbursement_notes'] ?? null,
-        ]);
+        DB::transaction(function () use ($expense, $validated, $oldReimbursedAt) {
+            $expense->update([
+                'is_personal' => true,
+                'reimbursement_status' => Expense::REIMBURSEMENT_STATUS_REIMBURSED,
+                'reimbursed_at' => $validated['reimbursed_at'],
+                'reimbursement_method' => $validated['reimbursement_method'],
+                'reimbursement_notes' => $validated['reimbursement_notes'] ?? null,
+            ]);
 
-        GcashLedgerEntry::syncForExpense($expense);
+            GcashLedgerEntry::syncForExpense($expense);
 
-        if ($oldReimbursedAt && $oldReimbursedAt !== $validated['reimbursed_at']) {
-            DailySettlement::syncForDate($oldReimbursedAt);
-        }
-        DailySettlement::syncForDate($validated['reimbursed_at']);
+            if ($oldReimbursedAt && $oldReimbursedAt !== $validated['reimbursed_at']) {
+                DailySettlement::syncForDate($oldReimbursedAt);
+            }
+            DailySettlement::syncForDate($validated['reimbursed_at']);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Personal expense marked as reimbursed.']);
 
@@ -322,17 +331,19 @@ class ExpenseController extends Controller
         $expenseDate = $expense->expense_date?->toDateString();
         $reimbursedAt = $expense->reimbursed_at?->toDateString();
 
-        $expense->delete();
+        DB::transaction(function () use ($expense, $expenseDate, $reimbursedAt) {
+            $expense->delete();
 
-        GcashLedgerEntry::where('expense_id', $expense->id)->delete();
-        GcashLedgerEntry::recalculateRunningBalances();
+            GcashLedgerEntry::where('expense_id', $expense->id)->delete();
+            GcashLedgerEntry::recalculateRunningBalances();
 
-        if ($expenseDate) {
-            DailySettlement::syncForDate($expenseDate);
-        }
-        if ($reimbursedAt) {
-            DailySettlement::syncForDate($reimbursedAt);
-        }
+            if ($expenseDate) {
+                DailySettlement::syncForDate($expenseDate);
+            }
+            if ($reimbursedAt) {
+                DailySettlement::syncForDate($reimbursedAt);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense moved to trash.']);
 
@@ -346,16 +357,18 @@ class ExpenseController extends Controller
     {
         Gate::authorize('restore', $expense);
 
-        $expense->restore();
+        DB::transaction(function () use ($expense) {
+            $expense->restore();
 
-        GcashLedgerEntry::syncForExpense($expense);
+            GcashLedgerEntry::syncForExpense($expense);
 
-        if ($expense->expense_date) {
-            DailySettlement::syncForDate($expense->expense_date->toDateString());
-        }
-        if ($expense->reimbursed_at) {
-            DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
-        }
+            if ($expense->expense_date) {
+                DailySettlement::syncForDate($expense->expense_date->toDateString());
+            }
+            if ($expense->reimbursed_at) {
+                DailySettlement::syncForDate($expense->reimbursed_at->toDateString());
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense restored.']);
 
@@ -372,17 +385,19 @@ class ExpenseController extends Controller
         $expenseDate = $expense->expense_date?->toDateString();
         $reimbursedAt = $expense->reimbursed_at?->toDateString();
 
-        $expense->forceDelete();
+        DB::transaction(function () use ($expense, $expenseDate, $reimbursedAt) {
+            $expense->forceDelete();
 
-        GcashLedgerEntry::withTrashed()->where('expense_id', $expense->id)->forceDelete();
-        GcashLedgerEntry::recalculateRunningBalances();
+            GcashLedgerEntry::withTrashed()->where('expense_id', $expense->id)->forceDelete();
+            GcashLedgerEntry::recalculateRunningBalances();
 
-        if ($expenseDate) {
-            DailySettlement::syncForDate($expenseDate);
-        }
-        if ($reimbursedAt) {
-            DailySettlement::syncForDate($reimbursedAt);
-        }
+            if ($expenseDate) {
+                DailySettlement::syncForDate($expenseDate);
+            }
+            if ($reimbursedAt) {
+                DailySettlement::syncForDate($reimbursedAt);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Expense permanently deleted.']);
 

@@ -10,6 +10,7 @@ use App\Models\GcashLedgerEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -154,55 +155,57 @@ class FlightPortalDepositController extends Controller
             'record_as_expense' => ['nullable', 'boolean'],
         ]);
 
-        $expenseId = null;
+        DB::transaction(function () use ($validated) {
+            $expenseId = null;
 
-        if (! empty($validated['record_as_expense'])) {
-            $category = ExpenseCategory::firstOrCreate(
-                ['name' => 'Flight Portal Reload'],
-                [
-                    'description' => 'Funds deposited to third-party flight booking platform',
-                    'is_active' => true,
-                    'sort_order' => 10,
-                ]
-            );
+            if (! empty($validated['record_as_expense'])) {
+                $category = ExpenseCategory::firstOrCreate(
+                    ['name' => ExpenseCategory::FLIGHT_PORTAL_RELOAD],
+                    [
+                        'description' => 'Funds deposited to third-party flight booking platform',
+                        'is_active' => true,
+                        'sort_order' => 10,
+                    ]
+                );
 
-            $expense = Expense::create([
-                'title' => 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : ''),
-                'expense_category_id' => $category->id,
-                'amount' => $validated['amount'],
-                'expense_date' => $validated['entry_date'],
-                'payment_method' => $validated['payment_source'],
-                'payee' => 'Flight Booking Portal',
-                'reference_number' => $validated['reference_number'] ?? null,
-                'recurring_frequency' => 'none',
-                'notes' => $validated['notes'] ?? null,
-                'user_id' => auth()->id(),
-            ]);
+                $expense = Expense::create([
+                    'title' => 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : ''),
+                    'expense_category_id' => $category->id,
+                    'amount' => $validated['amount'],
+                    'expense_date' => $validated['entry_date'],
+                    'payment_method' => $validated['payment_source'],
+                    'payee' => 'Flight Booking Portal',
+                    'reference_number' => $validated['reference_number'] ?? null,
+                    'recurring_frequency' => 'none',
+                    'notes' => $validated['notes'] ?? null,
+                    'user_id' => auth()->id(),
+                ]);
 
-            $expenseId = $expense->id;
+                $expenseId = $expense->id;
 
-            GcashLedgerEntry::syncForExpense($expense);
+                GcashLedgerEntry::syncForExpense($expense);
 
-            // Sync daily settlement if exists
-            DailySettlement::syncForDate($validated['entry_date']);
-        }
+                // Sync daily settlement if exists
+                DailySettlement::syncForDate($validated['entry_date']);
+            }
 
-        $deposit = new FlightPortalDeposit;
-        $deposit->user_id = (int) auth()->id();
-        $deposit->type = FlightPortalDeposit::TYPE_TOP_UP;
-        $deposit->amount = $validated['amount'];
-        $deposit->entry_date = $validated['entry_date'];
-        $deposit->payment_source = $validated['payment_source'];
-        $deposit->reference_number = $validated['reference_number'] ?? null;
-        $deposit->notes = $validated['notes'] ?? null;
-        $deposit->expense_id = $expenseId;
+            $deposit = new FlightPortalDeposit;
+            $deposit->user_id = (int) auth()->id();
+            $deposit->type = FlightPortalDeposit::TYPE_TOP_UP;
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->payment_source = $validated['payment_source'];
+            $deposit->reference_number = $validated['reference_number'] ?? null;
+            $deposit->notes = $validated['notes'] ?? null;
+            $deposit->expense_id = $expenseId;
 
-        $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-        $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
+            $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
+            $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
 
-        $deposit->save();
+            $deposit->save();
 
-        FlightPortalDeposit::recalculateRunningBalances();
+            FlightPortalDeposit::recalculateRunningBalances();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -223,24 +226,26 @@ class FlightPortalDepositController extends Controller
             'notes' => ['required', 'string', 'max:1000'],
         ]);
 
-        $deposit = new FlightPortalDeposit;
-        $deposit->user_id = (int) auth()->id();
-        $deposit->type = FlightPortalDeposit::TYPE_ADJUSTMENT;
-        $deposit->amount = $validated['amount'];
-        $deposit->entry_date = $validated['entry_date'];
-        $deposit->notes = 'Adjustment: '.$validated['notes'];
+        DB::transaction(function () use ($validated) {
+            $deposit = new FlightPortalDeposit;
+            $deposit->user_id = (int) auth()->id();
+            $deposit->type = FlightPortalDeposit::TYPE_ADJUSTMENT;
+            $deposit->amount = $validated['amount'];
+            $deposit->entry_date = $validated['entry_date'];
+            $deposit->notes = 'Adjustment: '.$validated['notes'];
 
-        if (str_contains(strtolower($validated['notes']), 'initial balance')) {
-            $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
-            $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
-        } else {
-            $maxOrder = (int) (FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
-            $deposit->sort_order = $maxOrder + 1;
-        }
+            if (str_contains(strtolower($validated['notes']), 'initial balance')) {
+                $minOrder = FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->min('sort_order');
+                $deposit->sort_order = $minOrder !== null ? min(0, (int) $minOrder - 1) : 1;
+            } else {
+                $maxOrder = (int) (FlightPortalDeposit::whereDate('entry_date', $validated['entry_date'])->max('sort_order') ?? 0);
+                $deposit->sort_order = $maxOrder + 1;
+            }
 
-        $deposit->save();
+            $deposit->save();
 
-        FlightPortalDeposit::recalculateRunningBalances();
+            FlightPortalDeposit::recalculateRunningBalances();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -264,84 +269,85 @@ class FlightPortalDepositController extends Controller
             return back();
         }
 
-        if ($deposit->type === FlightPortalDeposit::TYPE_TOP_UP) {
-            $validated = $request->validate([
+        $validated = match ($deposit->type) {
+            FlightPortalDeposit::TYPE_TOP_UP => $request->validate([
                 'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
                 'entry_date' => ['required', 'date'],
                 'payment_source' => ['required', 'string', 'in:cash,gcash,bank_transfer'],
                 'reference_number' => ['nullable', 'string', 'max:100'],
                 'notes' => ['nullable', 'string', 'max:1000'],
-            ]);
-
-            $oldDate = $deposit->entry_date->toDateString();
-
-            $deposit->amount = $validated['amount'];
-            $deposit->entry_date = $validated['entry_date'];
-            $deposit->payment_source = $validated['payment_source'];
-            $deposit->reference_number = $validated['reference_number'] ?? null;
-            $deposit->notes = $validated['notes'] ?? null;
-            $deposit->save();
-
-            // Synchronize linked expense if exists
-            if ($deposit->expense) {
-                $expense = $deposit->expense;
-                $expense->amount = $validated['amount'];
-                $expense->expense_date = $validated['entry_date'];
-                $expense->payment_method = $validated['payment_source'];
-                $expense->reference_number = $validated['reference_number'] ?? null;
-                $expense->title = 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : '');
-                $expense->notes = $validated['notes'] ?? null;
-                $expense->save();
-
-                GcashLedgerEntry::syncForExpense($expense);
-
-                if ($oldDate) {
-                    DailySettlement::syncForDate($oldDate);
-                }
-                DailySettlement::syncForDate($validated['entry_date']);
-            }
-        } elseif ($deposit->type === FlightPortalDeposit::TYPE_ADJUSTMENT) {
-            $validated = $request->validate([
+            ]),
+            FlightPortalDeposit::TYPE_ADJUSTMENT => $request->validate([
                 'amount' => ['required', 'numeric', 'decimal:0,2', 'not_in:0'],
                 'entry_date' => ['required', 'date'],
                 'notes' => ['required', 'string', 'max:1000'],
-            ]);
-
-            $deposit->amount = $validated['amount'];
-            $deposit->entry_date = $validated['entry_date'];
-            $deposit->notes = $validated['notes'];
-            $deposit->save();
-        } else {
-            $validated = $request->validate([
+            ]),
+            default => $request->validate([
                 'amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
                 'entry_date' => ['required', 'date'],
                 'notes' => ['nullable', 'string', 'max:1000'],
-            ]);
+            ]),
+        };
 
-            $deposit->amount = $validated['amount'];
-            $deposit->entry_date = $validated['entry_date'];
-            $deposit->notes = $validated['notes'] ?? null;
-            $deposit->save();
-        }
-
-        // Handle manual running balance anchor override if provided
-        $anchorValidated = $request->validate([
+        $request->validate([
             'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
             'is_balance_anchor' => ['nullable', 'boolean'],
         ]);
 
-        if ($request->has('is_balance_anchor')) {
-            $isAnchor = $request->boolean('is_balance_anchor');
-            $deposit->is_balance_anchor = $isAnchor;
+        DB::transaction(function () use ($request, $deposit, $validated) {
+            if ($deposit->type === FlightPortalDeposit::TYPE_TOP_UP) {
+                $oldDate = $deposit->entry_date->toDateString();
 
-            if ($isAnchor && $request->filled('running_balance')) {
-                $deposit->running_balance = number_format((float) $request->input('running_balance'), 2, '.', '');
+                $deposit->amount = $validated['amount'];
+                $deposit->entry_date = $validated['entry_date'];
+                $deposit->payment_source = $validated['payment_source'];
+                $deposit->reference_number = $validated['reference_number'] ?? null;
+                $deposit->notes = $validated['notes'] ?? null;
+                $deposit->save();
+
+                // Synchronize linked expense if exists
+                if ($deposit->expense) {
+                    $expense = $deposit->expense;
+                    $expense->amount = $validated['amount'];
+                    $expense->expense_date = $validated['entry_date'];
+                    $expense->payment_method = $validated['payment_source'];
+                    $expense->reference_number = $validated['reference_number'] ?? null;
+                    $expense->title = 'Flight Portal Top-up'.(! empty($validated['reference_number']) ? ' ('.$validated['reference_number'].')' : '');
+                    $expense->notes = $validated['notes'] ?? null;
+                    $expense->save();
+
+                    GcashLedgerEntry::syncForExpense($expense);
+
+                    if ($oldDate) {
+                        DailySettlement::syncForDate($oldDate);
+                    }
+                    DailySettlement::syncForDate($validated['entry_date']);
+                }
+            } elseif ($deposit->type === FlightPortalDeposit::TYPE_ADJUSTMENT) {
+                $deposit->amount = $validated['amount'];
+                $deposit->entry_date = $validated['entry_date'];
+                $deposit->notes = $validated['notes'];
+                $deposit->save();
+            } else {
+                $deposit->amount = $validated['amount'];
+                $deposit->entry_date = $validated['entry_date'];
+                $deposit->notes = $validated['notes'] ?? null;
+                $deposit->save();
             }
 
-            $deposit->save();
-        }
+            if ($request->has('is_balance_anchor')) {
+                $isAnchor = $request->boolean('is_balance_anchor');
+                $deposit->is_balance_anchor = $isAnchor;
 
-        FlightPortalDeposit::recalculateRunningBalances();
+                if ($isAnchor && $request->filled('running_balance')) {
+                    $deposit->running_balance = number_format((float) $request->input('running_balance'), 2, '.', '');
+                }
+
+                $deposit->save();
+            }
+
+            FlightPortalDeposit::recalculateRunningBalances();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -365,18 +371,20 @@ class FlightPortalDepositController extends Controller
             return back();
         }
 
-        // If it was linked to an expense, soft delete the expense as well
-        if ($deposit->expense) {
-            $expenseId = $deposit->expense->id;
-            $deposit->expense->delete();
-            GcashLedgerEntry::where('expense_id', $expenseId)->delete();
-            GcashLedgerEntry::recalculateRunningBalances();
-            DailySettlement::syncForDate($deposit->entry_date->toDateString());
-        }
+        DB::transaction(function () use ($deposit) {
+            // If it was linked to an expense, soft delete the expense as well
+            if ($deposit->expense) {
+                $expenseId = $deposit->expense->id;
+                $deposit->expense->delete();
+                GcashLedgerEntry::where('expense_id', $expenseId)->delete();
+                GcashLedgerEntry::recalculateRunningBalances();
+                DailySettlement::syncForDate($deposit->entry_date->toDateString());
+            }
 
-        $deposit->delete();
+            $deposit->delete();
 
-        FlightPortalDeposit::recalculateRunningBalances();
+            FlightPortalDeposit::recalculateRunningBalances();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',

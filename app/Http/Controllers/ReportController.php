@@ -2,20 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CloseSettlementRequest;
+use App\Http\Requests\StorePastSettlementRequest;
+use App\Http\Requests\StoreSettlementRequest;
+use App\Http\Requests\UpdateSettlementRequest;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
+use App\Services\FinancialMetricsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
+    public function __construct(
+        private readonly FinancialMetricsService $metricsService,
+    ) {}
+
     /**
      * Display the Reports Hub with Daily Cash Settlements and Financial Reports.
      */
@@ -84,13 +94,9 @@ class ReportController extends Controller
     /**
      * Open a new daily cash settlement drawer.
      */
-    public function startDay(Request $request): RedirectResponse
+    public function startDay(StoreSettlementRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'opening_cash' => ['required', 'numeric', 'min:0'],
-            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
-            'settlement_date' => ['nullable', 'date'],
-        ]);
+        $validated = $request->validated();
 
         $date = $validated['settlement_date'] ?? now()->toDateString();
 
@@ -101,32 +107,34 @@ class ReportController extends Controller
             return back();
         }
 
-        $openingCash = (float) $validated['opening_cash'];
-        $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
-        $metrics = DailySettlement::calculateMetricsForDate($date);
+        DB::transaction(function () use ($validated, $date) {
+            $openingCash = (float) $validated['opening_cash'];
+            $openingGcash = (float) ($validated['opening_gcash'] ?? 0);
+            $metrics = DailySettlement::calculateMetricsForDate($date);
 
-        $settlement = DailySettlement::query()->create([
-            'settlement_date' => $date,
-            'user_id' => auth()->id(),
-            'status' => DailySettlement::STATUS_OPEN,
-            'opening_cash' => $openingCash,
-            'cash_in' => $metrics['cash_in'],
-            'cash_out' => $metrics['cash_out'],
-            'expected_cash' => round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2),
-            'opening_gcash' => $openingGcash,
-            'gcash_in' => $metrics['gcash_in'],
-            'gcash_out' => $metrics['gcash_out'],
-            'expected_gcash' => round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2),
-            'total_gcash' => $metrics['total_gcash'],
-            'total_bank_transfer' => $metrics['total_bank_transfer'],
-            'total_sales' => $metrics['total_sales'],
-            'total_ddn_earnings' => $metrics['total_ddn_earnings'],
-            'opened_at' => now(),
-        ]);
+            DailySettlement::query()->create([
+                'settlement_date' => $date,
+                'user_id' => auth()->id(),
+                'status' => DailySettlement::STATUS_OPEN,
+                'opening_cash' => $openingCash,
+                'cash_in' => $metrics['cash_in'],
+                'cash_out' => $metrics['cash_out'],
+                'expected_cash' => round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2),
+                'opening_gcash' => $openingGcash,
+                'gcash_in' => $metrics['gcash_in'],
+                'gcash_out' => $metrics['gcash_out'],
+                'expected_gcash' => round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2),
+                'total_gcash' => $metrics['total_gcash'],
+                'total_bank_transfer' => $metrics['total_bank_transfer'],
+                'total_sales' => $metrics['total_sales'],
+                'total_ddn_earnings' => $metrics['total_ddn_earnings'],
+                'opened_at' => now(),
+            ]);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Daily cash register opened with ₱'.number_format($openingCash, 2).' float.',
+            'message' => 'Daily cash register opened with ₱'.number_format((float) $validated['opening_cash'], 2).' float.',
         ]);
 
         return back();
@@ -176,16 +184,9 @@ class ReportController extends Controller
     /**
      * Record a past daily cash settlement directly as closed.
      */
-    public function storePastSettlement(Request $request): RedirectResponse
+    public function storePastSettlement(StorePastSettlementRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'settlement_date' => ['required', 'date', 'before_or_equal:today', 'unique:daily_settlements,settlement_date'],
-            'opening_cash' => ['required', 'numeric', 'min:0'],
-            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
-            'actual_cash' => ['required', 'numeric', 'min:0'],
-            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validated();
 
         $date = Carbon::parse($validated['settlement_date'])->toDateString();
         $openingCash = (float) $validated['opening_cash'];
@@ -195,39 +196,41 @@ class ReportController extends Controller
             ? (float) $validated['actual_gcash']
             : null;
 
-        $metrics = DailySettlement::calculateMetricsForDate($date);
+        DB::transaction(function () use ($date, $openingCash, $openingGcash, $actualCash, $actualGcash, $validated) {
+            $metrics = DailySettlement::calculateMetricsForDate($date);
 
-        $expectedCash = round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2);
-        $discrepancy = round($actualCash - $expectedCash, 2);
+            $expectedCash = round($openingCash + $metrics['cash_in'] - $metrics['cash_out'], 2);
+            $discrepancy = round($actualCash - $expectedCash, 2);
 
-        $expectedGcash = round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2);
-        $gcashDiscrepancy = $actualGcash !== null ? round($actualGcash - $expectedGcash, 2) : null;
+            $expectedGcash = round($openingGcash + $metrics['gcash_in'] - $metrics['gcash_out'], 2);
+            $gcashDiscrepancy = $actualGcash !== null ? round($actualGcash - $expectedGcash, 2) : null;
 
-        DailySettlement::query()->create([
-            'settlement_date' => $date,
-            'user_id' => auth()->id(),
-            'closed_by_user_id' => auth()->id(),
-            'status' => DailySettlement::STATUS_CLOSED,
-            'opening_cash' => $openingCash,
-            'cash_in' => $metrics['cash_in'],
-            'cash_out' => $metrics['cash_out'],
-            'expected_cash' => $expectedCash,
-            'actual_cash' => $actualCash,
-            'discrepancy' => $discrepancy,
-            'opening_gcash' => $openingGcash,
-            'gcash_in' => $metrics['gcash_in'],
-            'gcash_out' => $metrics['gcash_out'],
-            'expected_gcash' => $expectedGcash,
-            'actual_gcash' => $actualGcash,
-            'gcash_discrepancy' => $gcashDiscrepancy,
-            'total_gcash' => $metrics['total_gcash'],
-            'total_bank_transfer' => $metrics['total_bank_transfer'],
-            'total_sales' => $metrics['total_sales'],
-            'total_ddn_earnings' => $metrics['total_ddn_earnings'],
-            'notes' => $validated['notes'] ?? null,
-            'opened_at' => Carbon::parse($date)->startOfDay(),
-            'closed_at' => now(),
-        ]);
+            DailySettlement::query()->create([
+                'settlement_date' => $date,
+                'user_id' => auth()->id(),
+                'closed_by_user_id' => auth()->id(),
+                'status' => DailySettlement::STATUS_CLOSED,
+                'opening_cash' => $openingCash,
+                'cash_in' => $metrics['cash_in'],
+                'cash_out' => $metrics['cash_out'],
+                'expected_cash' => $expectedCash,
+                'actual_cash' => $actualCash,
+                'discrepancy' => $discrepancy,
+                'opening_gcash' => $openingGcash,
+                'gcash_in' => $metrics['gcash_in'],
+                'gcash_out' => $metrics['gcash_out'],
+                'expected_gcash' => $expectedGcash,
+                'actual_gcash' => $actualGcash,
+                'gcash_discrepancy' => $gcashDiscrepancy,
+                'total_gcash' => $metrics['total_gcash'],
+                'total_bank_transfer' => $metrics['total_bank_transfer'],
+                'total_sales' => $metrics['total_sales'],
+                'total_ddn_earnings' => $metrics['total_ddn_earnings'],
+                'notes' => $validated['notes'] ?? null,
+                'opened_at' => Carbon::parse($date)->startOfDay(),
+                'closed_at' => now(),
+            ]);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -240,66 +243,60 @@ class ReportController extends Controller
     /**
      * Update an existing daily cash settlement record.
      */
-    public function update(Request $request, DailySettlement $settlement): RedirectResponse
+    public function update(UpdateSettlementRequest $request, DailySettlement $settlement): RedirectResponse
     {
-        $validated = $request->validate([
-            'opening_cash' => ['required', 'numeric', 'min:0'],
-            'opening_gcash' => ['nullable', 'numeric', 'min:0'],
-            'actual_cash' => ['nullable', 'numeric', 'min:0'],
-            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['required', 'string', 'in:'.DailySettlement::STATUS_OPEN.','.DailySettlement::STATUS_CLOSED],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'sync_metrics' => ['nullable', 'boolean'],
-        ]);
+        $validated = $request->validated();
 
-        $settlement->opening_cash = (float) $validated['opening_cash'];
-        if (array_key_exists('opening_gcash', $validated)) {
-            $settlement->opening_gcash = (float) ($validated['opening_gcash'] ?? 0);
-        }
-        $settlement->notes = $validated['notes'] ?? null;
-        $newStatus = $validated['status'];
+        DB::transaction(function () use ($request, $settlement, $validated) {
+            $settlement->opening_cash = (float) $validated['opening_cash'];
+            if (array_key_exists('opening_gcash', $validated)) {
+                $settlement->opening_gcash = (float) ($validated['opening_gcash'] ?? 0);
+            }
+            $settlement->notes = $validated['notes'] ?? null;
+            $newStatus = $validated['status'];
 
-        if ($request->boolean('sync_metrics', true)) {
-            $settlement->syncMetricsWithRecords();
-        } else {
-            $settlement->expected_cash = round((float) $settlement->opening_cash + (float) $settlement->cash_in - (float) $settlement->cash_out, 2);
-            $settlement->expected_gcash = round((float) ($settlement->opening_gcash ?? 0) + (float) ($settlement->gcash_in ?? 0) - (float) ($settlement->gcash_out ?? 0), 2);
-        }
-
-        if ($newStatus === DailySettlement::STATUS_CLOSED) {
-            $actualCash = $validated['actual_cash'] !== null
-                ? (float) $validated['actual_cash']
-                : (float) ($settlement->actual_cash ?? $settlement->expected_cash);
-
-            $settlement->actual_cash = $actualCash;
-            $settlement->discrepancy = round($actualCash - (float) $settlement->expected_cash, 2);
-
-            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
-                $actualGcash = (float) $validated['actual_gcash'];
-                $settlement->actual_gcash = $actualGcash;
-                $settlement->gcash_discrepancy = round($actualGcash - (float) $settlement->expected_gcash, 2);
+            if ($request->boolean('sync_metrics', true)) {
+                $settlement->syncMetricsWithRecords();
+            } else {
+                $settlement->expected_cash = round((float) $settlement->opening_cash + (float) $settlement->cash_in - (float) $settlement->cash_out, 2);
+                $settlement->expected_gcash = round((float) ($settlement->opening_gcash ?? 0) + (float) ($settlement->gcash_in ?? 0) - (float) ($settlement->gcash_out ?? 0), 2);
             }
 
-            $settlement->status = DailySettlement::STATUS_CLOSED;
-            if (! $settlement->closed_at) {
-                $settlement->closed_at = now();
-                $settlement->closed_by_user_id = (int) auth()->id();
-            }
-        } else {
-            $settlement->status = DailySettlement::STATUS_OPEN;
-            $settlement->closed_at = null;
-            $settlement->closed_by_user_id = null;
-            if ($validated['actual_cash'] !== null) {
-                $settlement->actual_cash = (float) $validated['actual_cash'];
-                $settlement->discrepancy = round((float) $settlement->actual_cash - (float) $settlement->expected_cash, 2);
-            }
-            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
-                $settlement->actual_gcash = (float) $validated['actual_gcash'];
-                $settlement->gcash_discrepancy = round((float) $settlement->actual_gcash - (float) $settlement->expected_gcash, 2);
-            }
-        }
+            if ($newStatus === DailySettlement::STATUS_CLOSED) {
+                $actualCash = $validated['actual_cash'] !== null
+                    ? (float) $validated['actual_cash']
+                    : (float) ($settlement->actual_cash ?? $settlement->expected_cash);
 
-        $settlement->save();
+                $settlement->actual_cash = $actualCash;
+                $settlement->discrepancy = round($actualCash - (float) $settlement->expected_cash, 2);
+
+                if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                    $actualGcash = (float) $validated['actual_gcash'];
+                    $settlement->actual_gcash = $actualGcash;
+                    $settlement->gcash_discrepancy = round($actualGcash - (float) $settlement->expected_gcash, 2);
+                }
+
+                $settlement->status = DailySettlement::STATUS_CLOSED;
+                if (! $settlement->closed_at) {
+                    $settlement->closed_at = now();
+                    $settlement->closed_by_user_id = (int) auth()->id();
+                }
+            } else {
+                $settlement->status = DailySettlement::STATUS_OPEN;
+                $settlement->closed_at = null;
+                $settlement->closed_by_user_id = null;
+                if ($validated['actual_cash'] !== null) {
+                    $settlement->actual_cash = (float) $validated['actual_cash'];
+                    $settlement->discrepancy = round((float) $settlement->actual_cash - (float) $settlement->expected_cash, 2);
+                }
+                if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                    $settlement->actual_gcash = (float) $validated['actual_gcash'];
+                    $settlement->gcash_discrepancy = round((float) $settlement->actual_gcash - (float) $settlement->expected_gcash, 2);
+                }
+            }
+
+            $settlement->save();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -312,28 +309,26 @@ class ReportController extends Controller
     /**
      * Close the daily settlement drawer and calculate discrepancy.
      */
-    public function closeDay(Request $request, DailySettlement $settlement): RedirectResponse
+    public function closeDay(CloseSettlementRequest $request, DailySettlement $settlement): RedirectResponse
     {
-        $validated = $request->validate([
-            'actual_cash' => ['required', 'numeric', 'min:0'],
-            'actual_gcash' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validated();
 
-        $actualCash = (float) $validated['actual_cash'];
-        $settlement->actual_cash = $actualCash;
-        if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
-            $settlement->actual_gcash = (float) $validated['actual_gcash'];
-        }
-        $settlement->syncMetricsWithRecords();
+        DB::transaction(function () use ($settlement, $validated) {
+            $actualCash = (float) $validated['actual_cash'];
+            $settlement->actual_cash = $actualCash;
+            if (array_key_exists('actual_gcash', $validated) && $validated['actual_gcash'] !== null) {
+                $settlement->actual_gcash = (float) $validated['actual_gcash'];
+            }
+            $settlement->syncMetricsWithRecords();
 
-        $settlement->status = DailySettlement::STATUS_CLOSED;
-        $settlement->closed_by_user_id = (int) auth()->id();
-        $settlement->closed_at = now();
-        if (array_key_exists('notes', $validated)) {
-            $settlement->notes = $validated['notes'];
-        }
-        $settlement->save();
+            $settlement->status = DailySettlement::STATUS_CLOSED;
+            $settlement->closed_by_user_id = (int) auth()->id();
+            $settlement->closed_at = now();
+            if (array_key_exists('notes', $validated)) {
+                $settlement->notes = $validated['notes'];
+            }
+            $settlement->save();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -535,93 +530,8 @@ class ReportController extends Controller
             }
         }
 
-        // Accurate Cash & GCash collections for the period via TransactionPayment
-        $periodPaymentCash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_CASH)
-            ->sum('amount');
-        $periodPaymentSplitCash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
-            ->sum('cash_amount');
-        $cashSales = $periodPaymentCash + $periodPaymentSplitCash;
-
-        $periodPaymentGcash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_GCASH)
-            ->sum('amount');
-        $periodPaymentSplitGcash = (float) TransactionPayment::query()
-            ->whereHas('transaction')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('payment_method', Transaction::PAYMENT_METHOD_SPLIT)
-            ->sum('gcash_amount');
-        $gcashSales = $periodPaymentGcash + $periodPaymentSplitGcash;
-
-        // Fallback for transactions in range without payments
-        $fallbackTransactions = Transaction::query()
-            ->whereBetween('transaction_date', [$startDate, $endDate])
-            ->whereDoesntHave('payments')
-            ->get(['payment_method', 'amount', 'cash_amount', 'gcash_amount', 'amount_paid', 'payment_status']);
-
-        foreach ($fallbackTransactions as $tx) {
-            $amt = $tx->amount_paid !== null && (float) $tx->amount_paid > 0
-                ? (float) $tx->amount_paid
-                : ($tx->payment_status === Transaction::PAYMENT_STATUS_UNPAID ? 0.0 : (float) $tx->amount);
-
-            if ($tx->payment_method === Transaction::PAYMENT_METHOD_CASH) {
-                $cashSales += $amt;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_GCASH) {
-                $gcashSales += $amt;
-            } elseif ($tx->payment_method === Transaction::PAYMENT_METHOD_SPLIT) {
-                $cashSales += (float) ($tx->cash_amount ?? 0);
-                $gcashSales += (float) ($tx->gcash_amount ?? 0);
-            }
-        }
-
-        $expenses = Expense::query()
-            ->with('category:id,name')
-            ->business()
-            ->whereBetween('expense_date', [$startDate, $endDate])
-            ->get(['expense_category_id', 'payment_method', 'amount']);
-
-        $totalExpenses = 0.0;
-        $portalReloadExpenses = 0.0;
-        $cashExpenses = 0.0;
-        $gcashExpenses = 0.0;
-        $bankExpenses = 0.0;
-
-        $categoriesGrouped = [];
-
-        foreach ($expenses as $exp) {
-            $amount = (float) $exp->amount;
-            $totalExpenses += $amount;
-
-            $catName = $exp->category ? $exp->category->name : 'Uncategorized';
-            if ($catName === 'Flight Portal Reload') {
-                $portalReloadExpenses += $amount;
-            }
-
-            if ($exp->payment_method === Expense::PAYMENT_METHOD_CASH) {
-                $cashExpenses += $amount;
-            } elseif ($exp->payment_method === Expense::PAYMENT_METHOD_GCASH) {
-                $gcashExpenses += $amount;
-            } elseif ($exp->payment_method === Expense::PAYMENT_METHOD_BANK_TRANSFER) {
-                $bankExpenses += $amount;
-            }
-
-            if (! isset($categoriesGrouped[$catName])) {
-                $categoriesGrouped[$catName] = ['category' => $catName, 'count' => 0, 'total' => 0.0];
-            }
-            $categoriesGrouped[$catName]['count']++;
-            $categoriesGrouped[$catName]['total'] += $amount;
-        }
-
-        $operatingExpenses = round(max(0, $totalExpenses - $portalReloadExpenses), 2);
-
-        usort($categoriesGrouped, fn ($a, $b) => $b['total'] <=> $a['total']);
+        $collections = $this->metricsService->calculateCashAndGcashCollections($startDate, $endDate);
+        $expenseMetrics = $this->metricsService->calculatePeriodExpenses($startDate, $endDate);
 
         $servicesBreakdown = [];
         foreach ($servicesGrouped as $type => $data) {
@@ -637,20 +547,21 @@ class ReportController extends Controller
             'summary' => [
                 'total_sales' => round($totalSales, 2),
                 'total_ddn' => round($totalDdn, 2),
-                'total_expenses' => round($totalExpenses, 2),
-                'operating_expenses' => $operatingExpenses,
-                'portal_reloads' => round($portalReloadExpenses, 2),
-                'net_profit' => round($totalDdn - $operatingExpenses, 2),
-                'cash_sales' => round($cashSales, 2),
-                'gcash_sales' => round($gcashSales, 2),
-                'cash_expenses' => round($cashExpenses, 2),
-                'gcash_expenses' => round($gcashExpenses, 2),
-                'bank_expenses' => round($bankExpenses, 2),
+                'total_expenses' => $expenseMetrics['total_expenses'],
+                'operating_expenses' => $expenseMetrics['operating_expenses'],
+                'portal_reloads' => $expenseMetrics['portal_reloads'],
+                'gcash_top_ups' => $expenseMetrics['gcash_top_ups'],
+                'net_profit' => round($totalDdn - $expenseMetrics['operating_expenses'], 2),
+                'cash_sales' => $collections['cash'],
+                'gcash_sales' => $collections['gcash'],
+                'cash_expenses' => $expenseMetrics['cash_expenses'],
+                'gcash_expenses' => $expenseMetrics['gcash_expenses'],
+                'bank_expenses' => $expenseMetrics['bank_expenses'],
                 'transaction_count' => $transactions->count(),
-                'expense_count' => $expenses->count(),
+                'expense_count' => $expenseMetrics['expense_count'],
             ],
             'servicesBreakdown' => $servicesBreakdown,
-            'expensesBreakdown' => $categoriesGrouped,
+            'expensesBreakdown' => $expenseMetrics['categories_breakdown'],
         ];
     }
 

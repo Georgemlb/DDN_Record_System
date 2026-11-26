@@ -15,6 +15,7 @@ use App\Models\TransactionPayment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -181,46 +182,50 @@ class TransactionController extends Controller
     {
         $validated = $request->validated();
 
-        // Auto-link or create Customer
-        if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
-            $customer = Customer::firstOrCreate(
-                ['name' => trim($validated['customer_name'])],
-                ['contact_number' => $request->input('customer_contact')]
-            );
-            $validated['customer_id'] = $customer->id;
-        } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
-            $customer = Customer::query()->find((int) $validated['customer_id']);
-            if ($customer && empty($customer->contact_number)) {
-                $customer->update(['contact_number' => $request->input('customer_contact')]);
+        $transaction = DB::transaction(function () use ($validated, $request) {
+            // Auto-link or create Customer
+            if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
+                $customer = Customer::firstOrCreate(
+                    ['name' => trim($validated['customer_name'])],
+                    ['contact_number' => $request->input('customer_contact')]
+                );
+                $validated['customer_id'] = $customer->id;
+            } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
+                $customer = Customer::query()->find((int) $validated['customer_id']);
+                if ($customer && empty($customer->contact_number)) {
+                    $customer->update(['contact_number' => $request->input('customer_contact')]);
+                }
             }
-        }
 
-        $payload = $this->prepareTransactionData($validated);
-        if (empty($payload['user_id']) && auth()->check()) {
-            $payload['user_id'] = (int) auth()->id();
-        }
+            $payload = $this->prepareTransactionData($validated);
+            if (empty($payload['user_id']) && auth()->check()) {
+                $payload['user_id'] = (int) auth()->id();
+            }
 
-        $transaction = Transaction::query()->create($payload);
+            $transaction = Transaction::query()->create($payload);
 
-        // Record initial payment if amount_paid > 0 and not already recorded
-        if ($payload['amount_paid'] > 0 && $transaction->payments()->doesntExist()) {
-            $transaction->payments()->create([
-                'user_id' => (int) auth()->id(),
-                'amount' => $payload['amount_paid'],
-                'payment_method' => $payload['payment_method'],
-                'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
-                'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
-                'gcash_tendered' => $payload['gcash_tendered'] ?? null,
-                'cash_change' => $payload['cash_change'] ?? 0,
-                'change_fee' => $payload['change_fee'] ?? 0,
-                'payment_date' => $payload['transaction_date'],
-                'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
-            ]);
-        }
+            // Record initial payment if amount_paid > 0 and not already recorded
+            if ($payload['amount_paid'] > 0 && $transaction->payments()->doesntExist()) {
+                $transaction->payments()->create([
+                    'user_id' => (int) auth()->id(),
+                    'amount' => $payload['amount_paid'],
+                    'payment_method' => $payload['payment_method'],
+                    'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                    'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                    'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                    'cash_change' => $payload['cash_change'] ?? 0,
+                    'change_fee' => $payload['change_fee'] ?? 0,
+                    'payment_date' => $payload['transaction_date'],
+                    'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
+                ]);
+            }
 
-        FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
-        GcashLedgerEntry::syncForTransaction($transaction);
-        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+            FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
+            GcashLedgerEntry::syncForTransaction($transaction);
+            DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+
+            return $transaction;
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction recorded.']);
 
@@ -288,77 +293,79 @@ class TransactionController extends Controller
 
         $validated = $request->validated();
 
-        if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
-            $customer = Customer::firstOrCreate(
-                ['name' => trim($validated['customer_name'])],
-                ['contact_number' => $request->input('customer_contact')]
-            );
-            $validated['customer_id'] = $customer->id;
-        } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
-            $customer = Customer::query()->find((int) $validated['customer_id']);
-            if ($customer && empty($customer->contact_number)) {
-                $customer->update(['contact_number' => $request->input('customer_contact')]);
-            }
-        }
-
-        $payload = $this->prepareTransactionData($validated);
-        $oldDate = $transaction->transaction_date->toDateString();
-
-        $transaction->update($payload);
-
-        // Synchronize initial payment when transaction has 0 or 1 payment record
-        $paymentsCount = $transaction->payments()->count();
-        if ($paymentsCount <= 1) {
-            $payment = $transaction->payments()->first();
-            $amountPaid = (float) ($payload['amount_paid'] ?? 0);
-
-            if ($amountPaid > 0) {
-                if (! $payment) {
-                    $transaction->payments()->create([
-                        'user_id' => $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null),
-                        'amount' => $amountPaid,
-                        'payment_method' => $payload['payment_method'],
-                        'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
-                        'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
-                        'gcash_tendered' => $payload['gcash_tendered'] ?? null,
-                        'cash_change' => $payload['cash_change'] ?? 0,
-                        'change_fee' => $payload['change_fee'] ?? 0,
-                        'payment_date' => $payload['transaction_date'],
-                        'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
-                    ]);
-                } else {
-                    $oldPaymentDate = $payment->payment_date->toDateString();
-                    $payment->update([
-                        'amount' => $amountPaid,
-                        'payment_method' => $payload['payment_method'],
-                        'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
-                        'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
-                        'gcash_tendered' => $payload['gcash_tendered'] ?? null,
-                        'cash_change' => $payload['cash_change'] ?? 0,
-                        'change_fee' => $payload['change_fee'] ?? 0,
-                        'payment_date' => $payload['transaction_date'],
-                    ]);
-
-                    if ($oldPaymentDate !== $transaction->transaction_date->toDateString()) {
-                        DailySettlement::syncForDate($oldPaymentDate);
-                    }
+        DB::transaction(function () use ($validated, $request, $transaction) {
+            if (empty($validated['customer_id']) && ! empty($validated['customer_name'])) {
+                $customer = Customer::firstOrCreate(
+                    ['name' => trim($validated['customer_name'])],
+                    ['contact_number' => $request->input('customer_contact')]
+                );
+                $validated['customer_id'] = $customer->id;
+            } elseif (! empty($validated['customer_id']) && ! empty($request->input('customer_contact'))) {
+                $customer = Customer::query()->find((int) $validated['customer_id']);
+                if ($customer && empty($customer->contact_number)) {
+                    $customer->update(['contact_number' => $request->input('customer_contact')]);
                 }
-            } elseif ($payment) {
-                $oldPaymentDate = $payment->payment_date->toDateString();
-                $payment->delete();
-                DailySettlement::syncForDate($oldPaymentDate);
             }
-        }
 
-        $transaction->recalculateBalance();
+            $payload = $this->prepareTransactionData($validated);
+            $oldDate = $transaction->transaction_date->toDateString();
 
-        FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
-        GcashLedgerEntry::syncForTransaction($transaction);
+            $transaction->update($payload);
 
-        if ($oldDate !== $transaction->transaction_date->toDateString()) {
-            DailySettlement::syncForDate($oldDate);
-        }
-        DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+            // Synchronize initial payment when transaction has 0 or 1 payment record
+            $paymentsCount = $transaction->payments()->count();
+            if ($paymentsCount <= 1) {
+                $payment = $transaction->payments()->first();
+                $amountPaid = (float) ($payload['amount_paid'] ?? 0);
+
+                if ($amountPaid > 0) {
+                    if (! $payment) {
+                        $transaction->payments()->create([
+                            'user_id' => $transaction->user_id ?? (auth()->id() !== null ? (int) auth()->id() : null),
+                            'amount' => $amountPaid,
+                            'payment_method' => $payload['payment_method'],
+                            'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                            'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                            'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                            'cash_change' => $payload['cash_change'] ?? 0,
+                            'change_fee' => $payload['change_fee'] ?? 0,
+                            'payment_date' => $payload['transaction_date'],
+                            'notes' => $payload['payment_status'] === Transaction::PAYMENT_STATUS_PARTIAL ? 'Initial downpayment' : 'Full payment',
+                        ]);
+                    } else {
+                        $oldPaymentDate = $payment->payment_date->toDateString();
+                        $payment->update([
+                            'amount' => $amountPaid,
+                            'payment_method' => $payload['payment_method'],
+                            'cash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['cash_amount'] : null,
+                            'gcash_amount' => $payload['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? $payload['gcash_amount'] : null,
+                            'gcash_tendered' => $payload['gcash_tendered'] ?? null,
+                            'cash_change' => $payload['cash_change'] ?? 0,
+                            'change_fee' => $payload['change_fee'] ?? 0,
+                            'payment_date' => $payload['transaction_date'],
+                        ]);
+
+                        if ($oldPaymentDate !== $transaction->transaction_date->toDateString()) {
+                            DailySettlement::syncForDate($oldPaymentDate);
+                        }
+                    }
+                } elseif ($payment) {
+                    $oldPaymentDate = $payment->payment_date->toDateString();
+                    $payment->delete();
+                    DailySettlement::syncForDate($oldPaymentDate);
+                }
+            }
+
+            $transaction->recalculateBalance();
+
+            FlightPortalDeposit::syncTransactionTicketDeduction($transaction);
+            GcashLedgerEntry::syncForTransaction($transaction);
+
+            if ($oldDate !== $transaction->transaction_date->toDateString()) {
+                DailySettlement::syncForDate($oldDate);
+            }
+            DailySettlement::syncForDate($transaction->transaction_date->toDateString());
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction updated.']);
 
@@ -394,22 +401,24 @@ class TransactionController extends Controller
             }
         }
 
-        $transaction->payments()->create([
-            'user_id' => (int) auth()->id(),
-            'amount' => $amount,
-            'payment_method' => $validated['payment_method'],
-            'cash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['cash_amount'] ?? 0) : null,
-            'gcash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['gcash_amount'] ?? 0) : null,
-            'gcash_tendered' => ! empty($validated['gcash_tendered']) ? (float) $validated['gcash_tendered'] : null,
-            'cash_change' => ! empty($validated['cash_change']) ? (float) $validated['cash_change'] : 0,
-            'change_fee' => ! empty($validated['change_fee']) ? (float) $validated['change_fee'] : 0,
-            'payment_date' => $validated['payment_date'],
-            'notes' => $validated['notes'] ?? 'Balance collection on pickup',
-        ]);
+        DB::transaction(function () use ($transaction, $validated, $amount) {
+            $transaction->payments()->create([
+                'user_id' => (int) auth()->id(),
+                'amount' => $amount,
+                'payment_method' => $validated['payment_method'],
+                'cash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['cash_amount'] ?? 0) : null,
+                'gcash_amount' => $validated['payment_method'] === Transaction::PAYMENT_METHOD_SPLIT ? (float) ($validated['gcash_amount'] ?? 0) : null,
+                'gcash_tendered' => ! empty($validated['gcash_tendered']) ? (float) $validated['gcash_tendered'] : null,
+                'cash_change' => ! empty($validated['cash_change']) ? (float) $validated['cash_change'] : 0,
+                'change_fee' => ! empty($validated['change_fee']) ? (float) $validated['change_fee'] : 0,
+                'payment_date' => $validated['payment_date'],
+                'notes' => $validated['notes'] ?? 'Balance collection on pickup',
+            ]);
 
-        $transaction->recalculateBalance();
-        GcashLedgerEntry::syncForTransaction($transaction);
-        DailySettlement::syncForDate($validated['payment_date']);
+            $transaction->recalculateBalance();
+            GcashLedgerEntry::syncForTransaction($transaction);
+            DailySettlement::syncForDate($validated['payment_date']);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -426,17 +435,19 @@ class TransactionController extends Controller
     {
         Gate::authorize('delete', $transaction);
 
-        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
-        $affectedDates[] = $transaction->transaction_date->toDateString();
+        DB::transaction(function () use ($transaction) {
+            $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+            $affectedDates[] = $transaction->transaction_date->toDateString();
 
-        $transaction->delete();
+            $transaction->delete();
 
-        FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
-        GcashLedgerEntry::removeForTransaction($transaction->id);
+            FlightPortalDeposit::removeTransactionTicketDeduction($transaction->id);
+            GcashLedgerEntry::removeForTransaction($transaction->id);
 
-        foreach (array_unique($affectedDates) as $date) {
-            DailySettlement::syncForDate($date);
-        }
+            foreach (array_unique($affectedDates) as $date) {
+                DailySettlement::syncForDate($date);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
@@ -450,17 +461,19 @@ class TransactionController extends Controller
     {
         Gate::authorize('restore', $transaction);
 
-        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
-        $affectedDates[] = $transaction->transaction_date->toDateString();
+        DB::transaction(function () use ($transaction) {
+            $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+            $affectedDates[] = $transaction->transaction_date->toDateString();
 
-        $transaction->restore();
+            $transaction->restore();
 
-        FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
-        GcashLedgerEntry::restoreForTransaction($transaction->id);
+            FlightPortalDeposit::restoreTransactionTicketDeduction($transaction->id);
+            GcashLedgerEntry::restoreForTransaction($transaction->id);
 
-        foreach (array_unique($affectedDates) as $date) {
-            DailySettlement::syncForDate($date);
-        }
+            foreach (array_unique($affectedDates) as $date) {
+                DailySettlement::syncForDate($date);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
 
@@ -474,18 +487,20 @@ class TransactionController extends Controller
     {
         Gate::authorize('forceDelete', $transaction);
 
-        $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
-        $affectedDates[] = $transaction->transaction_date->toDateString();
+        DB::transaction(function () use ($transaction) {
+            $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+            $affectedDates[] = $transaction->transaction_date->toDateString();
 
-        $transaction->payments()->delete();
-        $transaction->forceDelete();
+            $transaction->payments()->delete();
+            $transaction->forceDelete();
 
-        FlightPortalDeposit::forceRemoveTransactionTicketDeduction($transaction->id);
-        GcashLedgerEntry::forceRemoveForTransaction($transaction->id);
+            FlightPortalDeposit::forceRemoveTransactionTicketDeduction($transaction->id);
+            GcashLedgerEntry::forceRemoveForTransaction($transaction->id);
 
-        foreach (array_unique($affectedDates) as $date) {
-            DailySettlement::syncForDate($date);
-        }
+            foreach (array_unique($affectedDates) as $date) {
+                DailySettlement::syncForDate($date);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
 

@@ -8,6 +8,7 @@ use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\FinancialMetricsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -721,4 +722,34 @@ test('gcash remittance cash-in recorded as unpaid deducts gcash immediately and 
 
     $metricsDay2 = DailySettlement::calculateMetricsForDate('2026-09-11');
     expect((float) $metricsDay2['cash_in'])->toBe(1000.00);
+});
+
+test('gcash top-up from cash drawer uses dedicated category and is excluded from operating expenses', function () {
+    $user = User::factory()->create();
+    $today = now()->toDateString();
+
+    $this->actingAs($user)
+        ->post(route('gcash-ledger.adjustment'), [
+            'amount' => 2500.00,
+            'entry_date' => $today,
+            'notes' => 'Cash drawer transfer to GCash',
+            'from_drawer' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('expense_categories', [
+        'name' => ExpenseCategory::GCASH_WALLET_TOP_UP,
+    ]);
+
+    $this->assertDatabaseHas('expenses', [
+        'title' => 'GCash Top-Up from Drawer',
+        'amount' => 2500.00,
+        'payment_method' => Expense::PAYMENT_METHOD_CASH,
+    ]);
+
+    // Operating expenses should exclude the internal drawer-to-GCash transfer
+    $metrics = app(FinancialMetricsService::class)->calculatePeriodExpenses($today, $today);
+    expect($metrics['total_expenses'])->toBe(2500.00)
+        ->and($metrics['gcash_top_ups'])->toBe(2500.00)
+        ->and($metrics['operating_expenses'])->toBe(0.0);
 });

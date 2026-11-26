@@ -25,6 +25,15 @@ use Illuminate\Support\Carbon;
 ])]
 class ExpenseCategory extends Model
 {
+    public const FLIGHT_PORTAL_RELOAD = 'Flight Portal Reload';
+
+    public const GCASH_WALLET_TOP_UP = 'GCash Wallet Top-Up';
+
+    public const NON_OPERATING_CATEGORIES = [
+        self::FLIGHT_PORTAL_RELOAD,
+        self::GCASH_WALLET_TOP_UP,
+    ];
+
     /**
      * Get the attributes that should be cast.
      *
