@@ -2,21 +2,18 @@
 import { Form, Link } from '@inertiajs/vue3';
 import {
     AlertCircle,
-    ArrowDownLeft,
-    ArrowUpRight,
     Calculator,
     CheckCircle,
     Clock,
-    Info,
-    Minus,
-    Plus,
-    Ship,
-    Smartphone,
     Wallet,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
-import GcashIcon from '@/components/icons/GcashIcon.vue';
 import InputError from '@/components/InputError.vue';
+import AirlineFields from '@/components/transactions/AirlineFields.vue';
+import FerryFields from '@/components/transactions/FerryFields.vue';
+import OnlineAssistanceFields from '@/components/transactions/OnlineAssistanceFields.vue';
+import PsaFields from '@/components/transactions/PsaFields.vue';
+import RemittanceFields from '@/components/transactions/RemittanceFields.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1364,510 +1361,43 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             <!-- 5. TYPE-SPECIFIC FIELDS                        -->
             <!-- ============================================== -->
 
-            <!-- AIRLINE TICKET -->
             <!-- AIRLINE TICKETING -->
-            <template v-if="formType === 'airline'">
-                <div class="grid gap-2">
-                    <Label for="pax">Number of Passengers (Pax)</Label>
-                    <Input
-                        id="pax"
-                        name="pax"
-                        type="number"
-                        min="1"
-                        step="1"
-                        v-model="pax"
-                        required
-                        placeholder="e.g. 1"
-                    />
-                    <InputError :message="errors.pax" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label>Trip Type</Label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            @click="tripType = 'one_way'"
-                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                            :class="
-                                tripType === 'one_way'
-                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <span>One-way (1 leg)</span>
-                        </button>
-                        <button
-                            type="button"
-                            @click="tripType = 'round_trip'"
-                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                            :class="
-                                tripType === 'round_trip'
-                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <span>Round-trip (2 legs)</span>
-                        </button>
-                    </div>
-                    <InputError :message="errors.trip_type" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="flight_type_select">Flight Type</Label>
-                    <Select v-model="flightType">
-                        <SelectTrigger id="flight_type_select" class="w-full">
-                            <SelectValue placeholder="Select flight type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="local"
-                                >Domestic (Local)</SelectItem
-                            >
-                            <SelectItem value="international"
-                                >International</SelectItem
-                            >
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.flight_type" />
-                </div>
-
-                <!-- Carrier Category for International Flights -->
-                <div v-if="flightType === 'international'" class="grid gap-2">
-                    <Label for="carrier_category_select"
-                        >Carrier Category</Label
-                    >
-                    <Select v-model="carrierCategory">
-                        <SelectTrigger
-                            id="carrier_category_select"
-                            class="w-full"
-                        >
-                            <SelectValue
-                                placeholder="Select carrier category"
-                            />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="budget">
-                                Budget Carrier (₱1,250 Markup)
-                            </SelectItem>
-                            <SelectItem value="full_service">
-                                Full Service Carrier (₱1,500 Markup)
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.carrier_category" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="provider">
-                        {{
-                            tripType === 'round_trip' &&
-                            hasDifferentReturnAirline
-                                ? 'Outbound Airline or Provider'
-                                : 'Airline or Provider'
-                        }}
-                    </Label>
-                    <Input
-                        id="provider"
-                        name="provider"
-                        v-model="provider"
-                        :placeholder="
-                            flightType === 'international'
-                                ? 'e.g. Scoot, PAL, Singapore Airlines'
-                                : 'e.g. Cebu Pacific'
-                        "
-                        list="airlines"
-                    />
-                    <datalist id="airlines">
-                        <option
-                            v-for="airline in airlineSuggestions"
-                            :key="airline"
-                            :value="airline"
-                        />
-                    </datalist>
-                    <InputError :message="errors.provider" />
-                </div>
-
-                <!-- Different Airline for Return (Round-trip only) -->
-                <div
-                    v-if="tripType === 'round_trip'"
-                    class="flex items-center gap-2 pt-1 pb-1 md:col-span-2"
-                >
-                    <input
-                        id="has_different_return_airline"
-                        type="checkbox"
-                        v-model="hasDifferentReturnAirline"
-                        class="size-4 rounded border-input text-primary focus:ring-primary"
-                    />
-                    <Label
-                        for="has_different_return_airline"
-                        class="cursor-pointer text-xs font-medium text-foreground"
-                    >
-                        Different airline for return flight (e.g. Outbound PAL,
-                        Return Cebu Pacific)
-                    </Label>
-                </div>
-
-                <!-- Return Airline Input -->
-                <div
-                    v-if="
-                        tripType === 'round_trip' && hasDifferentReturnAirline
-                    "
-                    class="grid gap-2 md:col-span-2"
-                >
-                    <Label
-                        for="return_provider"
-                        class="flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400"
-                    >
-                        <span>Return Airline or Provider</span>
-                    </Label>
-                    <Input
-                        id="return_provider"
-                        name="return_provider"
-                        v-model="returnProvider"
-                        :placeholder="
-                            flightType === 'international'
-                                ? 'e.g. Singapore Airlines, Scoot'
-                                : 'e.g. Philippine Airlines'
-                        "
-                        list="return-airlines"
-                    />
-                    <datalist id="return-airlines">
-                        <option
-                            v-for="airline in airlineSuggestions"
-                            :key="airline"
-                            :value="airline"
-                        />
-                    </datalist>
-                    <p class="text-[11px] text-muted-foreground">
-                        Markup will be calculated independently for each leg
-                        (Outbound + Return) based on each carrier's rule.
-                    </p>
-                    <InputError :message="errors.return_provider" />
-                </div>
-
-                <div
-                    class="grid gap-2"
-                    :class="
-                        flightType === 'international' ? '' : 'md:col-span-2'
-                    "
-                >
-                    <Label for="airline_service_details"
-                        >Flight Route / Details</Label
-                    >
-                    <Input
-                        id="airline_service_details"
-                        name="service_details"
-                        v-model="serviceDetails"
-                        placeholder="e.g. Manila to Cebu (MNL-CEB)"
-                    />
-                    <InputError :message="errors.service_details" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="amount">Customer Ticket Price (PHP)</Label>
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Total amount collected from customer.
-                    </p>
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <div class="flex items-center justify-between">
-                        <Label for="third_party_payment"
-                            >Portal Net Cost (PHP)</Label
-                        >
-                        <span
-                            v-if="props.portalBalance !== undefined"
-                            :class="[
-                                'text-xs font-medium',
-                                props.portalBalance < 10000
-                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
-                                    : 'text-muted-foreground',
-                            ]"
-                        >
-                            Balance: {{ formatPhp(props.portalBalance) }}
-                        </span>
-                    </div>
-                    <Input
-                        id="third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        placeholder="0.00 (Optional)"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Net ticket fare deducted from flight portal deposit.
-                        Auto-calculates if markup rule is set.
-                    </p>
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Auto Calculation Preview -->
-                <div
-                    v-if="numAmount > 0 && numThirdParty > 0"
-                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
-                >
-                    <div class="flex items-center justify-between">
-                        <div
-                            class="flex items-center gap-2 text-sm font-semibold text-primary"
-                        >
-                            <Calculator class="size-4" />
-                            <span>Flight Ticketing Margin Preview</span>
-                        </div>
-                        <span
-                            v-if="activeMarkupRuleDescription"
-                            class="text-xs font-medium text-muted-foreground"
-                        >
-                            {{ activeMarkupRuleDescription }}
-                        </span>
-                    </div>
-                    <div
-                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
-                    >
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Customer Paid</span
-                            >
-                            <p class="font-semibold text-foreground">
-                                {{ formatPhp(numAmount) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Portal Cost</span
-                            >
-                            <p
-                                class="font-semibold text-blue-600 dark:text-blue-400"
-                            >
-                                -{{ formatPhp(numThirdParty) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >DDN Margin</span
-                            >
-                            <p
-                                class="font-semibold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{
-                                    formatPhp(
-                                        Math.max(0, numAmount - numThirdParty),
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </template>
+            <AirlineFields
+                v-if="formType === 'airline'"
+                v-model:pax="pax"
+                v-model:trip-type="tripType"
+                v-model:flight-type="flightType"
+                v-model:carrier-category="carrierCategory"
+                v-model:provider="provider"
+                v-model:has-different-return-airline="hasDifferentReturnAirline"
+                v-model:return-provider="returnProvider"
+                v-model:service-details="serviceDetails"
+                v-model:amount="amount"
+                v-model:third-party-payment="thirdPartyPayment"
+                :errors="errors"
+                :airline-suggestions="airlineSuggestions"
+                :portal-balance="props.portalBalance"
+                :num-amount="numAmount"
+                :num-third-party="numThirdParty"
+                :active-markup-rule-description="activeMarkupRuleDescription"
+            />
 
             <!-- FERRY TICKETING -->
-            <template v-if="formType === 'ferry'">
-                <div class="grid gap-2">
-                    <Label for="ferry_pax">Number of Passengers (Pax)</Label>
-                    <Input
-                        id="ferry_pax"
-                        name="pax"
-                        type="number"
-                        min="1"
-                        step="1"
-                        v-model="pax"
-                        required
-                        placeholder="e.g. 1"
-                    />
-                    <InputError :message="errors.pax" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label>Trip Type</Label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            @click="tripType = 'one_way'"
-                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                            :class="
-                                tripType === 'one_way'
-                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <span>One-way (1 leg)</span>
-                        </button>
-                        <button
-                            type="button"
-                            @click="tripType = 'round_trip'"
-                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                            :class="
-                                tripType === 'round_trip'
-                                    ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <span>Round-trip (2 legs)</span>
-                        </button>
-                    </div>
-                    <InputError :message="errors.trip_type" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="ferry_provider"
-                        >Ferry Provider / Category</Label
-                    >
-                    <Input
-                        id="ferry_provider"
-                        name="provider"
-                        v-model="provider"
-                        placeholder="All Ferries"
-                        list="ferries-list"
-                    />
-                    <datalist id="ferries-list">
-                        <option
-                            v-for="ferry in ferrySuggestions"
-                            :key="ferry"
-                            :value="ferry"
-                        />
-                    </datalist>
-                    <InputError :message="errors.provider" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="ferry_service_details"
-                        >Route / Trip Details</Label
-                    >
-                    <Input
-                        id="ferry_service_details"
-                        name="service_details"
-                        v-model="serviceDetails"
-                        placeholder="e.g. Batangas to Calapan"
-                    />
-                    <InputError :message="errors.service_details" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="ferry_amount"
-                        >Customer Ticket Price (PHP)</Label
-                    >
-                    <Input
-                        id="ferry_amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Total amount collected from customer.
-                    </p>
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <div class="flex items-center justify-between">
-                        <Label for="ferry_third_party_payment"
-                            >Portal Net Cost (PHP)</Label
-                        >
-                        <span
-                            v-if="props.portalBalance !== undefined"
-                            :class="[
-                                'text-xs font-medium',
-                                props.portalBalance < 10000
-                                    ? 'font-semibold text-amber-600 dark:text-amber-400'
-                                    : 'text-muted-foreground',
-                            ]"
-                        >
-                            Balance: {{ formatPhp(props.portalBalance) }}
-                        </span>
-                    </div>
-                    <Input
-                        id="ferry_third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        placeholder="0.00 (Optional)"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Net ticket fare deducted from portal deposit.
-                        Auto-calculates with fixed ₱200 markup per pax/leg.
-                    </p>
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Ferry Calculation Preview -->
-                <div
-                    v-if="numAmount > 0 && numThirdParty > 0"
-                    class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
-                >
-                    <div class="flex items-center justify-between">
-                        <div
-                            class="flex items-center gap-2 text-sm font-semibold text-primary"
-                        >
-                            <Ship class="size-4" />
-                            <span>Ferry Ticketing Margin Preview</span>
-                        </div>
-                        <span
-                            v-if="activeMarkupRuleDescription"
-                            class="text-xs font-medium text-muted-foreground"
-                        >
-                            {{ activeMarkupRuleDescription }}
-                        </span>
-                    </div>
-                    <div
-                        class="mt-2 grid grid-cols-3 gap-2 text-center text-xs"
-                    >
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Customer Paid</span
-                            >
-                            <p class="font-semibold text-foreground">
-                                {{ formatPhp(numAmount) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Portal Cost</span
-                            >
-                            <p
-                                class="font-semibold text-blue-600 dark:text-blue-400"
-                            >
-                                -{{ formatPhp(numThirdParty) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >DDN Margin</span
-                            >
-                            <p
-                                class="font-semibold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{
-                                    formatPhp(
-                                        Math.max(0, numAmount - numThirdParty),
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </template>
+            <FerryFields
+                v-if="formType === 'ferry'"
+                v-model:pax="pax"
+                v-model:trip-type="tripType"
+                v-model:provider="provider"
+                v-model:service-details="serviceDetails"
+                v-model:amount="amount"
+                v-model:third-party-payment="thirdPartyPayment"
+                :errors="errors"
+                :ferry-suggestions="ferrySuggestions"
+                :portal-balance="props.portalBalance"
+                :num-amount="numAmount"
+                :num-third-party="numThirdParty"
+                :active-markup-rule-description="activeMarkupRuleDescription"
+            />
 
             <!-- DOCUMENT TRANSLATION -->
             <template v-if="formType === 'translation'">
@@ -1965,579 +1495,56 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             </template>
 
             <!-- PSA ASSISTANCE -->
-            <template v-if="formType === 'psa'">
-                <div class="grid gap-4 sm:grid-cols-3 md:col-span-2">
-                    <div class="space-y-2 sm:col-span-2">
-                        <Label for="psa_doc_select">PSA Document Type</Label>
-                        <Select
-                            :model-value="psaDocumentType"
-                            @update:model-value="handlePsaDocumentTypeChange"
-                        >
-                            <SelectTrigger id="psa_doc_select" class="w-full">
-                                <SelectValue
-                                    placeholder="Select PSA Document Type"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <template v-if="props.psaRates.length > 0">
-                                    <SelectItem
-                                        v-for="rate in props.psaRates"
-                                        :key="rate.id"
-                                        :value="rate.document_type"
-                                    >
-                                        {{ rate.document_type }} —
-                                        {{ rate.name }} ({{
-                                            formatPhp(rate.price)
-                                        }})
-                                    </SelectItem>
-                                </template>
-                                <template v-else>
-                                    <SelectItem
-                                        v-for="docType in psaDocumentTypes"
-                                        :key="docType"
-                                        :value="docType"
-                                    >
-                                        {{
-                                            psaDocumentTypeLabels[docType] ||
-                                            docType
-                                        }}
-                                    </SelectItem>
-                                </template>
-                            </SelectContent>
-                        </Select>
-                        <InputError :message="errors.psa_document_type" />
-                    </div>
-
-                    <div class="space-y-2">
-                        <Label for="psa_copies">Number of Copies</Label>
-                        <div class="flex items-center space-x-1">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                class="h-9 w-9 shrink-0"
-                                :disabled="copies <= 1"
-                                @click="decrementCopies"
-                            >
-                                <Minus class="size-3.5" />
-                            </Button>
-                            <Input
-                                id="psa_copies"
-                                v-model.number="copies"
-                                type="number"
-                                min="1"
-                                max="100"
-                                class="h-9 text-center font-semibold"
-                                @input="handleCopiesInput"
-                            />
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                class="h-9 w-9 shrink-0"
-                                :disabled="copies >= 100"
-                                @click="incrementCopies"
-                            >
-                                <Plus class="size-3.5" />
-                            </Button>
-                        </div>
-                        <InputError :message="errors.copies" />
-                    </div>
-                </div>
-
-                <!-- PSA Margin & Net Breakdown Preview (Price is automated from configuration) -->
-                <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
-                    <div
-                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
-                    >
-                        <div class="flex items-center gap-2">
-                            <Calculator class="size-4" />
-                            <span>Configured PSA Fixed Price & Breakdown</span>
-                        </div>
-                        <span class="text-xs font-normal text-muted-foreground">
-                            {{ copies }}
-                            {{ copies === 1 ? 'copy' : 'copies' }} &middot;
-                            Automatically calculated
-                        </span>
-                    </div>
-                    <div
-                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
-                    >
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Customer Price</span
-                            >
-                            <p class="font-bold text-foreground">
-                                {{ formatPhp(numAmount) }}
-                            </p>
-                            <span
-                                v-if="copies > 1 && selectedPsaRate"
-                                class="mt-0.5 block text-[10px] text-muted-foreground"
-                            >
-                                {{ copies }} &times;
-                                {{ formatPhp(selectedPsaRate.price) }}
-                            </span>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >PSA Officer Fee</span
-                            >
-                            <p
-                                class="font-semibold text-blue-600 dark:text-blue-400"
-                            >
-                                -{{ formatPhp(numThirdParty) }}
-                            </p>
-                            <span
-                                v-if="copies > 1 && selectedPsaRate"
-                                class="mt-0.5 block text-[10px] text-muted-foreground"
-                            >
-                                {{ copies }} &times;
-                                {{ formatPhp(selectedPsaRate.officer_fee) }}
-                            </span>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Net DDN Income</span
-                            >
-                            <p
-                                class="font-semibold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{
-                                    formatPhp(computedTranslationOrPsaDdnAmount)
-                                }}
-                            </p>
-                            <span
-                                v-if="copies > 1 && selectedPsaRate"
-                                class="mt-0.5 block text-[10px] text-muted-foreground"
-                            >
-                                {{ copies }} &times;
-                                {{
-                                    formatPhp(
-                                        Number(selectedPsaRate.price) -
-                                            Number(selectedPsaRate.officer_fee),
-                                    )
-                                }}
-                            </span>
-                        </div>
-                    </div>
-                    <p
-                        class="mt-2 text-center text-[11px] text-muted-foreground"
-                    >
-                        Customer price and PSA officer payment are fixed
-                        according to branch configuration multiplied by number
-                        of copies.
-                    </p>
-                    <InputError :message="errors.amount" />
-                    <InputError :message="errors.third_party_payment" />
-                    <InputError :message="errors.copies" />
-                </div>
-            </template>
+            <PsaFields
+                v-if="formType === 'psa'"
+                v-model:copies="copies"
+                :errors="errors"
+                :psa-document-type="psaDocumentType"
+                :psa-rates="props.psaRates"
+                :psa-document-types="psaDocumentTypes"
+                :psa-document-type-labels="psaDocumentTypeLabels"
+                :selected-psa-rate="selectedPsaRate"
+                :num-amount="numAmount"
+                :num-third-party="numThirdParty"
+                :computed-translation-or-psa-ddn-amount="
+                    computedTranslationOrPsaDdnAmount
+                "
+                :handle-psa-document-type-change="handlePsaDocumentTypeChange"
+                :handle-copies-input="handleCopiesInput"
+                :increment-copies="incrementCopies"
+                :decrement-copies="decrementCopies"
+            />
 
             <!-- ONLINE ASSISTANCE -->
-            <template v-if="formType === 'online_assistance'">
-                <div class="grid gap-2 md:col-span-2">
-                    <Label for="assistance_type_select"
-                        >Online Assistance Type</Label
-                    >
-                    <Select
-                        :model-value="onlineAssistanceTypeId"
-                        @update:model-value="handleOnlineAssistanceTypeChange"
-                    >
-                        <SelectTrigger
-                            id="assistance_type_select"
-                            class="w-full"
-                        >
-                            <SelectValue placeholder="Select assistance type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem
-                                v-for="typeOption in onlineAssistanceTypes"
-                                :key="typeOption.id"
-                                :value="String(typeOption.id)"
-                            >
-                                {{ typeOption.name }} ({{
-                                    formatPhp(typeOption.price)
-                                }})
-                                <template
-                                    v-if="
-                                        typeOption.has_disbursement &&
-                                        typeOption.disbursement_amount
-                                    "
-                                >
-                                    — Fee:
-                                    {{
-                                        formatPhp(
-                                            typeOption.disbursement_amount,
-                                        )
-                                    }}
-                                </template>
-                                <template
-                                    v-else-if="
-                                        typeOption.has_disbursement === false
-                                    "
-                                >
-                                    — (No Disb.)
-                                </template>
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <InputError :message="errors.online_assistance_type_id" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="amount">Customer Payment (PHP)</Label>
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Total fee collected from the customer.
-                    </p>
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <!-- Government Fee / GCash Disbursement Input -->
-                <div
-                    v-if="selectedAssistanceHasDisbursement"
-                    class="grid gap-2"
-                >
-                    <Label
-                        for="online_third_party_payment"
-                        class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400"
-                    >
-                        <GcashIcon class="size-4" />
-                        <span>Government Fee (Paid via GCash)</span>
-                    </Label>
-                    <Input
-                        id="online_third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        required
-                        placeholder="0.00"
-                    />
-                    <p class="text-[11px] text-muted-foreground">
-                        Amount to be automatically deducted from your live GCash
-                        Ledger upon submission.
-                    </p>
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-                <div
-                    v-else
-                    class="rounded-lg border border-muted bg-muted/30 p-3 text-xs text-muted-foreground md:col-span-2"
-                >
-                    <p class="font-medium text-foreground">
-                        ℹ️ Pure Online Assistance Service
-                    </p>
-                    <p class="mt-0.5">
-                        No government fee disbursement required. 100% of
-                        customer payment is retained for agency and employee
-                        split.
-                    </p>
-                </div>
-
-                <!-- Net Margin & 60/40 Split Calculation Preview -->
-                <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
-                    <div
-                        class="flex items-center justify-between gap-2 text-sm font-semibold text-primary"
-                    >
-                        <div class="flex items-center gap-2">
-                            <Calculator class="size-4" />
-                            <span
-                                >Net Service Margin & 60/40 Revenue Split</span
-                            >
-                        </div>
-                        <span class="text-xs font-normal text-muted-foreground">
-                            Office 60% / Employee 40%
-                        </span>
-                    </div>
-
-                    <div
-                        v-if="
-                            selectedAssistanceHasDisbursement &&
-                            numThirdParty > 0
-                        "
-                        class="mt-3 grid grid-cols-3 gap-2 text-center text-xs"
-                    >
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Customer Paid</span
-                            >
-                            <p class="font-bold text-foreground">
-                                {{ formatPhp(numAmount) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Gov / GCash Fee</span
-                            >
-                            <p
-                                class="font-semibold text-blue-600 dark:text-blue-400"
-                            >
-                                -{{ formatPhp(numThirdParty) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Net Margin</span
-                            >
-                            <p
-                                class="font-semibold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{ formatPhp(computedOnlineNetMargin) }}
-                            </p>
-                        </div>
-                    </div>
-                    <div
-                        v-else
-                        class="mt-3 grid grid-cols-2 gap-2 text-center text-xs"
-                    >
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Customer Paid</span
-                            >
-                            <p class="font-bold text-foreground">
-                                {{ formatPhp(numAmount) }}
-                            </p>
-                        </div>
-                        <div class="rounded border bg-background p-2">
-                            <span class="text-muted-foreground"
-                                >Net Service Margin</span
-                            >
-                            <p
-                                class="font-semibold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{ formatPhp(computedOnlineNetMargin) }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2">
-                        <div class="rounded-md border bg-card p-3">
-                            <p class="text-xs text-muted-foreground">
-                                DDN Office Share (60%)
-                            </p>
-                            <p class="mt-1 text-lg font-bold text-primary">
-                                {{ formatPhp(computedOnlineDdnShare) }}
-                            </p>
-                        </div>
-                        <div class="rounded-md border bg-card p-3">
-                            <p class="text-xs text-muted-foreground">
-                                Employee Cut (40%)
-                            </p>
-                            <p
-                                class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{ formatPhp(computedOnlineEmployeeShare) }}
-                            </p>
-                        </div>
-                    </div>
-                    <p
-                        class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                        <Info class="size-3.5 shrink-0" />
-                        <span>{{
-                            selectedAssistanceHasDisbursement &&
-                            numThirdParty > 0
-                                ? 'Shares are computed from net margin (Customer Payment minus Government Fee).'
-                                : '100% of customer payment is split 60% Office / 40% Employee.'
-                        }}</span>
-                    </p>
-                </div>
-            </template>
+            <OnlineAssistanceFields
+                v-if="formType === 'online_assistance'"
+                v-model:amount="amount"
+                v-model:third-party-payment="thirdPartyPayment"
+                :errors="errors"
+                :online-assistance-type-id="onlineAssistanceTypeId"
+                :online-assistance-types="onlineAssistanceTypes"
+                :selected-assistance-has-disbursement="
+                    selectedAssistanceHasDisbursement
+                "
+                :num-amount="numAmount"
+                :num-third-party="numThirdParty"
+                :computed-online-net-margin="computedOnlineNetMargin"
+                :computed-online-ddn-share="computedOnlineDdnShare"
+                :computed-online-employee-share="computedOnlineEmployeeShare"
+                :handle-online-assistance-type-change="
+                    handleOnlineAssistanceTypeChange
+                "
+            />
 
             <!-- REMITTANCE / CASH EXCHANGE -->
-            <template v-if="formType === 'remittance'">
-                <!-- Direction selector -->
-                <div class="grid gap-2 md:col-span-2">
-                    <Label>Remittance Direction</Label>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <button
-                            type="button"
-                            @click="remittanceDirection = 'GCASH_CASH_OUT'"
-                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
-                            :class="
-                                remittanceDirection === 'GCASH_CASH_OUT'
-                                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-200'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <div
-                                class="flex items-center gap-2 font-semibold text-foreground"
-                            >
-                                <ArrowDownLeft
-                                    class="size-4 text-blue-600 dark:text-blue-400"
-                                />
-                                <span>GCash Cash-Out</span>
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Customer sends GCash (+GCash) → Staff dispenses
-                                physical cash (-Drawer Cash)
-                            </p>
-                        </button>
-
-                        <button
-                            type="button"
-                            @click="remittanceDirection = 'GCASH_CASH_IN'"
-                            class="flex flex-col items-start gap-1.5 rounded-lg border p-3.5 text-left transition-all"
-                            :class="
-                                remittanceDirection === 'GCASH_CASH_IN'
-                                    ? 'border-emerald-600 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-200'
-                                    : 'border-input text-muted-foreground hover:bg-muted'
-                            "
-                        >
-                            <div
-                                class="flex items-center gap-2 font-semibold text-foreground"
-                            >
-                                <ArrowUpRight
-                                    class="size-4 text-emerald-600 dark:text-emerald-400"
-                                />
-                                <span>GCash Cash-In</span>
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Customer gives physical cash (+Drawer Cash) →
-                                Staff sends from GCash wallet (-GCash)
-                            </p>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Principal Amount & Fee -->
-                <div class="grid gap-2">
-                    <Label for="remittance_amount"
-                        >Remittance Principal Amount (PHP)</Label
-                    >
-                    <Input
-                        id="remittance_amount"
-                        name="amount"
-                        type="number"
-                        min="1"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="e.g. 350.00"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Principal amount being converted / transferred.
-                    </p>
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="remittance_fee">Agency Service Fee (PHP)</Label>
-                    <Input
-                        id="remittance_fee"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="remittanceFee"
-                        placeholder="0.00 (Optional service charge)"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Office commission for remittance processing.
-                    </p>
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Dual Cash Drawer & GCash Wallet Flow Preview Card -->
-                <div
-                    class="space-y-3 rounded-lg border bg-muted/40 p-4 md:col-span-2"
-                >
-                    <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
-                    >
-                        <Calculator class="size-4" />
-                        <span>Simultaneous Dual Movement Preview</span>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-                        <div class="space-y-1 rounded-md border bg-card p-3">
-                            <div
-                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
-                            >
-                                <Wallet class="size-3.5" />
-                                <span>Physical Cash Drawer</span>
-                            </div>
-                            <p
-                                class="text-base font-bold"
-                                :class="
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? 'text-rose-600 dark:text-rose-400'
-                                        : 'text-emerald-600 dark:text-emerald-400'
-                                "
-                            >
-                                {{
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? '-'
-                                        : '+'
-                                }}{{ formatPhp(numAmount) }}
-                            </p>
-                            <p class="text-[11px] text-muted-foreground">
-                                {{
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? 'Outflow: Dispensed out to customer'
-                                        : 'Inflow: Cash collected into drawer'
-                                }}
-                            </p>
-                        </div>
-
-                        <div class="space-y-1 rounded-md border bg-card p-3">
-                            <div
-                                class="flex items-center gap-1.5 font-medium text-muted-foreground"
-                            >
-                                <Smartphone class="size-3.5 text-blue-500" />
-                                <span>GCash Ledger Wallet</span>
-                            </div>
-                            <p
-                                class="text-base font-bold"
-                                :class="
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : 'text-rose-600 dark:text-rose-400'
-                                "
-                            >
-                                {{
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? '+'
-                                        : '-'
-                                }}{{ formatPhp(numAmount) }}
-                            </p>
-                            <p class="text-[11px] text-muted-foreground">
-                                {{
-                                    remittanceDirection === 'GCASH_CASH_OUT'
-                                        ? 'Inflow: Received in GCash account'
-                                        : 'Outflow: Transferred from GCash wallet'
-                                }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="Number(remittanceFee) > 0"
-                        class="flex items-center justify-between border-t pt-2 text-xs"
-                    >
-                        <span class="font-medium text-muted-foreground"
-                            >DDN Agency Service Fee Earning:</span
-                        >
-                        <span
-                            class="font-bold text-emerald-600 dark:text-emerald-400"
-                            >{{ formatPhp(Number(remittanceFee)) }}</span
-                        >
-                    </div>
-                </div>
-            </template>
+            <RemittanceFields
+                v-if="formType === 'remittance'"
+                v-model:remittance-direction="remittanceDirection"
+                v-model:amount="amount"
+                v-model:remittance-fee="remittanceFee"
+                :errors="errors"
+                :num-amount="numAmount"
+            />
 
             <!-- PRINTING -->
             <template v-if="formType === 'printing'">
