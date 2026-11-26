@@ -13,6 +13,7 @@ use App\Models\OnlineAssistanceType;
 use App\Models\PsaRate;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -438,6 +439,13 @@ class TransactionController extends Controller
             }
         });
 
+        ActivityLogger::log(
+            'transaction',
+            'deleted',
+            "Moved transaction #{$transaction->id} ({$transaction->customer_name}) to trash",
+            $transaction,
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction moved to trash.']);
 
         return to_route('transactions.index');
@@ -464,6 +472,13 @@ class TransactionController extends Controller
             }
         });
 
+        ActivityLogger::log(
+            'transaction',
+            'restored',
+            "Restored transaction #{$transaction->id} ({$transaction->customer_name})",
+            $transaction,
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction restored.']);
 
         return back();
@@ -475,6 +490,9 @@ class TransactionController extends Controller
     public function forceDelete(Transaction $transaction): RedirectResponse
     {
         Gate::authorize('forceDelete', $transaction);
+
+        $txId = $transaction->id;
+        $customerName = $transaction->customer_name;
 
         DB::transaction(function () use ($transaction) {
             $affectedDates = $transaction->payments()->pluck('payment_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
@@ -490,6 +508,12 @@ class TransactionController extends Controller
                 DailySettlement::syncForDate($date);
             }
         });
+
+        ActivityLogger::log(
+            'transaction',
+            'force_deleted',
+            "Permanently deleted transaction #{$txId} ({$customerName})",
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Transaction permanently deleted.']);
 

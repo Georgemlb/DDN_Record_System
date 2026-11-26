@@ -404,7 +404,9 @@ const toggleSort = (field: string) => {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div class="text-2xl font-bold text-foreground">
+                    <div
+                        class="text-2xl font-bold text-foreground tabular-nums"
+                    >
                         {{ formatPhp(summary.total_expenses) }}
                     </div>
                 </CardContent>
@@ -419,7 +421,7 @@ const toggleSort = (field: string) => {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div class="text-2xl font-bold">
+                    <div class="text-2xl font-bold tabular-nums">
                         {{ formatPhp(summary.total_cash) }}
                     </div>
                 </CardContent>

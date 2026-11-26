@@ -275,7 +275,9 @@ function switchPeriod(period: Period) {
                                 Low
                             </span>
                         </div>
-                        <p class="mt-0.5 text-lg font-semibold tracking-tight">
+                        <p
+                            class="mt-0.5 text-lg font-semibold tracking-tight tabular-nums"
+                        >
                             {{ formatPhp(portal?.balance ?? 0) }}
                         </p>
                         <p class="text-[11px] text-primary">Manage Portal →</p>
@@ -295,7 +297,7 @@ function switchPeriod(period: Period) {
 
             <!-- 4 Primary Period KPI Cards -->
             <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <article class="rounded-lg border bg-card p-5">
+                <article class="rounded-lg border bg-card p-5 shadow-xs">
                     <div class="flex items-start justify-between">
                         <div>
                             <p
@@ -304,7 +306,7 @@ function switchPeriod(period: Period) {
                                 Total Sales
                             </p>
                             <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
+                                class="mt-3 text-2xl font-semibold tracking-tight tabular-nums"
                             >
                                 {{ formatPhp(kpis.total_sales) }}
                             </p>
@@ -316,7 +318,7 @@ function switchPeriod(period: Period) {
                         </span>
                     </div>
                     <div
-                        class="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground"
+                        class="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground tabular-nums"
                     >
                         <span>Cash {{ formatPhp(kpis.total_cash) }}</span>
                         <span>·</span>
@@ -324,7 +326,7 @@ function switchPeriod(period: Period) {
                     </div>
                 </article>
 
-                <article class="rounded-lg border bg-card p-5">
+                <article class="rounded-lg border bg-card p-5 shadow-xs">
                     <div class="flex items-start justify-between">
                         <div>
                             <p
@@ -333,7 +335,7 @@ function switchPeriod(period: Period) {
                                 DDN Earnings
                             </p>
                             <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
+                                class="mt-3 text-2xl font-semibold tracking-tight tabular-nums"
                             >
                                 {{ formatPhp(kpis.total_ddn) }}
                             </p>
@@ -349,7 +351,7 @@ function switchPeriod(period: Period) {
                     </p>
                 </article>
 
-                <article class="rounded-lg border bg-card p-5">
+                <article class="rounded-lg border bg-card p-5 shadow-xs">
                     <div class="flex items-start justify-between">
                         <div>
                             <p
@@ -358,7 +360,7 @@ function switchPeriod(period: Period) {
                                 Operating Expenses
                             </p>
                             <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
+                                class="mt-3 text-2xl font-semibold tracking-tight tabular-nums"
                             >
                                 {{
                                     formatPhp(

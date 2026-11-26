@@ -10,6 +10,7 @@ use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
+use App\Services\ActivityLogger;
 use App\Services\FinancialMetricsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -330,6 +331,13 @@ class ReportController extends Controller
             $settlement->save();
         });
 
+        ActivityLogger::log(
+            'settlement',
+            'closed',
+            'Closed daily settlement for '.$settlement->settlement_date->format('M d, Y'),
+            $settlement,
+        );
+
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => 'Daily register for '.$settlement->settlement_date->format('M d, Y').' closed and reconciled.',
@@ -349,6 +357,13 @@ class ReportController extends Controller
         $settlement->syncMetricsWithRecords();
         $settlement->save();
 
+        ActivityLogger::log(
+            'settlement',
+            'reopened',
+            'Reopened daily settlement for '.$settlement->settlement_date->format('M d, Y'),
+            $settlement,
+        );
+
         Inertia::flash('toast', [
             'type' => 'info',
             'message' => 'Daily register reopened for adjustments.',
@@ -364,6 +379,12 @@ class ReportController extends Controller
     {
         $date = $settlement->settlement_date->format('M d, Y');
         $settlement->forceDelete();
+
+        ActivityLogger::log(
+            'settlement',
+            'deleted',
+            "Deleted daily settlement for {$date}",
+        );
 
         Inertia::flash('toast', [
             'type' => 'success',

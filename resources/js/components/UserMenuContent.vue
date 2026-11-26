@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut, Monitor, Moon, Sun } from '@lucide/vue';
+import { KeyRound, LogOut, Monitor, Moon, Sun } from '@lucide/vue';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -36,6 +36,15 @@ defineProps<Props>();
     </DropdownMenuLabel>
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
+        <DropdownMenuItem :as-child="true">
+            <Link
+                class="flex w-full cursor-pointer items-center"
+                href="/account/password"
+            >
+                <KeyRound class="mr-2 size-4" />
+                <span>Change Password</span>
+            </Link>
+        </DropdownMenuItem>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger class="cursor-pointer">
                 <Sun v-if="appearance === 'light'" class="mr-2 size-4" />

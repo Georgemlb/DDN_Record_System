@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
-import { Banknote, Clock, Pencil, Phone, Trash2 } from '@lucide/vue';
+import { Banknote, Clock, Pencil, Phone, Printer, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import TransactionController from '@/actions/App/Http/Controllers/TransactionController';
 import CollectBalanceModal from '@/components/CollectBalanceModal.vue';
+import TransactionReceiptModal from '@/components/TransactionReceiptModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,6 +31,7 @@ const props = defineProps<{
 }>();
 
 const isCollectModalOpen = ref(false);
+const isReceiptModalOpen = ref(false);
 
 const page = usePage();
 const currentUser = computed(() => page.props.auth?.user);
@@ -73,6 +75,11 @@ defineOptions({
 
     <CollectBalanceModal
         v-model:open="isCollectModalOpen"
+        :transaction="transaction"
+    />
+
+    <TransactionReceiptModal
+        v-model:open="isReceiptModalOpen"
         :transaction="transaction"
     />
 
@@ -128,6 +135,14 @@ defineOptions({
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
+                <Button
+                    variant="outline"
+                    class="gap-1.5"
+                    @click="isReceiptModalOpen = true"
+                >
+                    <Printer class="size-4" />
+                    <span>Print Receipt</span>
+                </Button>
                 <Button
                     v-if="Number(transaction.balance) > 0"
                     class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"

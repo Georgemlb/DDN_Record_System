@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -56,13 +57,20 @@ class UserController extends Controller
 
         $validated = $request->validated();
 
-        User::create([
+        $createdUser = User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
             'email' => $validated['email'] ?? null,
             'role' => $validated['role'],
             'password' => $validated['password'],
         ]);
+
+        ActivityLogger::log(
+            'user',
+            'created',
+            "Created user {$createdUser->name} ({$createdUser->role})",
+            $createdUser,
+        );
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -112,6 +120,13 @@ class UserController extends Controller
 
         $user->update($updateData);
 
+        ActivityLogger::log(
+            'user',
+            'updated',
+            "Updated user {$user->name} ({$user->role})",
+            $user,
+        );
+
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => "User {$user->name} updated successfully.",
@@ -129,6 +144,12 @@ class UserController extends Controller
 
         $userName = $user->name;
         $user->delete();
+
+        ActivityLogger::log(
+            'user',
+            'deleted',
+            "Deleted user {$userName}",
+        );
 
         Inertia::flash('toast', [
             'type' => 'success',
