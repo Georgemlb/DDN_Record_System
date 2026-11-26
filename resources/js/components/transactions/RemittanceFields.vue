@@ -6,10 +6,13 @@ import {
     Smartphone,
     Wallet,
 } from '@lucide/vue';
+import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatPhp } from '@/lib/transactionFormat';
+
+const showBreakdown = ref(false);
 
 const remittanceDirection = defineModel<'GCASH_CASH_OUT' | 'GCASH_CASH_IN'>(
     'remittanceDirection',
@@ -116,78 +119,129 @@ defineProps<{
         <InputError :message="errors.third_party_payment" />
     </div>
 
-    <div class="space-y-3 rounded-lg border bg-muted/40 p-4 md:col-span-2">
-        <div class="flex items-center gap-2 text-sm font-semibold text-primary">
-            <Calculator class="size-4" />
-            <span>Simultaneous Dual Movement Preview</span>
-        </div>
-
-        <div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-            <div class="space-y-1 rounded-md border bg-card p-3">
-                <div
-                    class="flex items-center gap-1.5 font-medium text-muted-foreground"
-                >
-                    <Wallet class="size-3.5" />
-                    <span>Physical Cash Drawer</span>
+    <div class="rounded-lg border bg-muted/40 px-4 py-2.5 md:col-span-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div class="flex items-center gap-1.5">
+                    <Calculator class="size-4 text-primary" />
+                    <span class="text-xs text-muted-foreground">
+                        Cash
+                        <strong
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                            "
+                        >
+                            {{
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? '-'
+                                    : '+'
+                            }}{{ formatPhp(numAmount) }}
+                        </strong>
+                        &middot; GCash
+                        <strong
+                            :class="
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-rose-600 dark:text-rose-400'
+                            "
+                        >
+                            {{
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? '+'
+                                    : '-'
+                            }}{{ formatPhp(numAmount) }}
+                        </strong>
+                        <template v-if="Number(remittanceFee) > 0">
+                            &middot; Fee:
+                            <strong
+                                class="text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ formatPhp(Number(remittanceFee)) }}
+                            </strong>
+                        </template>
+                    </span>
                 </div>
-                <p
-                    class="text-base font-bold"
-                    :class="
-                        remittanceDirection === 'GCASH_CASH_OUT'
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-emerald-600 dark:text-emerald-400'
-                    "
-                >
-                    {{ remittanceDirection === 'GCASH_CASH_OUT' ? '-' : '+'
-                    }}{{ formatPhp(numAmount) }}
-                </p>
-                <p class="text-[11px] text-muted-foreground">
-                    {{
-                        remittanceDirection === 'GCASH_CASH_OUT'
-                            ? 'Outflow: Dispensed out to customer'
-                            : 'Inflow: Cash collected into drawer'
-                    }}
-                </p>
             </div>
-
-            <div class="space-y-1 rounded-md border bg-card p-3">
-                <div
-                    class="flex items-center gap-1.5 font-medium text-muted-foreground"
-                >
-                    <Smartphone class="size-3.5 text-blue-500" />
-                    <span>GCash Ledger Wallet</span>
-                </div>
-                <p
-                    class="text-base font-bold"
-                    :class="
-                        remittanceDirection === 'GCASH_CASH_OUT'
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-rose-600 dark:text-rose-400'
-                    "
-                >
-                    {{ remittanceDirection === 'GCASH_CASH_OUT' ? '+' : '-'
-                    }}{{ formatPhp(numAmount) }}
-                </p>
-                <p class="text-[11px] text-muted-foreground">
-                    {{
-                        remittanceDirection === 'GCASH_CASH_OUT'
-                            ? 'Inflow: Received in GCash account'
-                            : 'Outflow: Transferred from GCash wallet'
-                    }}
-                </p>
-            </div>
-        </div>
-
-        <div
-            v-if="Number(remittanceFee) > 0"
-            class="flex items-center justify-between border-t pt-2 text-xs"
-        >
-            <span class="font-medium text-muted-foreground"
-                >DDN Agency Service Fee Earning:</span
+            <button
+                type="button"
+                class="text-xs font-medium text-primary hover:underline"
+                @click="showBreakdown = !showBreakdown"
             >
-            <span class="font-bold text-emerald-600 dark:text-emerald-400">{{
-                formatPhp(Number(remittanceFee))
-            }}</span>
+                {{ showBreakdown ? 'Hide breakdown' : 'Show breakdown' }}
+            </button>
+        </div>
+
+        <div v-if="showBreakdown" class="mt-3 space-y-3 border-t pt-3">
+            <div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                <div class="space-y-1 rounded-md border bg-card p-3">
+                    <div
+                        class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                    >
+                        <Wallet class="size-3.5" />
+                        <span>Physical Cash Drawer</span>
+                    </div>
+                    <p
+                        class="text-base font-bold"
+                        :class="
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                        "
+                    >
+                        {{ remittanceDirection === 'GCASH_CASH_OUT' ? '-' : '+'
+                        }}{{ formatPhp(numAmount) }}
+                    </p>
+                    <p class="text-[11px] text-muted-foreground">
+                        {{
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'Outflow: Dispensed out to customer'
+                                : 'Inflow: Cash collected into drawer'
+                        }}
+                    </p>
+                </div>
+
+                <div class="space-y-1 rounded-md border bg-card p-3">
+                    <div
+                        class="flex items-center gap-1.5 font-medium text-muted-foreground"
+                    >
+                        <Smartphone class="size-3.5 text-blue-500" />
+                        <span>GCash Ledger Wallet</span>
+                    </div>
+                    <p
+                        class="text-base font-bold"
+                        :class="
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
+                        "
+                    >
+                        {{ remittanceDirection === 'GCASH_CASH_OUT' ? '+' : '-'
+                        }}{{ formatPhp(numAmount) }}
+                    </p>
+                    <p class="text-[11px] text-muted-foreground">
+                        {{
+                            remittanceDirection === 'GCASH_CASH_OUT'
+                                ? 'Inflow: Received in GCash account'
+                                : 'Outflow: Transferred from GCash wallet'
+                        }}
+                    </p>
+                </div>
+            </div>
+
+            <div
+                v-if="Number(remittanceFee) > 0"
+                class="flex items-center justify-between border-t pt-2 text-xs"
+            >
+                <span class="font-medium text-muted-foreground"
+                    >DDN Agency Service Fee Earning:</span
+                >
+                <span
+                    class="font-bold text-emerald-600 dark:text-emerald-400"
+                    >{{ formatPhp(Number(remittanceFee)) }}</span
+                >
+            </div>
         </div>
     </div>
 </template>

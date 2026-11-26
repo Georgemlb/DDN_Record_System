@@ -182,9 +182,119 @@ function switchPeriod(period: Period) {
                 </div>
             </section>
 
+            <!-- Compact Live Balances Strip -->
             <section
-                class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                aria-label="Live Balances"
+                class="grid gap-3 rounded-xl border bg-muted/30 p-3 sm:grid-cols-3"
             >
+                <div
+                    class="flex items-center justify-between rounded-lg border border-emerald-500/25 bg-card px-4 py-3"
+                >
+                    <div class="min-w-0">
+                        <p
+                            class="text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                        >
+                            Today's Cash in Box
+                        </p>
+                        <p class="mt-0.5 text-lg font-semibold tracking-tight">
+                            {{ formatPhp(register.cash_in_box) }}
+                        </p>
+                        <p class="text-[11px] text-muted-foreground">
+                            +{{ formatPhp(register.cash_in) }} / -{{
+                                formatPhp(register.cash_out)
+                            }}
+                        </p>
+                    </div>
+                    <span
+                        class="rounded-md bg-emerald-500/15 p-2 text-emerald-600 dark:text-emerald-400"
+                    >
+                        <Banknote class="size-4" />
+                    </span>
+                </div>
+
+                <Link
+                    href="/gcash-ledger"
+                    :class="[
+                        'flex items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40',
+                        gcash?.is_low_balance
+                            ? 'border-amber-500/40 bg-amber-500/5'
+                            : 'border-border bg-card',
+                    ]"
+                >
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <p
+                                class="text-xs font-medium text-muted-foreground"
+                            >
+                                GCash Wallet
+                            </p>
+                            <span
+                                v-if="gcash?.is_low_balance"
+                                class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                            >
+                                Low
+                            </span>
+                        </div>
+                        <p class="mt-0.5 text-lg font-semibold tracking-tight">
+                            {{ formatPhp(gcash?.balance ?? 0) }}
+                        </p>
+                        <p class="text-[11px] text-primary">View Ledger →</p>
+                    </div>
+                    <span
+                        :class="[
+                            'rounded-md p-2',
+                            gcash?.is_low_balance
+                                ? 'bg-amber-500/20 text-amber-600'
+                                : 'bg-primary/10 text-primary',
+                        ]"
+                    >
+                        <GcashIcon class="size-4" />
+                    </span>
+                </Link>
+
+                <Link
+                    href="/portal-deposits"
+                    :class="[
+                        'flex items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40',
+                        portal?.is_low_balance
+                            ? 'border-amber-500/40 bg-amber-500/5'
+                            : 'border-border bg-card',
+                    ]"
+                >
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <p
+                                class="text-xs font-medium text-muted-foreground"
+                            >
+                                Flight Portal Deposit
+                            </p>
+                            <span
+                                v-if="portal?.is_low_balance"
+                                class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+                            >
+                                Low
+                            </span>
+                        </div>
+                        <p class="mt-0.5 text-lg font-semibold tracking-tight">
+                            {{ formatPhp(portal?.balance ?? 0) }}
+                        </p>
+                        <p class="text-[11px] text-primary">Manage Portal →</p>
+                    </div>
+                    <span
+                        :class="[
+                            'rounded-md p-2',
+                            portal?.is_low_balance
+                                ? 'bg-amber-500/20 text-amber-600'
+                                : 'bg-primary/10 text-primary',
+                        ]"
+                    >
+                        <Wallet class="size-4" />
+                    </span>
+                </Link>
+            </section>
+
+            <!-- 4 Primary Period KPI Cards -->
+            <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <article class="rounded-lg border bg-card p-5">
                     <div class="flex items-start justify-between">
                         <div>
@@ -305,149 +415,6 @@ function switchPeriod(period: Period) {
                     >
                         DDN Earnings minus Operating Expenses
                     </p>
-                </article>
-
-                <article
-                    class="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5"
-                >
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <p
-                                class="text-sm font-medium text-emerald-700 dark:text-emerald-400"
-                            >
-                                Today's Cash in Box
-                            </p>
-                            <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
-                            >
-                                {{ formatPhp(register.cash_in_box) }}
-                            </p>
-                        </div>
-                        <span
-                            class="rounded-md bg-emerald-500/15 p-2 text-emerald-600 dark:text-emerald-400"
-                        >
-                            <Banknote class="size-5" />
-                        </span>
-                    </div>
-                    <div
-                        class="mt-3 flex items-center justify-between border-t border-emerald-500/15 pt-3 text-xs text-muted-foreground"
-                    >
-                        <span>In: +{{ formatPhp(register.cash_in) }}</span>
-                        <span>Out: -{{ formatPhp(register.cash_out) }}</span>
-                    </div>
-                </article>
-
-                <article
-                    :class="[
-                        'rounded-lg border p-5 transition-all',
-                        gcash?.is_low_balance
-                            ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-transparent'
-                            : 'border-border bg-card',
-                    ]"
-                >
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <div class="flex items-center gap-1.5">
-                                <p
-                                    class="text-sm font-medium text-muted-foreground"
-                                >
-                                    GCash Wallet Balance
-                                </p>
-                                <span
-                                    v-if="gcash?.is_low_balance"
-                                    class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
-                                >
-                                    Low
-                                </span>
-                            </div>
-                            <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
-                            >
-                                {{ formatPhp(gcash?.balance ?? 0) }}
-                            </p>
-                        </div>
-                        <Link
-                            href="/gcash-ledger"
-                            :class="[
-                                'rounded-md p-2 transition-colors',
-                                gcash?.is_low_balance
-                                    ? 'bg-amber-500/20 text-amber-600 hover:bg-amber-500/30'
-                                    : 'bg-primary/10 text-primary hover:bg-primary/20',
-                            ]"
-                            title="Manage GCash Ledger"
-                        >
-                            <GcashIcon class="size-5" />
-                        </Link>
-                    </div>
-                    <div
-                        class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
-                    >
-                        <span
-                            >Today In: +{{ formatPhp(register.gcash_in) }} /
-                            Out: -{{ formatPhp(register.gcash_out) }}</span
-                        >
-                        <Link
-                            href="/gcash-ledger"
-                            class="font-medium text-primary hover:underline"
-                        >
-                            Ledger &rarr;
-                        </Link>
-                    </div>
-                </article>
-
-                <article
-                    :class="[
-                        'rounded-lg border p-5 transition-all sm:col-span-2 xl:col-span-2',
-                        portal?.is_low_balance
-                            ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-transparent'
-                            : 'border-border bg-card',
-                    ]"
-                >
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <div class="flex items-center gap-1.5">
-                                <p
-                                    class="text-sm font-medium text-muted-foreground"
-                                >
-                                    Flight Portal Deposit
-                                </p>
-                                <span
-                                    v-if="portal?.is_low_balance"
-                                    class="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
-                                >
-                                    Low
-                                </span>
-                            </div>
-                            <p
-                                class="mt-3 text-2xl font-semibold tracking-tight"
-                            >
-                                {{ formatPhp(portal?.balance ?? 0) }}
-                            </p>
-                        </div>
-                        <Link
-                            href="/portal-deposits"
-                            :class="[
-                                'rounded-md p-2 transition-colors',
-                                portal?.is_low_balance
-                                    ? 'bg-amber-500/20 text-amber-600 hover:bg-amber-500/30'
-                                    : 'bg-primary/10 text-primary hover:bg-primary/20',
-                            ]"
-                            title="Manage Portal Deposit"
-                        >
-                            <Wallet class="size-5" />
-                        </Link>
-                    </div>
-                    <div
-                        class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
-                    >
-                        <span>Available ticket booking balance</span>
-                        <Link
-                            href="/portal-deposits"
-                            class="font-medium text-primary hover:underline"
-                        >
-                            Manage &rarr;
-                        </Link>
-                    </div>
                 </article>
             </section>
 

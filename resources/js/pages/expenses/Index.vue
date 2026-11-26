@@ -12,10 +12,12 @@ import {
     Pencil,
     Plus,
     RotateCcw,
+    Search,
     Trash2,
     UserCheck,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import FilterToggleBar from '@/components/FilterToggleBar.vue';
 import Pagination from '@/components/Pagination.vue';
 import ReimburseExpenseModal from '@/components/ReimburseExpenseModal.vue';
 import { Badge } from '@/components/ui/badge';
@@ -124,6 +126,24 @@ const canModify = (expense: Expense): boolean => {
 const openReimburseModal = (expense: Expense) => {
     expenseToReimburse.value = expense;
     reimburseModalOpen.value = true;
+};
+
+const activeFilterCount = computed(
+    () =>
+        [
+            categoryId.value !== 'all',
+            paymentMethod.value !== 'all',
+            date.value !== 'all',
+        ].filter(Boolean).length,
+);
+
+const clearFilters = () => {
+    search.value = '';
+    categoryId.value = 'all';
+    paymentMethod.value = 'all';
+    date.value = 'all';
+    dateFrom.value = '';
+    dateTo.value = '';
 };
 
 let timeout: ReturnType<typeof setTimeout>;
@@ -468,76 +488,95 @@ const toggleSort = (field: string) => {
         </section>
 
         <!-- Filters Section -->
-        <section class="flex flex-col gap-4">
-            <div class="flex flex-wrap items-center gap-3">
-                <Input
-                    v-model="search"
-                    placeholder="Search expenses, payees, notes..."
-                    class="w-full sm:w-64"
-                />
+        <section class="rounded-lg border bg-card p-4 sm:p-5">
+            <FilterToggleBar
+                :active-count="activeFilterCount"
+                @clear="clearFilters"
+            >
+                <template #search>
+                    <div class="relative">
+                        <Search
+                            class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                            v-model="search"
+                            placeholder="Search expenses, payees, notes..."
+                            class="w-full pl-9"
+                        />
+                    </div>
+                </template>
 
-                <Select v-model="categoryId">
-                    <SelectTrigger class="w-full sm:w-[180px]">
-                        <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem
-                            v-for="cat in categories"
-                            :key="cat.id"
-                            :value="String(cat.id)"
+                <template #filters>
+                    <Select v-model="categoryId">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            <SelectItem
+                                v-for="cat in categories"
+                                :key="cat.id"
+                                :value="String(cat.id)"
+                            >
+                                {{ cat.name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select v-model="paymentMethod">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Payment Method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Methods</SelectItem>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="gcash">GCash</SelectItem>
+                            <SelectItem value="bank_transfer"
+                                >Bank Transfer</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+
+                    <Select v-model="date">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Date Range" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Time</SelectItem>
+                            <SelectItem value="today">Today</SelectItem>
+                            <SelectItem value="last_7_days"
+                                >Last 7 Days</SelectItem
+                            >
+                            <SelectItem value="this_month"
+                                >This Month</SelectItem
+                            >
+                            <SelectItem value="custom">Custom Range</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <div
+                        v-if="date === 'custom'"
+                        class="flex flex-wrap items-center gap-2 border-t pt-3 sm:col-span-2 lg:col-span-4"
+                    >
+                        <span class="text-xs font-medium text-muted-foreground"
+                            >Date range:</span
                         >
-                            {{ cat.name }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <Select v-model="paymentMethod">
-                    <SelectTrigger class="w-full sm:w-[160px]">
-                        <SelectValue placeholder="Payment Method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Methods</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="gcash">GCash</SelectItem>
-                        <SelectItem value="bank_transfer"
-                            >Bank Transfer</SelectItem
-                        >
-                    </SelectContent>
-                </Select>
-
-                <Select v-model="date">
-                    <SelectTrigger class="w-full sm:w-[160px]">
-                        <SelectValue placeholder="Date Range" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Time</SelectItem>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                        <SelectItem value="this_month">This Month</SelectItem>
-                        <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <div
-                    v-if="date === 'custom'"
-                    class="flex flex-wrap items-center gap-2"
-                >
-                    <Input
-                        v-model="dateFrom"
-                        type="date"
-                        placeholder="From date"
-                        class="w-auto text-xs"
-                    />
-                    <span class="text-xs text-muted-foreground">to</span>
-                    <Input
-                        v-model="dateTo"
-                        type="date"
-                        placeholder="To date"
-                        class="w-auto text-xs"
-                    />
-                </div>
-            </div>
+                        <Input
+                            v-model="dateFrom"
+                            type="date"
+                            placeholder="From date"
+                            class="w-auto text-xs"
+                        />
+                        <span class="text-xs text-muted-foreground">to</span>
+                        <Input
+                            v-model="dateTo"
+                            type="date"
+                            placeholder="To date"
+                            class="w-auto text-xs"
+                        />
+                    </div>
+                </template>
+            </FilterToggleBar>
         </section>
 
         <!-- Table View -->

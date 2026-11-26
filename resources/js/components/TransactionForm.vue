@@ -15,6 +15,7 @@ import OnlineAssistanceFields from '@/components/transactions/OnlineAssistanceFi
 import PsaFields from '@/components/transactions/PsaFields.vue';
 import RemittanceFields from '@/components/transactions/RemittanceFields.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -925,663 +926,717 @@ const psaDocumentTypeLabels: Record<PsaDocumentType, string> = {
             :value="remittanceFee"
         />
 
-        <div class="grid gap-6 md:grid-cols-2">
-            <!-- 1. Transaction Type Selector -->
-            <div class="grid gap-2">
-                <Label for="type-select">Transaction / Service Type</Label>
-                <Select v-model="formType">
-                    <SelectTrigger id="type-select" class="w-full">
-                        <SelectValue placeholder="Select transaction type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="airline">
-                            Airline Ticket / Flight
-                        </SelectItem>
-                        <SelectItem value="ferry">
-                            Ferry Ticket / Booking
-                        </SelectItem>
-                        <SelectItem value="translation">
-                            Document Translation
-                        </SelectItem>
-                        <SelectItem value="psa"> PSA Assistance </SelectItem>
-                        <SelectItem value="online_assistance">
-                            Online Assistance
-                        </SelectItem>
-                        <SelectItem value="remittance">
-                            GCash Remittance / Cash Exchange
-                        </SelectItem>
-                        <SelectItem value="printing"> Printing </SelectItem>
-                    </SelectContent>
-                </Select>
-                <InputError :message="errors.type" />
-            </div>
-
-            <!-- 2. Transaction Date (Defaults to Today) -->
-            <div class="grid gap-2">
-                <Label for="transaction_date">Transaction date</Label>
-                <Input
-                    id="transaction_date"
-                    name="transaction_date"
-                    type="date"
-                    v-model="transactionDate"
-                    required
-                />
-                <InputError :message="errors.transaction_date" />
-            </div>
-
-            <!-- 3. Customer / Person with Native Recurring Datalist Autocomplete -->
-            <div class="grid gap-2">
-                <Label for="customer_name">Customer / Person</Label>
-                <Input
-                    id="customer_name"
-                    name="customer_name"
-                    v-model="customerName"
-                    list="recurring-customers-list"
-                    required
-                    placeholder="e.g. Juan Dela Cruz"
-                    autocomplete="off"
-                    @input="onCustomerInput"
-                    @change="onCustomerInput"
-                />
-                <datalist id="recurring-customers-list">
-                    <option
-                        v-for="c in recurringCustomers"
-                        :key="c.id"
-                        :value="c.name"
-                    >
-                        {{
-                            c.contact_number
-                                ? `${c.name} (${c.contact_number})`
-                                : c.name
-                        }}
-                    </option>
-                </datalist>
-                <InputError :message="errors.customer_name" />
-            </div>
-
-            <!-- 4. Contact Number (Autofilled for recurring customer or entered manually) -->
-            <div class="grid gap-2">
-                <Label
-                    for="customer_contact"
-                    class="flex items-center justify-between"
-                >
-                    <span>Contact Number</span>
-                    <span class="text-xs font-normal text-muted-foreground"
-                        >Optional</span
-                    >
-                </Label>
-                <Input
-                    id="customer_contact"
-                    name="customer_contact"
-                    v-model="customerContact"
-                    placeholder="e.g. 0917 123 4567"
-                    autocomplete="tel"
-                />
-                <InputError :message="errors.customer_contact" />
-            </div>
-
-            <!-- 4. Payment Status (Paid / Downpayment / Unpaid) -->
-            <div
-                v-if="formType === 'remittance'"
-                class="flex items-center justify-between rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 dark:bg-blue-950/20"
-            >
-                <div class="flex items-center gap-2">
-                    <Smartphone
-                        class="size-4 shrink-0 text-blue-600 dark:text-blue-400"
-                    />
-                    <span>
-                        <strong class="font-semibold text-foreground"
-                            >Remittance Flow:</strong
-                        >
-                        {{
-                            remittanceDirection === 'GCASH_CASH_OUT'
-                                ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)'
-                                : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)'
-                        }}
-                    </span>
-                </div>
-                <span
-                    v-if="remittanceDirection === 'GCASH_CASH_OUT'"
-                    class="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                >
-                    Settles Immediately (Paid)
-                </span>
-                <span
-                    v-else
-                    class="shrink-0 rounded bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                >
-                    Cash Paid Now or Later
-                </span>
-            </div>
-
-            <div
-                v-if="
-                    formType !== 'remittance' ||
-                    remittanceDirection === 'GCASH_CASH_IN'
-                "
-                class="grid gap-2 md:col-span-2"
-            >
-                <Label>Payment Status</Label>
-
-                <!-- Multi-payment locking notice -->
-                <div
-                    v-if="hasMultiplePayments"
-                    class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300"
-                >
-                    <div class="flex items-center gap-1.5 font-medium">
-                        <AlertCircle
-                            class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
-                        />
-                        <span>Multiple Payments Recorded</span>
-                    </div>
-                    <p
-                        class="mt-1 text-[11px] text-amber-700/90 dark:text-amber-300/90"
-                    >
-                        This transaction has multiple payment records. Payment
-                        status and method are locked here; manage subsequent
-                        payments via the transaction's Payment History table.
-                    </p>
-                </div>
-
-                <div class="grid grid-cols-3 gap-2">
-                    <button
-                        type="button"
-                        :disabled="hasMultiplePayments"
-                        @click="
-                            !hasMultiplePayments && (paymentStatus = 'paid')
-                        "
-                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="[
-                            paymentStatus === 'paid'
-                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : 'border-input text-muted-foreground hover:bg-muted',
-                            hasMultiplePayments
-                                ? 'cursor-not-allowed opacity-60'
-                                : '',
-                        ]"
-                    >
-                        <CheckCircle class="size-3.5" />
-                        <span>Fully Paid</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        :disabled="hasMultiplePayments"
-                        @click="
-                            !hasMultiplePayments && (paymentStatus = 'partial')
-                        "
-                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="[
-                            paymentStatus === 'partial'
-                                ? 'border-amber-600 bg-amber-50 text-amber-700 ring-1 ring-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
-                                : 'border-input text-muted-foreground hover:bg-muted',
-                            hasMultiplePayments
-                                ? 'cursor-not-allowed opacity-60'
-                                : '',
-                        ]"
-                    >
-                        <Clock class="size-3.5" />
-                        <span>Downpayment / Partial</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        :disabled="hasMultiplePayments"
-                        @click="
-                            !hasMultiplePayments && (paymentStatus = 'unpaid')
-                        "
-                        class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
-                        :class="[
-                            paymentStatus === 'unpaid'
-                                ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
-                                : 'border-input text-muted-foreground hover:bg-muted',
-                            hasMultiplePayments
-                                ? 'cursor-not-allowed opacity-60'
-                                : '',
-                        ]"
-                    >
-                        <AlertCircle class="size-3.5" />
-                        <span>Unpaid (On Pickup)</span>
-                    </button>
-                </div>
-                <InputError :message="errors.payment_status" />
-            </div>
-
-            <!-- Downpayment Amount & Remaining Balance (if Partial) -->
-            <template v-if="paymentStatus === 'partial'">
+        <!-- 1. Service & Customer -->
+        <Card>
+            <CardHeader class="pb-4">
+                <CardTitle class="text-base font-semibold">
+                    1. Service &amp; Customer
+                </CardTitle>
+            </CardHeader>
+            <CardContent class="grid gap-6 md:grid-cols-2">
+                <!-- Transaction Type Selector -->
                 <div class="grid gap-2">
-                    <Label for="amount_paid"
-                        >Downpayment Paid Today (PHP)</Label
-                    >
-                    <Input
-                        id="amount_paid"
-                        type="number"
-                        min="0.01"
-                        :max="amount ? Number(amount) : undefined"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amountPaid"
-                        :disabled="hasMultiplePayments"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.amount_paid" />
-                </div>
-
-                <div
-                    class="rounded-lg border bg-amber-50/50 p-3 text-xs dark:bg-amber-950/20"
-                >
-                    <span
-                        class="font-medium text-amber-800 dark:text-amber-300"
-                    >
-                        Remaining Balance Due on Pickup:
-                    </span>
-                    <p
-                        class="mt-1 text-lg font-bold text-amber-600 dark:text-amber-400"
-                    >
-                        {{ formatPhp(computedRemainingBalance) }}
-                    </p>
-                    <p class="text-[11px] text-muted-foreground">
-                        Staff can collect this balance later via the "Collect
-                        Balance" action.
-                    </p>
-                </div>
-            </template>
-
-            <!-- 4. Payment Method -->
-            <div
-                v-if="formType !== 'remittance'"
-                class="grid gap-2 md:col-span-2"
-            >
-                <Label for="payment_method_select">Payment method</Label>
-                <Select v-model="paymentMethod" :disabled="hasMultiplePayments">
-                    <SelectTrigger id="payment_method_select" class="w-full">
-                        <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="gcash">GCash</SelectItem>
-                        <SelectItem value="split"
-                            >Split (Cash & GCash)</SelectItem
-                        >
-                    </SelectContent>
-                </Select>
-                <InputError :message="errors.payment_method" />
-            </div>
-
-            <!-- SPLIT PAYMENT FIELDS -->
-            <template v-if="paymentMethod === 'split'">
-                <div class="grid gap-2">
-                    <Label for="cash_amount">Cash Amount (PHP)</Label>
-                    <Input
-                        id="cash_amount"
-                        name="cash_amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="cashAmount"
-                        @input="handleCashChange"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.cash_amount" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="gcash_amount">GCash Amount (PHP)</Label>
-                    <Input
-                        id="gcash_amount"
-                        name="gcash_amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="gcashAmount"
-                        @input="handleGcashChange"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.gcash_amount" />
-                </div>
-            </template>
-
-            <!-- GCASH OVERPAYMENT & CASH CHANGE -->
-            <div
-                v-if="paymentMethod === 'gcash' || paymentMethod === 'split'"
-                class="space-y-3 rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 md:col-span-2"
-            >
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <Smartphone
-                            class="size-4 text-blue-600 dark:text-blue-400"
-                        />
-                        <span class="text-sm font-medium"
-                            >Customer GCash Overpayment & Cash Change</span
-                        >
-                    </div>
-                    <label
-                        class="flex cursor-pointer items-center gap-2 text-xs font-medium"
-                    >
-                        <input
-                            type="checkbox"
-                            v-model="hasGcashOverpayment"
-                            class="size-4 rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500"
-                        />
-                        <span>Enable Change</span>
-                    </label>
-                </div>
-                <p class="text-xs text-muted-foreground">
-                    Use when a customer sends extra money to your GCash wallet
-                    and requests the difference in cash from the drawer.
-                </p>
-
-                <div
-                    v-if="hasGcashOverpayment"
-                    class="space-y-3 border-t border-blue-500/10 pt-2"
-                >
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div class="space-y-1.5">
-                            <Label
-                                for="gcash_tendered_input"
-                                class="text-xs font-medium"
-                            >
-                                Total GCash Sent / Tendered (₱)
-                                <span class="text-destructive">*</span>
-                            </Label>
-                            <Input
-                                id="gcash_tendered_input"
-                                type="number"
-                                step="0.01"
-                                :min="gcashDueForChange"
-                                v-model="gcashTendered"
-                                placeholder="e.g. 1000.00"
-                                required
-                            />
-                            <p class="text-[11px] text-muted-foreground">
-                                Minimum required for bill:
-                                <span class="font-medium text-foreground">{{
-                                    formatPhp(gcashDueForChange)
-                                }}</span>
-                            </p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <Label
-                                for="change_fee_input"
-                                class="text-xs font-medium"
-                            >
-                                Optional Cash-Out Fee (₱)
-                            </Label>
-                            <Input
-                                id="change_fee_input"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                v-model="changeFee"
-                                placeholder="0.00"
-                            />
-                            <p class="text-[11px] text-muted-foreground">
-                                Convenience fee kept by DDN (adds to earnings)
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background/80 p-3 text-xs"
-                    >
-                        <div>
-                            <span class="text-muted-foreground"
-                                >Cash Change to Dispense:</span
-                            >
-                            <div
-                                class="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400"
-                            >
-                                {{ formatPhp(calculatedCashChange) }}
-                            </div>
-                        </div>
-                        <div
-                            class="text-right text-[11px] text-muted-foreground"
-                        >
-                            <div>
-                                GCash Inflow: +{{
-                                    formatPhp(Number(gcashTendered) || 0)
-                                }}
-                            </div>
-                            <div>
-                                Drawer Outflow: -{{
-                                    formatPhp(calculatedCashChange)
-                                }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============================================== -->
-            <!-- 5. TYPE-SPECIFIC FIELDS                        -->
-            <!-- ============================================== -->
-
-            <!-- AIRLINE TICKETING -->
-            <AirlineFields
-                v-if="formType === 'airline'"
-                v-model:pax="pax"
-                v-model:trip-type="tripType"
-                v-model:flight-type="flightType"
-                v-model:carrier-category="carrierCategory"
-                v-model:provider="provider"
-                v-model:has-different-return-airline="hasDifferentReturnAirline"
-                v-model:return-provider="returnProvider"
-                v-model:service-details="serviceDetails"
-                v-model:amount="amount"
-                v-model:third-party-payment="thirdPartyPayment"
-                :errors="errors"
-                :airline-suggestions="airlineSuggestions"
-                :portal-balance="props.portalBalance"
-                :num-amount="numAmount"
-                :num-third-party="numThirdParty"
-                :active-markup-rule-description="activeMarkupRuleDescription"
-            />
-
-            <!-- FERRY TICKETING -->
-            <FerryFields
-                v-if="formType === 'ferry'"
-                v-model:pax="pax"
-                v-model:trip-type="tripType"
-                v-model:provider="provider"
-                v-model:service-details="serviceDetails"
-                v-model:amount="amount"
-                v-model:third-party-payment="thirdPartyPayment"
-                :errors="errors"
-                :ferry-suggestions="ferrySuggestions"
-                :portal-balance="props.portalBalance"
-                :num-amount="numAmount"
-                :num-third-party="numThirdParty"
-                :active-markup-rule-description="activeMarkupRuleDescription"
-            />
-
-            <!-- DOCUMENT TRANSLATION -->
-            <template v-if="formType === 'translation'">
-                <div class="grid gap-2">
-                    <Label for="amount"
-                        >Total Price / Customer Payment (PHP)</Label
-                    >
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.amount" />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="third_party_payment"
-                        >Translator Payment (PHP)</Label
-                    >
-                    <Input
-                        id="third_party_payment"
-                        name="third_party_payment"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="thirdPartyPayment"
-                        required
-                        placeholder="0.00"
-                    />
-                    <InputError :message="errors.third_party_payment" />
-                </div>
-
-                <!-- Disbursement Source for Translation -->
-                <div class="grid gap-2 md:col-span-2">
-                    <Label
-                        for="translation_disbursement_source"
-                        class="flex items-center gap-1.5 font-medium"
-                    >
-                        <Wallet class="size-4 text-muted-foreground" />
-                        <span>Disbursement Source (Payment to Translator)</span>
-                    </Label>
-                    <Select v-model="disbursementSource">
-                        <SelectTrigger
-                            id="translation_disbursement_source"
-                            class="w-full"
-                        >
+                    <Label for="type-select">Transaction / Service Type</Label>
+                    <Select v-model="formType">
+                        <SelectTrigger id="type-select" class="w-full">
                             <SelectValue
-                                placeholder="Select disbursement source"
+                                placeholder="Select transaction type"
                             />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="cash">
-                                Cash Drawer (Paid in cash from physical drawer)
+                            <SelectItem value="airline">
+                                Airline Ticket / Flight
                             </SelectItem>
-                            <SelectItem value="gcash">
-                                GCash Wallet (Paid via GCash — recorded in GCash
-                                Ledger)
+                            <SelectItem value="ferry">
+                                Ferry Ticket / Booking
                             </SelectItem>
+                            <SelectItem value="translation">
+                                Document Translation
+                            </SelectItem>
+                            <SelectItem value="psa">
+                                PSA Assistance
+                            </SelectItem>
+                            <SelectItem value="online_assistance">
+                                Online Assistance
+                            </SelectItem>
+                            <SelectItem value="remittance">
+                                GCash Remittance / Cash Exchange
+                            </SelectItem>
+                            <SelectItem value="printing"> Printing </SelectItem>
                         </SelectContent>
                     </Select>
-                    <p class="text-xs text-muted-foreground">
-                        Specify where the translator fee is disbursed from. If
-                        GCash is selected, it will automatically record a
-                        disbursement outflow in your live GCash Ledger.
-                    </p>
-                    <InputError :message="errors.disbursement_source" />
+                    <InputError :message="errors.type" />
                 </div>
 
-                <!-- Auto Calculation Preview -->
-                <div class="rounded-lg border bg-muted/40 p-4 md:col-span-2">
-                    <div
-                        class="flex items-center gap-2 text-sm font-semibold text-primary"
+                <!-- Transaction Date (Defaults to Today) -->
+                <div class="grid gap-2">
+                    <Label for="transaction_date">Transaction date</Label>
+                    <Input
+                        id="transaction_date"
+                        name="transaction_date"
+                        type="date"
+                        v-model="transactionDate"
+                        required
+                    />
+                    <InputError :message="errors.transaction_date" />
+                </div>
+
+                <!-- Customer / Person with Native Recurring Datalist Autocomplete -->
+                <div class="grid gap-2">
+                    <Label for="customer_name">Customer / Person</Label>
+                    <Input
+                        id="customer_name"
+                        name="customer_name"
+                        v-model="customerName"
+                        list="recurring-customers-list"
+                        required
+                        placeholder="e.g. Juan Dela Cruz"
+                        autocomplete="off"
+                        @input="onCustomerInput"
+                        @change="onCustomerInput"
+                    />
+                    <datalist id="recurring-customers-list">
+                        <option
+                            v-for="c in recurringCustomers"
+                            :key="c.id"
+                            :value="c.name"
+                        >
+                            {{
+                                c.contact_number
+                                    ? `${c.name} (${c.contact_number})`
+                                    : c.name
+                            }}
+                        </option>
+                    </datalist>
+                    <InputError :message="errors.customer_name" />
+                </div>
+
+                <!-- Contact Number (Autofilled for recurring customer or entered manually) -->
+                <div class="grid gap-2">
+                    <Label
+                        for="customer_contact"
+                        class="flex items-center justify-between"
                     >
-                        <Calculator class="size-4" />
-                        <span>DDN Amount Calculation</span>
+                        <span>Contact Number</span>
+                        <span class="text-xs font-normal text-muted-foreground"
+                            >Optional</span
+                        >
+                    </Label>
+                    <Input
+                        id="customer_contact"
+                        name="customer_contact"
+                        v-model="customerContact"
+                        placeholder="e.g. 0917 123 4567"
+                        autocomplete="tel"
+                    />
+                    <InputError :message="errors.customer_contact" />
+                </div>
+            </CardContent>
+        </Card>
+
+        <!-- 2. Details & Pricing -->
+        <Card>
+            <CardHeader class="pb-4">
+                <CardTitle class="text-base font-semibold">
+                    2. Details &amp; Pricing
+                </CardTitle>
+            </CardHeader>
+            <CardContent class="grid gap-6 md:grid-cols-2">
+                <!-- AIRLINE TICKETING -->
+                <AirlineFields
+                    v-if="formType === 'airline'"
+                    v-model:pax="pax"
+                    v-model:trip-type="tripType"
+                    v-model:flight-type="flightType"
+                    v-model:carrier-category="carrierCategory"
+                    v-model:provider="provider"
+                    v-model:has-different-return-airline="
+                        hasDifferentReturnAirline
+                    "
+                    v-model:return-provider="returnProvider"
+                    v-model:service-details="serviceDetails"
+                    v-model:amount="amount"
+                    v-model:third-party-payment="thirdPartyPayment"
+                    :errors="errors"
+                    :airline-suggestions="airlineSuggestions"
+                    :portal-balance="props.portalBalance"
+                    :num-amount="numAmount"
+                    :num-third-party="numThirdParty"
+                    :active-markup-rule-description="
+                        activeMarkupRuleDescription
+                    "
+                />
+
+                <!-- FERRY TICKETING -->
+                <FerryFields
+                    v-if="formType === 'ferry'"
+                    v-model:pax="pax"
+                    v-model:trip-type="tripType"
+                    v-model:provider="provider"
+                    v-model:service-details="serviceDetails"
+                    v-model:amount="amount"
+                    v-model:third-party-payment="thirdPartyPayment"
+                    :errors="errors"
+                    :ferry-suggestions="ferrySuggestions"
+                    :portal-balance="props.portalBalance"
+                    :num-amount="numAmount"
+                    :num-third-party="numThirdParty"
+                    :active-markup-rule-description="
+                        activeMarkupRuleDescription
+                    "
+                />
+
+                <!-- DOCUMENT TRANSLATION -->
+                <template v-if="formType === 'translation'">
+                    <div class="grid gap-2">
+                        <Label for="amount"
+                            >Total Price / Customer Payment (PHP)</Label
+                        >
+                        <Input
+                            id="amount"
+                            name="amount"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="amount"
+                            required
+                            placeholder="0.00"
+                        />
+                        <InputError :message="errors.amount" />
                     </div>
+
+                    <div class="grid gap-2">
+                        <Label for="third_party_payment"
+                            >Translator Payment (PHP)</Label
+                        >
+                        <Input
+                            id="third_party_payment"
+                            name="third_party_payment"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="thirdPartyPayment"
+                            required
+                            placeholder="0.00"
+                        />
+                        <InputError :message="errors.third_party_payment" />
+                    </div>
+
+                    <!-- Disbursement Source for Translation -->
+                    <div class="grid gap-2 md:col-span-2">
+                        <Label
+                            for="translation_disbursement_source"
+                            class="flex items-center gap-1.5 font-medium"
+                        >
+                            <Wallet class="size-4 text-muted-foreground" />
+                            <span
+                                >Disbursement Source (Payment to
+                                Translator)</span
+                            >
+                        </Label>
+                        <Select v-model="disbursementSource">
+                            <SelectTrigger
+                                id="translation_disbursement_source"
+                                class="w-full"
+                            >
+                                <SelectValue
+                                    placeholder="Select disbursement source"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="cash">
+                                    Cash Drawer (Paid in cash from physical
+                                    drawer)
+                                </SelectItem>
+                                <SelectItem value="gcash">
+                                    GCash Wallet (Paid via GCash — recorded in
+                                    GCash Ledger)
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p class="text-xs text-muted-foreground">
+                            Specify where the translator fee is disbursed from.
+                            If GCash is selected, it will automatically record a
+                            disbursement outflow in your live GCash Ledger.
+                        </p>
+                        <InputError :message="errors.disbursement_source" />
+                    </div>
+
+                    <!-- Compact Calculation Preview -->
                     <div
-                        class="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t pt-3"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm md:col-span-2"
                     >
-                        <span class="text-sm text-muted-foreground">
-                            DDN Net (Price − Translator Payment):
-                        </span>
-                        <span class="text-lg font-bold">
+                        <div
+                            class="flex items-center gap-2 text-muted-foreground"
+                        >
+                            <Calculator class="size-4 text-primary" />
+                            <span>DDN Net (Price − Translator Payment)</span>
+                        </div>
+                        <span
+                            class="font-bold text-emerald-600 dark:text-emerald-400"
+                        >
                             {{ formatPhp(computedTranslationOrPsaDdnAmount) }}
                         </span>
                     </div>
-                </div>
-            </template>
+                </template>
 
-            <!-- PSA ASSISTANCE -->
-            <PsaFields
-                v-if="formType === 'psa'"
-                v-model:copies="copies"
-                :errors="errors"
-                :psa-document-type="psaDocumentType"
-                :psa-rates="props.psaRates"
-                :psa-document-types="psaDocumentTypes"
-                :psa-document-type-labels="psaDocumentTypeLabels"
-                :selected-psa-rate="selectedPsaRate"
-                :num-amount="numAmount"
-                :num-third-party="numThirdParty"
-                :computed-translation-or-psa-ddn-amount="
-                    computedTranslationOrPsaDdnAmount
-                "
-                :handle-psa-document-type-change="handlePsaDocumentTypeChange"
-                :handle-copies-input="handleCopiesInput"
-                :increment-copies="incrementCopies"
-                :decrement-copies="decrementCopies"
-            />
+                <!-- PSA ASSISTANCE -->
+                <PsaFields
+                    v-if="formType === 'psa'"
+                    v-model:copies="copies"
+                    :errors="errors"
+                    :psa-document-type="psaDocumentType"
+                    :psa-rates="props.psaRates"
+                    :psa-document-types="psaDocumentTypes"
+                    :psa-document-type-labels="psaDocumentTypeLabels"
+                    :selected-psa-rate="selectedPsaRate"
+                    :num-amount="numAmount"
+                    :num-third-party="numThirdParty"
+                    :computed-translation-or-psa-ddn-amount="
+                        computedTranslationOrPsaDdnAmount
+                    "
+                    :handle-psa-document-type-change="
+                        handlePsaDocumentTypeChange
+                    "
+                    :handle-copies-input="handleCopiesInput"
+                    :increment-copies="incrementCopies"
+                    :decrement-copies="decrementCopies"
+                />
 
-            <!-- ONLINE ASSISTANCE -->
-            <OnlineAssistanceFields
-                v-if="formType === 'online_assistance'"
-                v-model:amount="amount"
-                v-model:third-party-payment="thirdPartyPayment"
-                :errors="errors"
-                :online-assistance-type-id="onlineAssistanceTypeId"
-                :online-assistance-types="onlineAssistanceTypes"
-                :selected-assistance-has-disbursement="
-                    selectedAssistanceHasDisbursement
-                "
-                :num-amount="numAmount"
-                :num-third-party="numThirdParty"
-                :computed-online-net-margin="computedOnlineNetMargin"
-                :computed-online-ddn-share="computedOnlineDdnShare"
-                :computed-online-employee-share="computedOnlineEmployeeShare"
-                :handle-online-assistance-type-change="
-                    handleOnlineAssistanceTypeChange
-                "
-            />
+                <!-- ONLINE ASSISTANCE -->
+                <OnlineAssistanceFields
+                    v-if="formType === 'online_assistance'"
+                    v-model:amount="amount"
+                    v-model:third-party-payment="thirdPartyPayment"
+                    :errors="errors"
+                    :online-assistance-type-id="onlineAssistanceTypeId"
+                    :online-assistance-types="onlineAssistanceTypes"
+                    :selected-assistance-has-disbursement="
+                        selectedAssistanceHasDisbursement
+                    "
+                    :num-amount="numAmount"
+                    :num-third-party="numThirdParty"
+                    :computed-online-net-margin="computedOnlineNetMargin"
+                    :computed-online-ddn-share="computedOnlineDdnShare"
+                    :computed-online-employee-share="
+                        computedOnlineEmployeeShare
+                    "
+                    :handle-online-assistance-type-change="
+                        handleOnlineAssistanceTypeChange
+                    "
+                />
 
-            <!-- REMITTANCE / CASH EXCHANGE -->
-            <RemittanceFields
-                v-if="formType === 'remittance'"
-                v-model:remittance-direction="remittanceDirection"
-                v-model:amount="amount"
-                v-model:remittance-fee="remittanceFee"
-                :errors="errors"
-                :num-amount="numAmount"
-            />
+                <!-- REMITTANCE / CASH EXCHANGE -->
+                <RemittanceFields
+                    v-if="formType === 'remittance'"
+                    v-model:remittance-direction="remittanceDirection"
+                    v-model:amount="amount"
+                    v-model:remittance-fee="remittanceFee"
+                    :errors="errors"
+                    :num-amount="numAmount"
+                />
 
-            <!-- PRINTING -->
-            <template v-if="formType === 'printing'">
+                <!-- PRINTING -->
+                <template v-if="formType === 'printing'">
+                    <div class="grid gap-2 md:col-span-2">
+                        <Label for="amount">Total Printing Price (PHP)</Label>
+                        <Input
+                            id="amount"
+                            name="amount"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="amount"
+                            required
+                            placeholder="0.00"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Enter the total amount charged to the customer.
+                        </p>
+                        <InputError :message="errors.amount" />
+                    </div>
+                </template>
+
+                <!-- Notes (Common to all types) -->
                 <div class="grid gap-2 md:col-span-2">
-                    <Label for="amount">Total Printing Price (PHP)</Label>
-                    <Input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputmode="decimal"
-                        v-model="amount"
-                        required
-                        placeholder="0.00"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        Enter the total amount charged to the customer.
-                    </p>
-                    <InputError :message="errors.amount" />
+                    <Label for="notes">Notes</Label>
+                    <textarea
+                        id="notes"
+                        name="notes"
+                        rows="3"
+                        v-model="notes"
+                        class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Optional notes about this transaction"
+                    ></textarea>
+                    <InputError :message="errors.notes" />
                 </div>
-            </template>
+            </CardContent>
+        </Card>
 
-            <!-- 6. Notes (Common to all types) -->
-            <div class="grid gap-2 md:col-span-2">
-                <Label for="notes">Notes</Label>
-                <textarea
-                    id="notes"
-                    name="notes"
-                    rows="3"
-                    v-model="notes"
-                    class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="Optional notes about this transaction"
-                ></textarea>
-                <InputError :message="errors.notes" />
-            </div>
-        </div>
+        <!-- 3. Payment -->
+        <Card>
+            <CardHeader class="pb-4">
+                <CardTitle class="text-base font-semibold">
+                    3. Payment
+                </CardTitle>
+            </CardHeader>
+            <CardContent class="grid gap-6 md:grid-cols-2">
+                <!-- Remittance Flow Banner -->
+                <div
+                    v-if="formType === 'remittance'"
+                    class="flex items-center justify-between rounded-lg border bg-blue-50/50 p-3.5 text-xs md:col-span-2 dark:bg-blue-950/20"
+                >
+                    <div class="flex items-center gap-2">
+                        <Smartphone
+                            class="size-4 shrink-0 text-blue-600 dark:text-blue-400"
+                        />
+                        <span>
+                            <strong class="font-semibold text-foreground"
+                                >Remittance Flow:</strong
+                            >
+                            {{
+                                remittanceDirection === 'GCASH_CASH_OUT'
+                                    ? 'Customer GCash Transfer (+GCash) & Drawer Cash Dispensed (-Cash)'
+                                    : 'Customer Physical Cash (+Cash) & GCash Wallet Sent (-GCash)'
+                            }}
+                        </span>
+                    </div>
+                    <span
+                        v-if="remittanceDirection === 'GCASH_CASH_OUT'"
+                        class="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                    >
+                        Settles Immediately (Paid)
+                    </span>
+                    <span
+                        v-else
+                        class="shrink-0 rounded bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                    >
+                        Cash Paid Now or Later
+                    </span>
+                </div>
+
+                <!-- Payment Status (Paid / Downpayment / Unpaid) -->
+                <div
+                    v-if="
+                        formType !== 'remittance' ||
+                        remittanceDirection === 'GCASH_CASH_IN'
+                    "
+                    class="grid gap-2 md:col-span-2"
+                >
+                    <Label>Payment Status</Label>
+
+                    <!-- Multi-payment locking notice -->
+                    <div
+                        v-if="hasMultiplePayments"
+                        class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300"
+                    >
+                        <div class="flex items-center gap-1.5 font-medium">
+                            <AlertCircle
+                                class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                            />
+                            <span>Multiple Payments Recorded</span>
+                        </div>
+                        <p
+                            class="mt-1 text-[11px] text-amber-700/90 dark:text-amber-300/90"
+                        >
+                            This transaction has multiple payment records.
+                            Payment status and method are locked here; manage
+                            subsequent payments via the transaction's Payment
+                            History table.
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            :disabled="hasMultiplePayments"
+                            @click="
+                                !hasMultiplePayments && (paymentStatus = 'paid')
+                            "
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="[
+                                paymentStatus === 'paid'
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted',
+                                hasMultiplePayments
+                                    ? 'cursor-not-allowed opacity-60'
+                                    : '',
+                            ]"
+                        >
+                            <CheckCircle class="size-3.5" />
+                            <span>Fully Paid</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            :disabled="hasMultiplePayments"
+                            @click="
+                                !hasMultiplePayments &&
+                                (paymentStatus = 'partial')
+                            "
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="[
+                                paymentStatus === 'partial'
+                                    ? 'border-amber-600 bg-amber-50 text-amber-700 ring-1 ring-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted',
+                                hasMultiplePayments
+                                    ? 'cursor-not-allowed opacity-60'
+                                    : '',
+                            ]"
+                        >
+                            <Clock class="size-3.5" />
+                            <span>Downpayment / Partial</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            :disabled="hasMultiplePayments"
+                            @click="
+                                !hasMultiplePayments &&
+                                (paymentStatus = 'unpaid')
+                            "
+                            class="flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition-all"
+                            :class="[
+                                paymentStatus === 'unpaid'
+                                    ? 'border-rose-600 bg-rose-50 text-rose-700 ring-1 ring-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                                    : 'border-input text-muted-foreground hover:bg-muted',
+                                hasMultiplePayments
+                                    ? 'cursor-not-allowed opacity-60'
+                                    : '',
+                            ]"
+                        >
+                            <AlertCircle class="size-3.5" />
+                            <span>Unpaid (On Pickup)</span>
+                        </button>
+                    </div>
+                    <InputError :message="errors.payment_status" />
+                </div>
+
+                <!-- Downpayment Amount & Remaining Balance (if Partial) -->
+                <template v-if="paymentStatus === 'partial'">
+                    <div class="grid gap-2">
+                        <Label for="amount_paid"
+                            >Downpayment Paid Today (PHP)</Label
+                        >
+                        <Input
+                            id="amount_paid"
+                            type="number"
+                            min="0.01"
+                            :max="amount ? Number(amount) : undefined"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="amountPaid"
+                            :disabled="hasMultiplePayments"
+                            required
+                            placeholder="0.00"
+                        />
+                        <InputError :message="errors.amount_paid" />
+                    </div>
+
+                    <div
+                        class="rounded-lg border bg-amber-50/50 p-3 text-xs dark:bg-amber-950/20"
+                    >
+                        <span
+                            class="font-medium text-amber-800 dark:text-amber-300"
+                        >
+                            Remaining Balance Due on Pickup:
+                        </span>
+                        <p
+                            class="mt-1 text-lg font-bold text-amber-600 dark:text-amber-400"
+                        >
+                            {{ formatPhp(computedRemainingBalance) }}
+                        </p>
+                        <p class="text-[11px] text-muted-foreground">
+                            Staff can collect this balance later via the
+                            "Collect Balance" action.
+                        </p>
+                    </div>
+                </template>
+
+                <!-- Payment Method -->
+                <div
+                    v-if="formType !== 'remittance'"
+                    class="grid gap-2 md:col-span-2"
+                >
+                    <Label for="payment_method_select">Payment method</Label>
+                    <Select
+                        v-model="paymentMethod"
+                        :disabled="hasMultiplePayments"
+                    >
+                        <SelectTrigger
+                            id="payment_method_select"
+                            class="w-full"
+                        >
+                            <SelectValue placeholder="Select payment method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="gcash">GCash</SelectItem>
+                            <SelectItem value="split"
+                                >Split (Cash &amp; GCash)</SelectItem
+                            >
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="errors.payment_method" />
+                </div>
+
+                <!-- SPLIT PAYMENT FIELDS -->
+                <template v-if="paymentMethod === 'split'">
+                    <div class="grid gap-2">
+                        <Label for="cash_amount">Cash Amount (PHP)</Label>
+                        <Input
+                            id="cash_amount"
+                            name="cash_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="cashAmount"
+                            @input="handleCashChange"
+                            required
+                            placeholder="0.00"
+                        />
+                        <InputError :message="errors.cash_amount" />
+                    </div>
+                    <div class="grid gap-2">
+                        <Label for="gcash_amount">GCash Amount (PHP)</Label>
+                        <Input
+                            id="gcash_amount"
+                            name="gcash_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            v-model="gcashAmount"
+                            @input="handleGcashChange"
+                            required
+                            placeholder="0.00"
+                        />
+                        <InputError :message="errors.gcash_amount" />
+                    </div>
+                </template>
+
+                <!-- GCASH OVERPAYMENT & CASH CHANGE -->
+                <div
+                    v-if="
+                        paymentMethod === 'gcash' || paymentMethod === 'split'
+                    "
+                    class="space-y-3 rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 md:col-span-2"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <Smartphone
+                                class="size-4 text-blue-600 dark:text-blue-400"
+                            />
+                            <span class="text-sm font-medium"
+                                >Customer GCash Overpayment &amp; Cash
+                                Change</span
+                            >
+                        </div>
+                        <label
+                            class="flex cursor-pointer items-center gap-2 text-xs font-medium"
+                        >
+                            <input
+                                type="checkbox"
+                                v-model="hasGcashOverpayment"
+                                class="size-4 rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                            />
+                            <span>Enable Change</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Use when a customer sends extra money to your GCash
+                        wallet and requests the difference in cash from the
+                        drawer.
+                    </p>
+
+                    <div
+                        v-if="hasGcashOverpayment"
+                        class="space-y-3 border-t border-blue-500/10 pt-2"
+                    >
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div class="space-y-1.5">
+                                <Label
+                                    for="gcash_tendered_input"
+                                    class="text-xs font-medium"
+                                >
+                                    Total GCash Sent / Tendered (₱)
+                                    <span class="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="gcash_tendered_input"
+                                    type="number"
+                                    step="0.01"
+                                    :min="gcashDueForChange"
+                                    v-model="gcashTendered"
+                                    placeholder="e.g. 1000.00"
+                                    required
+                                />
+                                <p class="text-[11px] text-muted-foreground">
+                                    Minimum required for bill:
+                                    <span class="font-medium text-foreground">{{
+                                        formatPhp(gcashDueForChange)
+                                    }}</span>
+                                </p>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <Label
+                                    for="change_fee_input"
+                                    class="text-xs font-medium"
+                                >
+                                    Optional Cash-Out Fee (₱)
+                                </Label>
+                                <Input
+                                    id="change_fee_input"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    v-model="changeFee"
+                                    placeholder="0.00"
+                                />
+                                <p class="text-[11px] text-muted-foreground">
+                                    Convenience fee kept by DDN (adds to
+                                    earnings)
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background/80 p-3 text-xs"
+                        >
+                            <div>
+                                <span class="text-muted-foreground"
+                                    >Cash Change to Dispense:</span
+                                >
+                                <div
+                                    class="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400"
+                                >
+                                    {{ formatPhp(calculatedCashChange) }}
+                                </div>
+                            </div>
+                            <div
+                                class="text-right text-[11px] text-muted-foreground"
+                            >
+                                <div>
+                                    GCash Inflow: +{{
+                                        formatPhp(Number(gcashTendered) || 0)
+                                    }}
+                                </div>
+                                <div>
+                                    Drawer Outflow: -{{
+                                        formatPhp(calculatedCashChange)
+                                    }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
 
         <div class="flex flex-wrap items-center gap-3 border-t pt-6">
             <Button type="submit" :disabled="processing">

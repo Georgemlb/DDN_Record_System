@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\MoveLedgerEntryRequest;
+use App\Http\Requests\StoreLedgerAdjustmentRequest;
 use App\Models\DailySettlement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\GcashLedgerEntry;
+use App\Services\LedgerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +18,10 @@ use Inertia\Response;
 
 class GcashLedgerController extends Controller
 {
+    public function __construct(
+        private readonly LedgerService $ledgerService,
+    ) {}
+
     /**
      * Display listing of GCash ledger entries and balance metrics.
      */
@@ -22,88 +29,12 @@ class GcashLedgerController extends Controller
     {
         $query = GcashLedgerEntry::query()->with(['user', 'transaction', 'expense']);
 
-        // Search filter
-        if ($search = $request->input('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('reference_number', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%")
-                    ->orWhereHas('transaction', function ($tq) use ($search) {
-                        $tq->where('customer_name', 'like', "%{$search}%")
-                            ->orWhere('reference_number', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        // Type filter
-        if ($type = $request->input('type')) {
-            if ($type !== 'all' && in_array($type, GcashLedgerEntry::TYPES, true)) {
-                $query->where('type', $type);
-            }
-        }
-
-        // Date range filter
-        if ($dateFrom = $request->input('date_from')) {
-            $query->whereDate('entry_date', '>=', $dateFrom);
-        }
-        if ($dateTo = $request->input('date_to')) {
-            $query->whereDate('entry_date', '<=', $dateTo);
-        }
-
-        // Sorting
-        $sort = (string) $request->input('sort', 'entry_date');
-        $direction = strtolower((string) $request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
-
-        if (in_array($sort, ['amount', 'running_balance', 'type', 'created_at'], true)) {
-            $query->orderBy($sort, $direction);
-        } else {
-            $query->orderByRaw('date(entry_date) '.$direction);
-        }
-
-        if ($sort === 'entry_date' || ! $request->has('sort')) {
-            $query->orderBy('sort_order', $direction);
-        }
-
-        if ($sort !== 'id') {
-            $query->orderBy('id', $direction);
-        }
-
-        $entries = $query->paginate(15)->withQueryString();
-
-        $pageDates = $entries->getCollection()->map(function ($d) {
-            return Carbon::parse($d->entry_date)->toDateString();
-        })->unique()->values()->all();
-
-        $dateStats = GcashLedgerEntry::whereIn('entry_date', $pageDates)
-            ->selectRaw('entry_date, MIN(sort_order) as min_order, MAX(sort_order) as max_order, COUNT(*) as entry_count')
-            ->groupBy('entry_date')
-            ->get()
-            ->keyBy(function ($item) {
-                return Carbon::parse($item->entry_date)->toDateString();
-            });
-
-        $entries->getCollection()->transform(function ($entry) use ($dateStats, $direction) {
-            $dateStr = Carbon::parse($entry->entry_date)->toDateString();
-            $stat = $dateStats->get($dateStr);
-            if (! $stat || (int) $stat->getAttribute('entry_count') <= 1) {
-                $entry->can_move_up = false;
-                $entry->can_move_down = false;
-
-                return $entry;
-            }
-
-            $maxOrder = (int) $stat->getAttribute('max_order');
-            $minOrder = (int) $stat->getAttribute('min_order');
-
-            if ($direction === 'desc') {
-                $entry->can_move_up = $entry->sort_order < $maxOrder;
-                $entry->can_move_down = $entry->sort_order > $minOrder;
-            } else {
-                $entry->can_move_up = $entry->sort_order > $minOrder;
-                $entry->can_move_down = $entry->sort_order < $maxOrder;
-            }
-
-            return $entry;
-        });
+        $entries = $this->ledgerService->paginateWithOrdering(
+            $request,
+            $query,
+            GcashLedgerEntry::class,
+            GcashLedgerEntry::TYPES,
+        );
 
         // Summary metrics
         $currentBalance = GcashLedgerEntry::getCurrentBalance();
@@ -137,15 +68,9 @@ class GcashLedgerController extends Controller
     /**
      * Store a manual balance adjustment or anchor.
      */
-    public function storeAdjustment(Request $request): RedirectResponse
+    public function storeAdjustment(StoreLedgerAdjustmentRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'decimal:0,2'],
-            'entry_date' => ['required', 'date'],
-            'notes' => ['required', 'string', 'max:1000'],
-            'is_balance_anchor' => ['nullable', 'boolean'],
-            'running_balance' => ['nullable', 'numeric', 'decimal:0,2'],
-        ]);
+        $validated = $request->validated();
 
         $isFromDrawer = $request->boolean('from_drawer') && (float) $validated['amount'] > 0;
 
@@ -303,67 +228,18 @@ class GcashLedgerController extends Controller
     /**
      * Move an entry up or down in sort order.
      */
-    public function move(Request $request, GcashLedgerEntry $entry): RedirectResponse
+    public function move(MoveLedgerEntryRequest $request, GcashLedgerEntry $entry): RedirectResponse
     {
-        $validated = $request->validate([
-            'direction' => ['required', 'string', 'in:up,down'],
-            'table_direction' => ['nullable', 'string', 'in:asc,desc'],
-        ]);
+        $validated = $request->validated();
 
-        $visualDirection = $validated['direction'];
-        $tableDirection = $validated['table_direction'] ?? 'desc';
-        $entryDate = $entry->entry_date->toDateString();
+        $moved = $this->ledgerService->moveEntryWithinDate(
+            GcashLedgerEntry::class,
+            $entry,
+            $validated['direction'],
+            $validated['table_direction'] ?? 'desc',
+        );
 
-        $dayEntries = GcashLedgerEntry::whereDate('entry_date', $entryDate)
-            ->orderBy('sort_order', 'asc')
-            ->orderBy('id', 'asc')
-            ->get();
-
-        if ($dayEntries->count() <= 1) {
-            return back();
-        }
-
-        // Re-normalize sort_orders to 1, 2, 3... to avoid ties or gaps
-        foreach ($dayEntries as $index => $item) {
-            $expectedOrder = $index + 1;
-            if ($item->sort_order !== $expectedOrder) {
-                $item->sort_order = $expectedOrder;
-                $item->saveQuietly();
-            }
-        }
-
-        $currentIndex = $dayEntries->search(fn ($item) => $item->id === $entry->id);
-
-        if ($currentIndex === false) {
-            return back();
-        }
-
-        $targetIndex = null;
-        if ($tableDirection === 'desc') {
-            if ($visualDirection === 'up' && $currentIndex < $dayEntries->count() - 1) {
-                $targetIndex = $currentIndex + 1;
-            } elseif ($visualDirection === 'down' && $currentIndex > 0) {
-                $targetIndex = $currentIndex - 1;
-            }
-        } else {
-            if ($visualDirection === 'up' && $currentIndex > 0) {
-                $targetIndex = $currentIndex - 1;
-            } elseif ($visualDirection === 'down' && $currentIndex < $dayEntries->count() - 1) {
-                $targetIndex = $currentIndex + 1;
-            }
-        }
-
-        if ($targetIndex !== null) {
-            $currentItem = $dayEntries[$currentIndex];
-            $sibling = $dayEntries[$targetIndex];
-
-            $currentOrder = $currentItem->sort_order;
-            $currentItem->sort_order = $sibling->sort_order;
-            $sibling->sort_order = $currentOrder;
-
-            $currentItem->saveQuietly();
-            $sibling->saveQuietly();
-
+        if ($moved) {
             GcashLedgerEntry::recalculateRunningBalances();
 
             Inertia::flash('toast', [

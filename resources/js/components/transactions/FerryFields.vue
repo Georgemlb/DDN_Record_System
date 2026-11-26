@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { Ship } from '@lucide/vue';
+import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatPhp } from '@/lib/transactionFormat';
+
+const showBreakdown = ref(false);
 
 const pax = defineModel<number | string>('pax', { required: true });
 const tripType = defineModel<'one_way' | 'round_trip'>('tripType', {
@@ -158,23 +161,34 @@ defineProps<{
 
     <div
         v-if="numAmount > 0 && numThirdParty > 0"
-        class="rounded-lg border bg-muted/40 p-4 md:col-span-2"
+        class="rounded-lg border bg-muted/40 px-4 py-2.5 md:col-span-2"
     >
-        <div class="flex items-center justify-between">
-            <div
-                class="flex items-center gap-2 text-sm font-semibold text-primary"
-            >
-                <Ship class="size-4" />
-                <span>Ferry Ticketing Margin Preview</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div class="flex items-center gap-2">
+                <Ship class="size-4 text-primary" />
+                <span class="text-muted-foreground">DDN Margin:</span>
+                <span class="font-bold text-emerald-600 dark:text-emerald-400">
+                    {{ formatPhp(Math.max(0, numAmount - numThirdParty)) }}
+                </span>
+                <span
+                    v-if="activeMarkupRuleDescription"
+                    class="text-xs text-muted-foreground"
+                >
+                    ({{ activeMarkupRuleDescription }})
+                </span>
             </div>
-            <span
-                v-if="activeMarkupRuleDescription"
-                class="text-xs font-medium text-muted-foreground"
+            <button
+                type="button"
+                class="text-xs font-medium text-primary hover:underline"
+                @click="showBreakdown = !showBreakdown"
             >
-                {{ activeMarkupRuleDescription }}
-            </span>
+                {{ showBreakdown ? 'Hide breakdown' : 'Show breakdown' }}
+            </button>
         </div>
-        <div class="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+        <div
+            v-if="showBreakdown"
+            class="mt-3 grid grid-cols-3 gap-2 border-t pt-3 text-center text-xs"
+        >
             <div class="rounded border bg-background p-2">
                 <span class="text-muted-foreground">Customer Paid</span>
                 <p class="font-semibold text-foreground">

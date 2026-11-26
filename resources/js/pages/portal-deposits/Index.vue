@@ -15,9 +15,9 @@ import {
     SlidersHorizontal,
     Trash2,
     Wallet,
-    X,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import FilterToggleBar from '@/components/FilterToggleBar.vue';
 import Pagination from '@/components/Pagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -397,23 +397,28 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
         <!-- Filter Bar -->
         <Card class="border shadow-sm">
             <CardContent class="p-4">
-                <div
-                    class="grid gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5"
+                <FilterToggleBar
+                    :active-count="
+                        (typeFilter !== 'all' ? 1 : 0) +
+                        (dateFrom ? 1 : 0) +
+                        (dateTo ? 1 : 0)
+                    "
+                    @clear="clearFilters"
                 >
-                    <!-- Search Input -->
-                    <div class="relative sm:col-span-2">
-                        <Search
-                            class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                            v-model="search"
-                            placeholder="Search reference, customer, or notes..."
-                            class="pl-9 text-sm"
-                        />
-                    </div>
+                    <template #search>
+                        <div class="relative">
+                            <Search
+                                class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                            />
+                            <Input
+                                v-model="search"
+                                placeholder="Search reference, customer, or notes..."
+                                class="pl-9 text-sm"
+                            />
+                        </div>
+                    </template>
 
-                    <!-- Type Filter -->
-                    <div>
+                    <template #filters>
                         <Select v-model="typeFilter">
                             <SelectTrigger class="w-full">
                                 <SelectValue placeholder="All Entry Types" />
@@ -431,45 +436,22 @@ const moveEntry = (deposit: FlightPortalDeposit, direction: 'up' | 'down') => {
                                 >
                             </SelectContent>
                         </Select>
-                    </div>
 
-                    <!-- Date From -->
-                    <div>
                         <Input
-                            type="date"
                             v-model="dateFrom"
+                            type="date"
                             placeholder="From Date"
                             class="text-sm"
                         />
-                    </div>
 
-                    <!-- Date To -->
-                    <div>
                         <Input
-                            type="date"
                             v-model="dateTo"
+                            type="date"
                             placeholder="To Date"
                             class="text-sm"
                         />
-                    </div>
-                </div>
-
-                <!-- Active filter clear button -->
-                <div
-                    v-if="hasActiveFilters"
-                    class="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
-                >
-                    <span>Showing filtered results</span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        @click="clearFilters"
-                        class="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                        <X class="size-3.5" />
-                        Clear Filters
-                    </Button>
-                </div>
+                    </template>
+                </FilterToggleBar>
             </CardContent>
         </Card>
 
