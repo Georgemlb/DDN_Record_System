@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowDownLeft,
@@ -7,10 +7,8 @@ import {
     ChevronUp,
     ChevronDown,
     Loader2,
-    Minus,
     Pencil,
     Pin,
-    Plus,
     Search,
     SlidersHorizontal,
     Smartphone,
@@ -37,7 +35,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -51,6 +48,8 @@ import type {
     GcashLedgerFilterParams,
     GcashLedgerMetrics,
 } from '@/types/gcashLedger';
+import GcashAdjustmentModal from './components/GcashAdjustmentModal.vue';
+import GcashEditModal from './components/GcashEditModal.vue';
 
 const props = defineProps<{
     entries: {
@@ -123,138 +122,18 @@ const hasActiveFilters = computed(() => {
     );
 });
 
-// Today date helper
-const todayDate = new Date().toISOString().split('T')[0];
-
-// Manual Adjustment Modal
-const isAdjustmentModalOpen = ref(false);
-const adjustmentDirection = ref<'credit' | 'debit'>('credit');
-const isAdjAnchor = ref(false);
-
-const adjustmentForm = useForm({
-    amount: '',
-    entry_date: todayDate,
-    notes: '',
-    from_drawer: false,
-    is_balance_anchor: false,
-    running_balance: '',
-});
+// Modal Refs
+const adjustmentModalRef = ref<InstanceType<
+    typeof GcashAdjustmentModal
+> | null>(null);
+const editModalRef = ref<InstanceType<typeof GcashEditModal> | null>(null);
 
 const openAdjustmentModal = () => {
-    adjustmentForm.reset();
-    adjustmentForm.entry_date = todayDate;
-    adjustmentForm.from_drawer = false;
-    adjustmentDirection.value = 'credit';
-    isAdjAnchor.value = false;
-    isAdjustmentModalOpen.value = true;
+    adjustmentModalRef.value?.open();
 };
-
-const submitAdjustment = () => {
-    const rawAmount = parseFloat(adjustmentForm.amount as string);
-
-    if (isNaN(rawAmount) || rawAmount <= 0) {
-        return;
-    }
-
-    const signedAmount =
-        adjustmentDirection.value === 'debit' ? -rawAmount : rawAmount;
-
-    adjustmentForm
-        .transform((data) => ({
-            ...data,
-            amount: signedAmount.toFixed(2),
-            from_drawer:
-                adjustmentDirection.value === 'credit'
-                    ? data.from_drawer
-                    : false,
-            is_balance_anchor: isAdjAnchor.value,
-            running_balance:
-                isAdjAnchor.value && data.running_balance
-                    ? parseFloat(data.running_balance as string).toFixed(2)
-                    : null,
-        }))
-        .post('/gcash-ledger/adjustment', {
-            preserveScroll: true,
-            onSuccess: () => {
-                isAdjustmentModalOpen.value = false;
-                adjustmentForm.reset();
-            },
-        });
-};
-
-// Edit Entry Modal
-const isEditModalOpen = ref(false);
-const entryToEdit = ref<GcashLedgerEntry | null>(null);
-const editAdjustmentDirection = ref<'credit' | 'debit'>('credit');
-const isAnchorOverride = ref(false);
-
-const editForm = useForm({
-    amount: '',
-    entry_date: '',
-    notes: '',
-    running_balance: '',
-    is_balance_anchor: false,
-});
 
 const openEditModal = (entry: GcashLedgerEntry) => {
-    entryToEdit.value = entry;
-    editForm.clearErrors();
-
-    isAnchorOverride.value = Boolean(entry.is_balance_anchor);
-    editForm.running_balance =
-        entry.running_balance !== null && entry.running_balance !== undefined
-            ? String(Math.abs(Number(entry.running_balance)))
-            : '';
-    editForm.is_balance_anchor = Boolean(entry.is_balance_anchor);
-
-    const numAmount = Number(entry.amount);
-    editAdjustmentDirection.value = numAmount < 0 ? 'debit' : 'credit';
-    editForm.amount = String(Math.abs(numAmount));
-    editForm.entry_date = String(entry.entry_date).split('T')[0];
-    editForm.notes = entry.notes ?? '';
-
-    isEditModalOpen.value = true;
-};
-
-const resetAnchorToAuto = () => {
-    isAnchorOverride.value = false;
-    editForm.is_balance_anchor = false;
-};
-
-const submitEdit = () => {
-    if (!entryToEdit.value) {
-        return;
-    }
-
-    const rawAmount = parseFloat(editForm.amount as string);
-
-    if (isNaN(rawAmount) || rawAmount <= 0) {
-        return;
-    }
-
-    const signedAmount =
-        entryToEdit.value.type === 'adjustment' &&
-        editAdjustmentDirection.value === 'debit'
-            ? -rawAmount
-            : rawAmount;
-
-    editForm
-        .transform((data) => ({
-            ...data,
-            amount: signedAmount.toFixed(2),
-            is_balance_anchor: isAnchorOverride.value,
-            running_balance:
-                isAnchorOverride.value && data.running_balance
-                    ? parseFloat(data.running_balance as string).toFixed(2)
-                    : null,
-        }))
-        .put(`/gcash-ledger/${entryToEdit.value.id}`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                isEditModalOpen.value = false;
-                entryToEdit.value = null;
-            },
-        });
+    editModalRef.value?.open(entry);
 };
 
 // Delete Entry Modal
@@ -931,393 +810,10 @@ const moveEntry = (entry: GcashLedgerEntry, direction: 'up' | 'down') => {
         </Card>
 
         <!-- MODAL: Manual Adjustment / Anchor -->
-        <Dialog v-model:open="isAdjustmentModalOpen">
-            <DialogContent class="sm:max-w-[460px]">
-                <DialogHeader>
-                    <DialogTitle class="flex items-center gap-2">
-                        <SlidersHorizontal class="size-5 text-primary" />
-                        <span>GCash Adjustment / Anchor</span>
-                    </DialogTitle>
-                    <DialogDescription>
-                        Record a manual adjustment or anchor your GCash running
-                        balance to match your app count.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <form @submit.prevent="submitAdjustment" class="space-y-4 py-2">
-                    <!-- Adjustment Direction -->
-                    <div class="space-y-1.5">
-                        <Label>Direction</Label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <Button
-                                type="button"
-                                :variant="
-                                    adjustmentDirection === 'credit'
-                                        ? 'default'
-                                        : 'outline'
-                                "
-                                class="w-full gap-2"
-                                @click="adjustmentDirection = 'credit'"
-                            >
-                                <Plus class="size-4" />
-                                <span>Inflow / Credit (+)</span>
-                            </Button>
-                            <Button
-                                type="button"
-                                :variant="
-                                    adjustmentDirection === 'debit'
-                                        ? 'destructive'
-                                        : 'outline'
-                                "
-                                class="w-full gap-2"
-                                @click="adjustmentDirection = 'debit'"
-                            >
-                                <Minus class="size-4" />
-                                <span>Outflow / Debit (-)</span>
-                            </Button>
-                        </div>
-                    </div>
-
-                    <!-- From Cash Drawer Option -->
-                    <div
-                        v-if="adjustmentDirection === 'credit'"
-                        class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3"
-                    >
-                        <div class="flex items-start gap-2.5">
-                            <input
-                                id="adj_from_drawer"
-                                v-model="adjustmentForm.from_drawer"
-                                type="checkbox"
-                                class="mt-0.5 size-4 rounded border-input text-primary shadow-xs focus:ring-primary"
-                            />
-                            <div class="space-y-0.5 text-xs">
-                                <Label
-                                    for="adj_from_drawer"
-                                    class="cursor-pointer font-semibold text-foreground"
-                                >
-                                    Funded from Cash Drawer (Top-Up)
-                                </Label>
-                                <p class="text-muted-foreground">
-                                    Records a physical cash withdrawal from the
-                                    drawer (-Cash Drawer) to reload into office
-                                    GCash (+GCash Wallet).
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Amount -->
-                    <div class="space-y-1.5">
-                        <Label for="adj_amount">
-                            Amount (PHP) <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="adj_amount"
-                            v-model="adjustmentForm.amount"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            required
-                            placeholder="0.00"
-                        />
-                        <span
-                            v-if="adjustmentForm.errors.amount"
-                            class="text-xs text-destructive"
-                        >
-                            {{ adjustmentForm.errors.amount }}
-                        </span>
-                    </div>
-
-                    <!-- Date -->
-                    <div class="space-y-1.5">
-                        <Label for="adj_date">
-                            Date <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="adj_date"
-                            v-model="adjustmentForm.entry_date"
-                            type="date"
-                            required
-                        />
-                        <span
-                            v-if="adjustmentForm.errors.entry_date"
-                            class="text-xs text-destructive"
-                        >
-                            {{ adjustmentForm.errors.entry_date }}
-                        </span>
-                    </div>
-
-                    <!-- Audit Reason -->
-                    <div class="space-y-1.5">
-                        <Label for="adj_notes">
-                            Reason / Description
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="adj_notes"
-                            v-model="adjustmentForm.notes"
-                            required
-                            placeholder="e.g. End of day GCash calibration, or manual top-up"
-                        />
-                        <span
-                            v-if="adjustmentForm.errors.notes"
-                            class="text-xs text-destructive"
-                        >
-                            {{ adjustmentForm.errors.notes }}
-                        </span>
-                    </div>
-
-                    <!-- Balance Anchor Override Checkbox -->
-                    <div
-                        class="space-y-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs"
-                    >
-                        <label class="flex cursor-pointer items-center gap-2">
-                            <input
-                                type="checkbox"
-                                v-model="isAdjAnchor"
-                                class="size-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span
-                                class="flex items-center gap-1.5 font-semibold text-foreground"
-                            >
-                                <Pin
-                                    class="size-3 text-amber-600 dark:text-amber-400"
-                                />
-                                Anchor Running Balance (Set Exact Balance)
-                            </span>
-                        </label>
-
-                        <div v-if="isAdjAnchor" class="space-y-1.5 pt-1">
-                            <Label for="adj_anchor_balance" class="text-xs">
-                                Exact Desired Running Balance on this row (PHP)
-                            </Label>
-                            <Input
-                                id="adj_anchor_balance"
-                                v-model="adjustmentForm.running_balance"
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                class="bg-background"
-                            />
-                            <p class="text-[11px] text-muted-foreground">
-                                Locks this row's running balance to this exact
-                                amount. Subsequent transactions will continue
-                                from here.
-                            </p>
-                        </div>
-                    </div>
-
-                    <DialogFooter class="pt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            @click="isAdjustmentModalOpen = false"
-                            :disabled="adjustmentForm.processing"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            :disabled="adjustmentForm.processing"
-                            class="gap-2"
-                        >
-                            <Loader2
-                                v-if="adjustmentForm.processing"
-                                class="size-4 animate-spin"
-                            />
-                            <span>Save Entry</span>
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+        <GcashAdjustmentModal ref="adjustmentModalRef" />
 
         <!-- MODAL: Edit Entry -->
-        <Dialog v-model:open="isEditModalOpen">
-            <DialogContent class="sm:max-w-[480px]">
-                <DialogHeader>
-                    <DialogTitle class="flex items-center gap-2">
-                        <Pencil class="size-5 text-primary" />
-                        <span>Edit GCash Ledger Entry</span>
-                    </DialogTitle>
-                    <DialogDescription>
-                        Update amount, entry date, notes, or running balance
-                        anchor.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <form @submit.prevent="submitEdit" class="space-y-4 py-2">
-                    <!-- Adjustment Direction -->
-                    <div
-                        v-if="entryToEdit?.type === 'adjustment'"
-                        class="space-y-1.5"
-                    >
-                        <Label>Direction</Label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <Button
-                                type="button"
-                                :variant="
-                                    editAdjustmentDirection === 'credit'
-                                        ? 'default'
-                                        : 'outline'
-                                "
-                                class="w-full gap-2"
-                                @click="editAdjustmentDirection = 'credit'"
-                            >
-                                <Plus class="size-4" />
-                                <span>Inflow / Credit (+)</span>
-                            </Button>
-                            <Button
-                                type="button"
-                                :variant="
-                                    editAdjustmentDirection === 'debit'
-                                        ? 'destructive'
-                                        : 'outline'
-                                "
-                                class="w-full gap-2"
-                                @click="editAdjustmentDirection = 'debit'"
-                            >
-                                <Minus class="size-4" />
-                                <span>Outflow / Debit (-)</span>
-                            </Button>
-                        </div>
-                    </div>
-
-                    <!-- Amount -->
-                    <div class="space-y-1.5">
-                        <Label for="edit_amount">
-                            Amount (PHP) <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="edit_amount"
-                            v-model="editForm.amount"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            required
-                            placeholder="0.00"
-                        />
-                        <span
-                            v-if="editForm.errors.amount"
-                            class="text-xs text-destructive"
-                        >
-                            {{ editForm.errors.amount }}
-                        </span>
-                    </div>
-
-                    <!-- Date -->
-                    <div class="space-y-1.5">
-                        <Label for="edit_date">
-                            Date <span class="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="edit_date"
-                            v-model="editForm.entry_date"
-                            type="date"
-                            required
-                        />
-                        <span
-                            v-if="editForm.errors.entry_date"
-                            class="text-xs text-destructive"
-                        >
-                            {{ editForm.errors.entry_date }}
-                        </span>
-                    </div>
-
-                    <!-- Notes -->
-                    <div class="space-y-1.5">
-                        <Label for="edit_notes">Notes / Reason</Label>
-                        <Input
-                            id="edit_notes"
-                            v-model="editForm.notes"
-                            placeholder="Audit reason or description"
-                        />
-                        <span
-                            v-if="editForm.errors.notes"
-                            class="text-xs text-destructive"
-                        >
-                            {{ editForm.errors.notes }}
-                        </span>
-                    </div>
-
-                    <!-- Anchor Override Section -->
-                    <div
-                        class="space-y-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs"
-                    >
-                        <div class="flex items-center justify-between">
-                            <label
-                                class="flex cursor-pointer items-center gap-2"
-                            >
-                                <input
-                                    type="checkbox"
-                                    v-model="isAnchorOverride"
-                                    class="size-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                                />
-                                <span
-                                    class="flex items-center gap-1.5 font-semibold text-foreground"
-                                >
-                                    <Pin
-                                        class="size-3 text-amber-600 dark:text-amber-400"
-                                    />
-                                    Anchor Running Balance
-                                </span>
-                            </label>
-
-                            <Button
-                                v-if="entryToEdit?.is_balance_anchor"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                class="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                                @click="resetAnchorToAuto"
-                            >
-                                Reset to Auto
-                            </Button>
-                        </div>
-
-                        <div v-if="isAnchorOverride" class="space-y-1.5 pt-1">
-                            <Label for="edit_running_balance" class="text-xs">
-                                Desired Running Balance on this row (PHP)
-                            </Label>
-                            <Input
-                                id="edit_running_balance"
-                                v-model="editForm.running_balance"
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                class="bg-background"
-                            />
-                            <p class="text-[11px] text-muted-foreground">
-                                Locks this row's running balance to this exact
-                                amount.
-                            </p>
-                        </div>
-                    </div>
-
-                    <DialogFooter class="pt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            @click="isEditModalOpen = false"
-                            :disabled="editForm.processing"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            :disabled="editForm.processing"
-                            class="gap-2"
-                        >
-                            <Loader2
-                                v-if="editForm.processing"
-                                class="size-4 animate-spin"
-                            />
-                            <span>Save Changes</span>
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+        <GcashEditModal ref="editModalRef" />
 
         <!-- MODAL: Delete Confirmation -->
         <Dialog v-model:open="isDeleteModalOpen">
